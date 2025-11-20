@@ -31,12 +31,14 @@ void loop() {
   Lora_update();
   Display_update();
   
+    // ==================== STATE_IDLE ====================
     if (mainState == STATE_IDLE) {
 
         if (handleIdle()) return;
 
     }
 
+    // ==================== STATE_SLEEP ====================
     if (mainState == STATE_SLEEP) {
 
         if (handleSleep()) return;
@@ -45,35 +47,13 @@ void loop() {
     // ==================== STATE_HISTORY_MENU ====================
     if (mainState == STATE_HISTORY_MENU) {
 
-        Display_centerText("HISTORY MENU");
-
-        if (isFinishPressed()) {
-            delay(50);
-            if (isFinishPressed()) {
-                mainState = STATE_IDLE;
-                menuTransitionDelay();
-                return;
-            }
-        }
-
-        return;
+        if (handleHistoryMenu()) return;
     }
 
     // ==================== STATE_GAMES_MENU ====================
     if (mainState == STATE_GAMES_MENU) {
 
-        Display_centerText("GAMES MENU");
-        
-        if (isFinishPressed()) {
-            delay(50);
-            if (isFinishPressed()) {
-                mainState = STATE_IDLE;
-                menuTransitionDelay();
-                return;
-            }
-        }
-
-        return;
+        if (handleGamesMenu()) return;
     }
 
     // ==================== STATE_SEND_MENU ====================

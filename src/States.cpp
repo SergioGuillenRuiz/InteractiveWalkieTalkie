@@ -347,3 +347,35 @@ bool handleSendMenu() {
 
     return true;
 }
+
+// ==================== STATE_HISTORY_MENU ====================
+bool handleHistoryMenu() {
+    Display_centerText("HISTORY MENU");
+
+    if (isFinishPressed()) {
+        delay(50);
+        if (isFinishPressed()) {
+            mainState = STATE_IDLE;
+            menuTransitionDelay();
+            return true;
+        }
+    }
+
+    return true; // mantiene el comportamiento anterior (salir del loop)
+}
+
+// ==================== STATE_GAMES_MENU ====================
+bool handleGamesMenu() {
+    Display_centerText("GAMES MENU");
+
+    if (isFinishPressed()) {
+        delay(50);
+        if (isFinishPressed()) {
+            mainState = STATE_IDLE;
+            menuTransitionDelay();
+            return true;
+        }
+    }
+
+    return true; // mantiene el comportamiento anterior (salir del loop)
+}

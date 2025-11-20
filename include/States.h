@@ -56,3 +56,5 @@ inline void changeSendSubState(SendSubState s) {
 bool handleIdle();   
 bool handleSleep();
 bool handleSendMenu();
+bool handleHistoryMenu();  
+bool handleGamesMenu();
