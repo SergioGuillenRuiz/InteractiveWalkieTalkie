@@ -18,6 +18,14 @@
 #define TEXT_SMALL 1
 #define TEXT_NORMAL 2
 
+// ============================================================
+// Variables Globales Accesibles
+// ============================================================
+
+extern int cursorPos; 
+extern Adafruit_SH1107 display;
+extern const char* nombresMensajes[];
+
 
 // ============================================================
 // Funciones Display
@@ -2187,10 +2195,5 @@ const unsigned char iconoMando [] PROGMEM = {
 	0x1f, 0xc0, 0x01, 0xf8, 0x00, 0x1f, 0x80, 0x01, 0xf0, 0x00, 0x0f, 0x80, 0x00, 0x40, 0x00, 0x02, 
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
-// ============================================================
-// Variables Globales Accesibles
-// ============================================================
-
-extern int cursorPos; 
 
 #endif 
