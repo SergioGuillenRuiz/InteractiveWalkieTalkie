@@ -1,3 +1,6 @@
+#ifndef STATES_H
+#define STATES_H
+
 #include <Arduino.h>
 #include "Config.h"
 
@@ -58,3 +61,5 @@ bool handleSleep();
 bool handleSendMenu();
 bool handleHistoryMenu();  
 bool handleGamesMenu();
+
+#endif

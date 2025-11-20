@@ -22,10 +22,8 @@
 // Variables Globales Accesibles
 // ============================================================
 
-extern int cursorPos; 
 extern Adafruit_SH1107 display;
 extern const char* nombresMensajes[];
-
 
 // ============================================================
 // Funciones Display
