@@ -466,6 +466,7 @@ bool handleHistoryMenu() {
         if (isFinishPressed()) {
             mainState = STATE_IDLE;
             menuTransitionDelay();
+            display.clearDisplay();
             return true;
         }
     }

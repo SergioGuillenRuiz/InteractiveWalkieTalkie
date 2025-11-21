@@ -8,7 +8,6 @@ ButtonState finishButton = { HIGH, HIGH, 0 };
 // ------------------------------------------------------------
 // Antirrebote
 // ------------------------------------------------------------
-static const unsigned long DEBOUNCE_TIME_MS = 50UL; 
 
 static bool readButton(ButtonState &btn, uint8_t pin) {
   bool raw = digitalRead(pin); 
@@ -18,7 +17,7 @@ static bool readButton(ButtonState &btn, uint8_t pin) {
   }
 
   // si ha pasado suficiente tiempo desde el último cambio, actualizamos el estado estable
-  if ((unsigned long)(millis() - btn.lastChange) > DEBOUNCE_TIME_MS) {
+  if ((unsigned long)(millis() - btn.lastChange) > BUTTON_DEBOUNCE_TIME_MS) {
     btn.currentState = btn.lastState;
   }
 
@@ -45,4 +44,30 @@ bool isMorsePressed() {
 
 bool isFinishPressed() {
   return readButton(finishButton, PIN_FINISH_BUTTON);
+}
+
+// ------------------------------------------------------------
+// Lectura estable del potenciómetro (A0) con debounce y mapeo
+// ------------------------------------------------------------
+int getPotValue(int maxIndex) {
+  if (maxIndex <= 0) return 0;
+
+  static int stable = 0;
+  static int candidate = 0;
+  static unsigned long since = 0;
+
+  int raw = analogRead(A0);
+  int mapped = map(raw, 0, 1023, 0, maxIndex);
+  mapped = constrain(mapped, 0, maxIndex);
+
+  if (mapped != candidate) {
+    candidate = mapped;
+    since = millis();
+  } else {
+    if ((unsigned long)(millis() - since) >= POT_DEBOUNCE_TIME_MS) {
+      stable = candidate;
+    }
+  }
+
+  return stable;
 }

@@ -4,7 +4,8 @@
 #include <Arduino.h>
 #include "Config.h"
 
-
+#define BUTTON_DEBOUNCE_TIME_MS  50UL
+#define POT_DEBOUNCE_TIME_MS    150UL
 // ============================================================
 //  Variables globales accesibles
 // ============================================================ 
@@ -26,6 +27,8 @@ extern ButtonState finishButton;
 bool isMorsePressed();
 
 bool isFinishPressed();
+
+int getPotValue(int maxIndex);
 
 void menuTransitionDelay();
 
