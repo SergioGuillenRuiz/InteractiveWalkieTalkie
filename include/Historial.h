@@ -10,4 +10,7 @@ extern int messageIndex;
 void History_addMessage(const String &msg);
 String History_getMessage(int index);
 
+int History_count();                        
+unsigned long History_getTimestamp(int index); 
+
 #endif

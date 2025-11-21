@@ -350,8 +350,117 @@ bool handleSendMenu() {
 
 // ==================== STATE_HISTORY_MENU ====================
 bool handleHistoryMenu() {
-    Display_centerText("HISTORY MENU");
+    static int topIndex = 0;          // índice del primer elemento a mostrar (0 = más reciente)
+    static int selected = 0;          // índice seleccionado (0 = más reciente)
+    static int prevTop = -1;
+    static int prevSelected = -1;
 
+    // Debounce / estabilidad para la entrada analógica
+    static int candidateSel = -1;
+    static unsigned long candidateSince = 0;
+    const unsigned long SEL_DEBOUNCE_MS = 150;
+
+    const int LINES_PER_PAGE = 4;
+
+    int total = History_count();
+
+    // Si no hay mensajes, mostrar aviso (sin test messages)
+    if (total == 0) {
+        if (prevTop != -2) {
+            prevTop = -2; prevSelected = -2;
+            Display_clear();
+            display.setCursor(0,0);
+            display.setTextSize(1);
+            display.setTextColor(SH110X_WHITE);
+            display.println("Historial");
+            display.println();
+            display.println("Sin mensajes");
+            display.display();
+        }
+
+        if (isFinishPressed()) {
+            delay(50);
+            if (isFinishPressed()) {
+                mainState = STATE_IDLE;
+                menuTransitionDelay();
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // Leer y mapear la entrada analógica a un índice
+    int raw = analogRead(A0);
+    int mapped = map(raw, 0, 1023, 0, max(0, total - 1));
+    mapped = constrain(mapped, 0, max(0, total - 1));
+
+    // Debounce: aceptar el nuevo valor sólo si se mantiene estable
+    if (mapped != candidateSel) {
+        candidateSel = mapped;
+        candidateSince = millis();
+    }
+    if ((millis() - candidateSince) >= SEL_DEBOUNCE_MS) {
+        selected = candidateSel;
+    }
+
+    // Asegurar visibilidad en ventana
+    if (selected < topIndex) topIndex = selected;
+    if (selected >= topIndex + LINES_PER_PAGE) topIndex = selected - LINES_PER_PAGE + 1;
+
+    // Decide si hay que redibujar:
+    bool needRedraw = (topIndex != prevTop) || (selected != prevSelected);
+
+    // Mantener cache de minutos de las líneas visibles para evitar redraw por segundos
+    static int prevMinutes[LINES_PER_PAGE] = { -1, -1, -1, -1 };
+
+    // Comprobar si alguno de los minutos visibles ha cambiado
+    for (int line = 0; line < LINES_PER_PAGE; ++line) {
+        int idx = topIndex + line;
+        if (idx >= total) {
+            if (prevMinutes[line] != -1) { prevMinutes[line] = -1; needRedraw = true; }
+            continue;
+        }
+        unsigned long ts = History_getTimestamp(idx);
+        unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
+        int ageMinInt = (int)ageMin;
+        if (prevMinutes[line] != ageMinInt) {
+            needRedraw = true;
+            // no break: queremos actualizar prevMinutes de todas las líneas al redibujar
+        }
+    }
+
+    if (needRedraw) {
+        prevTop = topIndex;
+        prevSelected = selected;
+
+        Display_clear();
+        display.setCursor(0,0);
+        display.setTextSize(1);
+        display.setTextColor(SH110X_WHITE);
+
+        for (int line = 0; line < LINES_PER_PAGE; ++line) {
+            int idx = topIndex + line;
+            if (idx >= total) {
+                prevMinutes[line] = -1;
+                break;
+            }
+
+            String msg = History_getMessage(idx);
+            unsigned long ts = History_getTimestamp(idx);
+            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
+
+            // Mostrar solo minutos: "0m", "1m", "23m", ...
+            String ageStr = String((unsigned long)ageMin) + "m";
+
+            String lineText = ((idx == selected) ? "> " : "  ") + ageStr + " " + msg;
+            display.println(lineText);
+
+            prevMinutes[line] = (int)ageMin;
+        }
+        display.display();
+    }
+
+    // Salir del menú
     if (isFinishPressed()) {
         delay(50);
         if (isFinishPressed()) {
@@ -361,7 +470,7 @@ bool handleHistoryMenu() {
         }
     }
 
-    return true; 
+    return true;
 }
 
 // ==================== STATE_GAMES_MENU ====================
@@ -373,9 +482,10 @@ bool handleGamesMenu() {
         if (isFinishPressed()) {
             mainState = STATE_IDLE;
             menuTransitionDelay();
+            display.clearDisplay();
             return true;
         }
     }
 
-    return true; // mantiene el comportamiento anterior (salir del loop)
+    return true; 
 }

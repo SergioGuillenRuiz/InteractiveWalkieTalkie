@@ -6,10 +6,15 @@
 #include "States.h"
 
 
+#include "Historial.h"// BORRAR ESTA LÍNEA DESPUÉS DE TESTEAR
+
+
 // ============================================================
 // setup
 // ============================================================
 void setup() {
+
+  History_addMessage("Test message"); // BORRAR ESTA LÍNEA DESPUÉS DE TESTEAR
 
   Serial.begin(115200);
 
