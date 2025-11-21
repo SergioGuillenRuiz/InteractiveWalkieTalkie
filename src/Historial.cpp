@@ -1,6 +1,6 @@
 #include "Historial.h"
 
-const int MAX_MESSAGES = 8;
+const int MAX_MESSAGES = 20;
 String messageHistory[MAX_MESSAGES];
 int messageIndex = 0;
 

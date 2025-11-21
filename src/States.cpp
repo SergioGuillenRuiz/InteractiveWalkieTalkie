@@ -361,7 +361,7 @@ bool handleHistoryMenu() {
         }
     }
 
-    return true; // mantiene el comportamiento anterior (salir del loop)
+    return true; 
 }
 
 // ==================== STATE_GAMES_MENU ====================
