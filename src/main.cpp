@@ -3,8 +3,6 @@
 #include "Display.h"
 #include "MyLora.h"
 #include "Morse.h"
-#include "Inputs.h"
-#include "Historial.h"
 #include "States.h"
 
 
