@@ -755,32 +755,32 @@ void drawInstantMessagesMenu() {
   display.clearDisplay();
 
   int seleccion = getPotValue(7);
-  if (seleccion > 7) seleccion = 7;
 
-  const int cols = 4;
-  const int iconSize = 16;
-  const int spacingX = 30;
-  const int spacingY = 28;
-  const int marginX = 8;
-  const int marginY = 4;
-  const int lift = 4;
+  const int cols = 3;
+  const int rows = 3;
+  const int iconSize = 20;
+  const int spacingX = 14;
+  const int spacingY = 20;
+  const int lift = 6;
 
-  for (int i = 0; i < 8; i++) {
+  int totalWidth = cols * iconSize + (cols - 1) * spacingX;
+  int marginX = max(0, (SCREEN_WIDTH - totalWidth) / 2);
+  int marginY = 10;
+
+  for (int i = 0; i < cols * rows; i++) {
+    if (i >= 8) continue; // hueco si no hay icono
     int fila = i / cols;
     int col = i % cols;
-    int x = marginX + col * spacingX;
-    int y = marginY + fila * spacingY;
+    int x = marginX + col * (iconSize + spacingX);
+    int y = marginY + fila * (iconSize + spacingY);
 
-    // Levantar icono seleccionado
     if (i == seleccion) {
       y -= lift;
-
-      // Mostrar nombre debajo del icono
       display.setTextSize(1);
       display.setTextColor(SH110X_WHITE);
       int textW = strlen(nombresMensajes[i]) * 6;
       int textX = x + (iconSize / 2) - (textW / 2);
-      int textY = y + iconSize + 1;
+      int textY = y + iconSize + 2;
       display.setCursor(textX, textY);
       display.print(nombresMensajes[i]);
     }
@@ -795,30 +795,32 @@ void drawGamesMenu() {
   display.clearDisplay();
 
   int seleccion = getPotValue(7);
-  if (seleccion > 7) seleccion = 7;
 
-  const int cols = 4;
-  const int iconSize = 16;
-  const int spacingX = 30;
-  const int spacingY = 28;
-  const int marginX = 8;
-  const int marginY = 4;
-  const int lift = 4;
+  const int cols = 3;
+  const int rows = 3;
+  const int iconSize = 20;
+  const int spacingX = 14;
+  const int spacingY = 20;
+  const int lift = 6;
 
-  for (int i = 0; i < 8; i++) {
+  int totalWidth = cols * iconSize + (cols - 1) * spacingX;
+  int marginX = max(0, (SCREEN_WIDTH - totalWidth) / 2);
+  int marginY = 10;
+
+  for (int i = 0; i < cols * rows; i++) {
+    if (i >= 8) continue;
     int fila = i / cols;
     int col = i % cols;
-    int x = marginX + col * spacingX;
-    int y = marginY + fila * spacingY;
+    int x = marginX + col * (iconSize + spacingX);
+    int y = marginY + fila * (iconSize + spacingY);
 
     if (i == seleccion) {
       y -= lift;
-
       display.setTextSize(1);
       display.setTextColor(SH110X_WHITE);
       int textW = strlen(nombresJuegos[i]) * 6;
       int textX = x + (iconSize / 2) - (textW / 2);
-      int textY = y + iconSize + 1;
+      int textY = y + iconSize + 2;
       display.setCursor(textX, textY);
       display.print(nombresJuegos[i]);
     }
