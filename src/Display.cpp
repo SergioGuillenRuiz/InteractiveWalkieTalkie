@@ -3,6 +3,7 @@
 #include "Display.h"
 #include "Morse.h"
 #include "States.h"
+#include "Inputs.h"
 
 const char* nombresMensajes[8] = {
   "luv u", "gschu", "ñe", "kissy",
@@ -567,7 +568,7 @@ void moveCursor() {
 
   static int lastCursorX = -1;
 
-  int raw = analogRead(A0);
+  int raw = getPotValue(1023);
   int cursorX;
   int sel = 0; // 0 = Env, 1 = Hist, 2 = Jueg
 
@@ -635,7 +636,7 @@ void drawMorseSuggestion() {
   }
 
   // Lectura del potenciómetro suavizada
-  int potValue = analogRead(A0);
+  int potValue = getPotValue(1023);
   int maxOffset = max(0, filteredCount - itemsPerPage);
   int scrollSteps = maxOffset + 1;
   int stepSize = 1024 / scrollSteps;
@@ -675,7 +676,7 @@ void drawMorseTable() {
   const int morseTableVisibleRows = 4;  
   const int morseTableItemsPerPage = morseTableCols * morseTableVisibleRows;
 
-  int potValue = analogRead(A0);
+  int potValue = getPotValue(1023);
 
   // Dividir el rango del potenciómetro en secciones discretas
   int maxOffset = max(0, morseTableSize - morseTableItemsPerPage);
@@ -743,7 +744,7 @@ void drawMorse() {
 void drawInstantMessagesMenu() {
   display.clearDisplay();
 
-  int seleccion = map(analogRead(A0), 0, 1023, 0, 7);
+  int seleccion = getPotValue(7);
   if (seleccion > 7) seleccion = 7;
 
   const int cols = 4;

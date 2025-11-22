@@ -104,7 +104,7 @@ bool handleSendMenu() {
         case SEND_WAIT:
         {
             static int lastSel = -1;
-            int sel = map(analogRead(A0), 0, 1023, 0, 1);
+            int sel = getPotValue(1);
             if (sel < 0) sel = 0;
             if (sel > 1) sel = 1;
 
@@ -282,7 +282,7 @@ bool handleSendMenu() {
             if (isMorsePressed()) {
                 delay(50);
                 if (isMorsePressed()) {
-                    int seleccion = map(analogRead(A0), 0, 1023, 0, 7);
+                    int seleccion = getPotValue(7);
                     if (seleccion < 0) seleccion = 0;
                     if (seleccion > 7) seleccion = 7;
 
@@ -390,9 +390,7 @@ bool handleHistoryMenu() {
     }
 
     // Leer y mapear la entrada analógica a un índice
-    int raw = analogRead(A0);
-    int mapped = map(raw, 0, 1023, 0, max(0, total - 1));
-    mapped = constrain(mapped, 0, max(0, total - 1));
+    int mapped = getPotValue(max(0, total - 1));
 
     // Debounce: aceptar el nuevo valor sólo si se mantiene estable
     if (mapped != candidateSel) {
