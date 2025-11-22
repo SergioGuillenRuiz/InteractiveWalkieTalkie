@@ -5,6 +5,16 @@
 #include "States.h"
 #include "Inputs.h"
 
+const char* nombresJuegos[8] = {
+  "Tetris", "Pescar", "Buscaminas", "Poker",
+  "Bar Game", "Pacman", "SpaceInv", "Snake"
+};
+
+const unsigned char* iconosJuegos[8] = {
+  iconoCorazon, iconoGota, iconoCaraSeria, iconoKissy,
+  iconoMano, iconoLatigo, iconoTick, iconoCruz
+};
+
 const char* nombresMensajes[8] = {
   "luv u", "gschu", "ñe", "kissy",
   "grab", "busy busy", "Shi", "Nour"
@@ -781,4 +791,40 @@ void drawInstantMessagesMenu() {
   display.display();
 }
 
-// ============================================================
+void drawGamesMenu() {
+  display.clearDisplay();
+
+  int seleccion = getPotValue(7);
+  if (seleccion > 7) seleccion = 7;
+
+  const int cols = 4;
+  const int iconSize = 16;
+  const int spacingX = 30;
+  const int spacingY = 28;
+  const int marginX = 8;
+  const int marginY = 4;
+  const int lift = 4;
+
+  for (int i = 0; i < 8; i++) {
+    int fila = i / cols;
+    int col = i % cols;
+    int x = marginX + col * spacingX;
+    int y = marginY + fila * spacingY;
+
+    if (i == seleccion) {
+      y -= lift;
+
+      display.setTextSize(1);
+      display.setTextColor(SH110X_WHITE);
+      int textW = strlen(nombresJuegos[i]) * 6;
+      int textX = x + (iconSize / 2) - (textW / 2);
+      int textY = y + iconSize + 1;
+      display.setCursor(textX, textY);
+      display.print(nombresJuegos[i]);
+    }
+
+    display.drawBitmap(x, y, iconosJuegos[i], iconSize, iconSize, SH110X_WHITE);
+  }
+
+  display.display();
+}

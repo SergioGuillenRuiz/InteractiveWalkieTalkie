@@ -474,17 +474,67 @@ bool handleHistoryMenu() {
 
 // ==================== STATE_GAMES_MENU ====================
 bool handleGamesMenu() {
-    Display_centerText("GAMES MENU");
+    // Muestra el submenú de juegos (iconos 4x2) y permite seleccionar con el potenciómetro A0.
+    drawGamesMenu();
 
+    // Si se pulsa MORSE -> "arrancar" juego (placeholder)
+    if (isMorsePressed()) {
+        delay(50);
+        if (isMorsePressed()) {
+            int seleccion = getPotValue(7);
+            if (seleccion < 0) seleccion = 0;
+            if (seleccion > 7) seleccion = 7;
+
+            // Mostrar pantalla de arranque / placeholder
+            String name = String(nombresJuegos[seleccion]);
+            Display_clear();
+            display.setCursor(0,20);
+            display.setTextSize(1);
+            display.setTextColor(SH110X_WHITE);
+            display.println("Arrancando:");
+            display.println(name);
+            display.display();
+
+            // Simular tentativa de arranque y mostrar que no está implementado aún
+            delay(800);
+            Display_clear();
+            display.setCursor(0,20);
+            display.setTextSize(1);
+            display.setTextColor(SH110X_WHITE);
+            display.println("Proximamente");
+            display.display();
+
+            // Esperar hasta que el usuario pulse un botón; MORSE -> volver al submenú, FINISH -> salir a idle
+            while (!isMorsePressed() && !isFinishPressed()) {
+                Lora_update();
+                Display_update();
+                yield();
+                delay(10);
+            }
+
+            if (isMorsePressed()) {
+                menuTransitionDelay();
+                Display_clear();
+                return true; // volver a STATE_GAMES_MENU (se redibujará)
+            } else { // isFinishPressed()
+                menuTransitionDelay();
+                mainState = STATE_IDLE;
+                Display_clear();
+                return true;
+            }
+        }
+    }
+
+    // Si se pulsa FINISH -> volver al menú principal
     if (isFinishPressed()) {
         delay(50);
         if (isFinishPressed()) {
             mainState = STATE_IDLE;
             menuTransitionDelay();
-            display.clearDisplay();
+            Display_clear();
             return true;
         }
     }
 
-    return true; 
+    return true;
 }

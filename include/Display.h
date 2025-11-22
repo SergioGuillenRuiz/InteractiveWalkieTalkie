@@ -24,6 +24,7 @@
 
 extern Adafruit_SH1107 display;
 extern const char* nombresMensajes[];
+extern const char* nombresJuegos[];
 
 // ============================================================
 // Funciones Display
@@ -38,6 +39,7 @@ void Display_centerText(const String &text);
 
 void drawMenu();
 void drawInstantMessagesMenu();
+void drawGamesMenu();
 void moveCursor();
 
 void drawMorseSuggestion();
