@@ -37,6 +37,7 @@ void loop() {
     // ==================== STATE_IDLE ====================
     if (mainState == STATE_IDLE) {
 
+        animateHippo();
         if (handleIdle()) return;
 
     }

@@ -18,7 +18,7 @@ const char* nombresMensajes[8] = {
   "cansada", "hambrienta", "meh", "kissy",
   "happy", "busy busy", "Zi", "Nour"
 };
-//Invertir los colores de los iconos (están bien pero en negativo) y rehacer el iconoZzz
+
 const unsigned char* iconosMensajes[8] = {
   iconoZZZ, iconoHambre, iconoCaraSeria, iconoCorazon,
   iconoCaraFeliz, iconoMochila, iconoTick, iconoCruz
@@ -575,37 +575,32 @@ void animateHippoGivingHeart() {
 }
 
 void moveCursor() { 
-
   static int lastCursorX = -1;
 
   int raw = getPotValue(1023);
   int cursorX;
-  int sel = 0; // 0 = Env, 1 = Hist, 2 = Jueg
+  int sel = 0;
 
-  // Ajuste de rangos: Msg más amplio, Ajt más corto
-  if (raw < 400) { cursorX = 20;  sel = 0; }       // Centrado bajo "Env"
-  else if (raw < 800) { cursorX = 68; sel = 1; }   // Centrado bajo "Hist"
-  else { cursorX = 115; sel = 2; }                 // Centrado bajo "Jueg"
+  if (raw < 400) { cursorX = 20;  sel = 0; }
+  else if (raw < 800) { cursorX = 68; sel = 1; }
+  else { cursorX = 115; sel = 2; }
 
-  // Actualiza la variable global usada por main.cpp
   cursorPos = sel;
 
   if (cursorX != lastCursorX) {
-    // Borra flecha anterior (solo si existe)
     if (lastCursorX >= 0) {
       display.fillTriangle(
         lastCursorX, 49,
-        lastCursorX - 5, 61,
-        lastCursorX + 5, 61,
+        lastCursorX - 3, 55,
+        lastCursorX + 3, 55,
         SH110X_BLACK
       );
     }
 
-    // Dibuja flecha nueva
     display.fillTriangle(
       cursorX, 49,
-      cursorX - 5, 61,
-      cursorX + 5, 61,
+      cursorX - 3, 55,
+      cursorX + 3, 55,
       SH110X_WHITE
     );
 
