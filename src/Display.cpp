@@ -5,24 +5,23 @@
 #include "States.h"
 #include "Inputs.h"
 
-const char* nombresJuegos[8] = {
-  "Tetris", "Pescar", "Buscaminas", "Poker",
-  "Bar Game", "Pacman", "SpaceInv", "Snake"
+
+const char* nombresJuegos[5] = {
+  "Tetris2v2", "Poker", "RefillGame", "Choose4Me", "HippoRadar"
 };
 
-const unsigned char* iconosJuegos[8] = {
-  iconoCorazon, iconoGota, iconoCaraSeria, iconoKissy,
-  iconoMano, iconoLatigo, iconoTick, iconoCruz
+const unsigned char* iconosJuegos[5] = {
+  iconoTetris, iconoPoker, iconoRefill, iconoDado, iconoRadar
 };
 
 const char* nombresMensajes[8] = {
-  "luv u", "gschu", "ñe", "kissy",
-  "grab", "busy busy", "Shi", "Nour"
+  "cansada", "hambrienta", "meh", "kissy",
+  "happy", "busy busy", "Zi", "Nour"
 };
-
+//Invertir los colores de los iconos (están bien pero en negativo) y rehacer el iconoZzz
 const unsigned char* iconosMensajes[8] = {
-  iconoCorazon, iconoGota, iconoCaraSeria, iconoKissy,
-  iconoMano, iconoLatigo, iconoTick, iconoCruz
+  iconoZZZ, iconoHambre, iconoCaraSeria, iconoCorazon,
+  iconoCaraFeliz, iconoMochila, iconoTick, iconoCruz
 };
 
 // -----------------------------------------------------------------------------
@@ -80,6 +79,7 @@ void Display_update() {
   if (now - lastUpdate >= DISPLAY_REFRESH_MS) {
     lastUpdate = now;
   }
+  display.display();
 }
 
 // -----------------------------------------------------------------------------
@@ -794,21 +794,21 @@ void drawInstantMessagesMenu() {
 void drawGamesMenu() {
   display.clearDisplay();
 
-  int seleccion = getPotValue(7);
+  int seleccion = getPotValue(5);
 
   const int cols = 3;
-  const int rows = 3;
+  const int rows = 2;
   const int iconSize = 20;
   const int spacingX = 14;
-  const int spacingY = 20;
+  const int spacingY = 35;
   const int lift = 6;
 
   int totalWidth = cols * iconSize + (cols - 1) * spacingX;
   int marginX = max(0, (SCREEN_WIDTH - totalWidth) / 2);
-  int marginY = 10;
+  int marginY = 20;
 
   for (int i = 0; i < cols * rows; i++) {
-    if (i >= 8) continue;
+    if (i >= 5) continue;
     int fila = i / cols;
     int col = i % cols;
     int x = marginX + col * (iconSize + spacingX);
