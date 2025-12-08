@@ -26,15 +26,19 @@ SendSubState sendSubState = SEND_WAIT;
 
 // ==================== STATE_IDLE ====================
 bool handleIdle() {
-
     LoRa.idle();
     drawMenu();
     moveCursor();
+    
+    // Gestionar animaciones (se ejecuta después del menú y cursor)
+    updateHippoAnimation();
 
     if (Lora_hasMessage()) {
         String msg = Lora_readMessage();
         History_addMessage(msg);
         lastTimeReceived = millis();
+        // Disparar animación cuando se recibe mensaje
+        triggerAnimation(ANIM_CHASING_HEART);
     }
 
     if (isMorsePressed()) {
@@ -171,6 +175,7 @@ bool handleSendMenu() {
                 MorseResult res = createMorseMessage();
                 if (res == MORSE_SENT) {
                     if (Lora_send(mensajeAEnviar)) {
+                        triggerAnimation(ANIM_GIVING_HEART);
                         Display_clear();
                         display.setCursor(0,0);
                         display.setTextSize(1);
@@ -289,6 +294,7 @@ bool handleSendMenu() {
                     String mensaje = nombresMensajes[seleccion];
 
                     if (Lora_send(mensaje)) {
+                        triggerAnimation(ANIM_GIVING_HEART);
                         Display_clear();
                         display.setCursor(0,0);
                         display.setTextSize(1);

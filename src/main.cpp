@@ -36,8 +36,8 @@ void loop() {
   
     // ==================== STATE_IDLE ====================
     if (mainState == STATE_IDLE) {
-        //Las animaciones parecen interferir con el dibujo del cursor
-        animateHippo();
+        // TEST: Mostrar animación chasing heart una vez
+      animateHippoChasingHeart();
         if (handleIdle()) return;
 
     }

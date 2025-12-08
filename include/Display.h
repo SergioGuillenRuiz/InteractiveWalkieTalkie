@@ -26,6 +26,15 @@ extern Adafruit_SH1107 display;
 extern const char* nombresMensajes[];
 extern const char* nombresJuegos[];
 
+enum HippoAnimation {
+  ANIM_NORMAL = 0,        // animateHippo()
+  ANIM_SLEEPY = 1,        // animateHippoWithZzz()
+  ANIM_CHASING_HEART = 2, // animateHippoChasingHeart()
+  ANIM_GIVING_HEART = 3,  // animateHippoGivingHeart()
+  ANIM_BONKED = 4,        // animateHippoBonked()
+  ANIM_NONE = 5
+};
+
 // ============================================================
 // Funciones Display
 // ============================================================
@@ -46,14 +55,18 @@ void drawMorseSuggestion();
 void drawMorseTable();
 void drawMorse();
 
-void animateHippo();
+bool animateHippo();
 void animateHippoWithZzz();
 void animateHippoAproaching();
 void animateHippoRetreating();
 void animateHippoBonked();
-void animateHippoChasingHeart();
+bool animateHippoChasingHeart();
 void animateHippoGivingHeart();
 void drawHeart(int x, int y, int color);
+
+void updateHippoAnimation();
+void triggerAnimation(HippoAnimation anim);
+void resetAnimationTimer(); 
 
 // ============================================================
 // BITMAPS 

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Config.h"   
-#include "Inputs.h"   
+#include "Inputs.h"  
+#include "Display.h" 
 
 ButtonState morseButton  = { HIGH, HIGH, 0 };
 ButtonState finishButton = { HIGH, HIGH, 0 };
@@ -16,13 +17,18 @@ static bool readButton(ButtonState &btn, uint8_t pin) {
     btn.lastState = raw;
   }
 
-  // si ha pasado suficiente tiempo desde el último cambio, actualizamos el estado estable
   if ((unsigned long)(millis() - btn.lastChange) > BUTTON_DEBOUNCE_TIME_MS) {
     btn.currentState = btn.lastState;
   }
 
-  // retornamos true cuando está PRESIONADO (activo LOW)
-  return (btn.currentState == LOW);
+  bool pressed = (btn.currentState == LOW);
+  
+  // Resetear temporizador de animación cuando se presiona un botón
+  if (pressed && btn.lastState == LOW) {
+    resetAnimationTimer();
+  }
+  
+  return pressed;
 }
 
 void menuTransitionDelay() {
@@ -55,6 +61,7 @@ int getPotValue(int maxIndex) {
   static int stable = 0;
   static int candidate = 0;
   static unsigned long since = 0;
+  static int lastStable = -1;
 
   int raw = analogRead(A0);
   int mapped = map(raw, 0, 1023, 0, maxIndex);
@@ -66,6 +73,11 @@ int getPotValue(int maxIndex) {
   } else {
     if ((unsigned long)(millis() - since) >= POT_DEBOUNCE_TIME_MS) {
       stable = candidate;
+      // Resetear temporizador solo cuando el valor estable cambia
+      if (stable != lastStable) {
+        resetAnimationTimer();
+        lastStable = stable;
+      }
     }
   }
 
