@@ -36,7 +36,7 @@ void loop() {
   
     // ==================== STATE_IDLE ====================
     if (mainState == STATE_IDLE) {
-
+        //Las animaciones parecen interferir con el dibujo del cursor
         animateHippo();
         if (handleIdle()) return;
 

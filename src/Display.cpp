@@ -576,7 +576,7 @@ void animateHippoGivingHeart() {
 
 void moveCursor() { 
   static int lastCursorX = -1;
-
+  //No está bien ajustado a 3 posiciones, revisar
   int raw = getPotValue(1023);
   int cursorX;
   int sel = 0;
