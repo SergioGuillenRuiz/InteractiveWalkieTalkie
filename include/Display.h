@@ -56,12 +56,12 @@ void drawMorseTable();
 void drawMorse();
 
 bool animateHippo();
-void animateHippoWithZzz();
+bool animateHippoWithZzz();
 void animateHippoAproaching();
 void animateHippoRetreating();
-void animateHippoBonked();
+bool animateHippoBonked();
 bool animateHippoChasingHeart();
-void animateHippoGivingHeart();
+bool animateHippoGivingHeart();
 void drawHeart(int x, int y, int color);
 
 void updateHippoAnimation();

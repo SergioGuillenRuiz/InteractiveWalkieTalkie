@@ -36,8 +36,7 @@ void loop() {
   
     // ==================== STATE_IDLE ====================
     if (mainState == STATE_IDLE) {
-        // TEST: Mostrar animación chasing heart una vez
-      animateHippoChasingHeart();
+        
         if (handleIdle()) return;
 
     }

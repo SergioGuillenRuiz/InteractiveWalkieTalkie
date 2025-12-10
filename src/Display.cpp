@@ -168,77 +168,126 @@ bool animateHippo() {
   return true;
 }
 
-void animateHippoWithZzz() {
-  static int frame = 0;         // Control del frame de la animación del hipopótamo
-  static int zzzY = 80;         // Posición inicial de las 'zzz' (cerca de la cabeza del hipopótamo)
-  static int prevZzzY = 80;     // Posición previa de las 'zzz'
-  static unsigned long lastResetTime = 0; // Tiempo del último reseteo de las 'zzz'
-  static bool isPaused = false; // Indica si está en pausa para el reseteo
+bool animateHippoWithZzz() {
+  static unsigned long lastFrameTime = 0;
+  static unsigned long lastZzzSpawnTime = 0;
+  static int frame = 0;
+  
+  // Sistema de partículas MEJORADO
+  #define MAX_ZZZ 5  // Menos ZZZ para que no sea caótico
+  static struct {
+    int y;
+    int prevY;  // Para borrar la posición anterior
+    bool active;
+  } zzzParticles[MAX_ZZZ];
+  
+  static bool initialized = false;
+  
+  // CONFIGURACIÓN MEJORADA
+  const unsigned long FRAME_DELAY = 350;     // Hipopótamo normal
+  const unsigned long ZZZ_SPAWN_DELAY = 400; // Nueva ZZZ cada 400ms (RITMO BUENO)
+  const int ZZZ_SPEED = 2;                   // Velocidad SUAVE (antes era 3)
+  const int ZZZ_START_Y = 95;                // Empezar cerca de la boca
+  const int ZZZ_END_Y = -25;                 // Salir completamente por arriba
+  const int ZZZ_HEIGHT = 25;                 // Altura total de las 3 Z
 
-  // Borra solo el área de las 'zzz' del frame anterior si no están en pausa
-  if (!isPaused && prevZzzY > 60) {
-    display.fillRect(50, prevZzzY - 16, 20, 24, SH110X_BLACK);
-  }
-
-  // Dibujar solo la parte dinámica (área del hipopótamo)
-  display.fillRect(50, 55, 81, 81, SH110X_BLACK); // Borra el área del hipopótamo
-
-  // Animación del hipopótamo
-  switch (frame) {
-    case 0: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
-    case 1: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
-    case 2: display.drawBitmap(65, 70, hippoBitMap62, 63, 63, SH110X_WHITE); break;
-    case 3: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
-    case 4: display.drawBitmap(65, 70, hippoBitMap64, 64, 64, SH110X_WHITE); break;
-    case 5: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
-    case 6: display.drawBitmap(65, 70, hippoBitMap62, 62, 62, SH110X_WHITE); break;
-    case 7: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
-    case 8: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
-  }
-
-  // Dibujar las 'zzz' si están por debajo del límite y no están en pausa
-  if (!isPaused && zzzY > 60) {
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-    display.setCursor(60, zzzY);
-    display.print("Z");
-
-    display.setCursor(55, zzzY - 8); // Segunda 'Z' ligeramente arriba
-    display.print("Z");
-
-    display.setCursor(50, zzzY - 16); // Tercera 'Z' aún más arriba
-    display.print("Z");
-  }
-
-  // Actualiza el contenido dinámico
-  display.display();
-
-  // Guarda la posición previa de las 'zzz'
-  prevZzzY = zzzY;
-
-  // Control de pausa y reinicio de las 'zzz'
-  if (zzzY <= 60) {
-    if (!isPaused) {
-      // Inicia la pausa
-      isPaused = true;
-      lastResetTime = millis();
-    } else if (millis() - lastResetTime >= 1500) {
-      // Termina la pausa después de 1.5 segundos
-      isPaused = false;
-      zzzY = 80; // Reinicia en la posición inicial
+  unsigned long now = millis();
+  
+  // INICIALIZACIÓN
+  if (!initialized) {
+    for (int i = 0; i < MAX_ZZZ; i++) {
+      zzzParticles[i].active = false;
+      zzzParticles[i].y = 0;
+      zzzParticles[i].prevY = 0;
     }
-  } else {
-    // Avanza las 'zzz' hacia arriba si no están en pausa
-    zzzY -= 2;
+    initialized = true;
   }
-
-  // Avanza el frame del hipopótamo
-  frame = (frame + 1) % 9;
-
-  // Pausa para la animación del hipopótamo
-  delay(350);
+  
+  // 1. ANIMACIÓN DEL HIPOPÓTAMO
+  if (now - lastFrameTime >= FRAME_DELAY) {
+    // Borrar solo el área del hipopótamo (NO las ZZZ)
+    display.fillRect(65, 70, 60, 60, SH110X_BLACK);
+    
+    frame = (frame + 1) % 9;
+    
+    switch (frame) {
+      case 0: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
+      case 1: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
+      case 2: display.drawBitmap(65, 70, hippoBitMap62, 63, 63, SH110X_WHITE); break;
+      case 3: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
+      case 4: display.drawBitmap(65, 70, hippoBitMap64, 64, 64, SH110X_WHITE); break;
+      case 5: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
+      case 6: display.drawBitmap(65, 70, hippoBitMap62, 62, 62, SH110X_WHITE); break;
+      case 7: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
+      case 8: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
+    }
+    
+    lastFrameTime = now;
+  }
+  
+  // 2. GENERAR NUEVAS ZZZ (con ritmo)
+  if (now - lastZzzSpawnTime >= ZZZ_SPAWN_DELAY) {
+    // Buscar slot libre
+    for (int i = 0; i < MAX_ZZZ; i++) {
+      if (!zzzParticles[i].active) {
+        zzzParticles[i].y = ZZZ_START_Y;
+        zzzParticles[i].prevY = ZZZ_START_Y;
+        zzzParticles[i].active = true;
+        break;
+      }
+    }
+    lastZzzSpawnTime = now;
+  }
+  
+  // 3. PRIMERO: BORRAR TODAS LAS ZZZ ANTERIORES
+  for (int i = 0; i < MAX_ZZZ; i++) {
+    if (zzzParticles[i].active) {
+      // Solo borrar si la posición anterior era visible
+      if (zzzParticles[i].prevY >= 0 && zzzParticles[i].prevY <= 128) {
+        display.fillRect(50, zzzParticles[i].prevY - 16, 20, ZZZ_HEIGHT, SH110X_BLACK);
+      }
+    }
+  }
+  
+  // 4. MOVER TODAS LAS ZZZ
+  for (int i = 0; i < MAX_ZZZ; i++) {
+    if (zzzParticles[i].active) {
+      // Guardar posición anterior antes de mover
+      zzzParticles[i].prevY = zzzParticles[i].y;
+      
+      // Mover hacia arriba
+      zzzParticles[i].y -= ZZZ_SPEED;
+      
+      // Si sale completamente de pantalla, desactivar
+      if (zzzParticles[i].y <= ZZZ_END_Y) {
+        zzzParticles[i].active = false;
+      }
+    }
+  }
+  
+  // 5. DIBUJAR TODAS LAS ZZZ NUEVAS
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  
+  for (int i = 0; i < MAX_ZZZ; i++) {
+    if (zzzParticles[i].active && zzzParticles[i].y >= 0 && zzzParticles[i].y <= 128) {
+      // Dibujar las 3 Z en cascada
+      display.setCursor(60, zzzParticles[i].y);
+      display.print("Z");
+      
+      display.setCursor(55, zzzParticles[i].y - 8);
+      display.print("Z");
+      
+      display.setCursor(50, zzzParticles[i].y - 16);
+      display.print("Z");
+    }
+  }
+  
+  // 6. ACTUALIZAR PANTALLA
+  display.display();
+  
+  return false;
 }
-
 void animateHippoAproaching() {
   static int frame = 0;    // Control del frame de animación
   static int size = 60;    // Tamaño inicial del hipopótamo
@@ -384,49 +433,199 @@ void animateHippoRetreating() {
   frameR = 0;
 }
 
-void animateHippoBonked() {
-  static int posX = 65;     // Coordenada X del hipopótamo
-  static int posY = 70;     // Coordenada Y del hipopótamo
-  static bool isBonked = false; // Estado del hipopótamo
+bool animateHippoBonked() {
+  static enum {
+    STATE_INIT,
+    STATE_BONK_1_WITH_STICK,
+    STATE_BONK_1_CLEAR,
+    STATE_BONK_2_WITH_STICK,
+    STATE_BONK_2_CLEAR,
+    STATE_BONK_3_WITH_STICK,
+    STATE_BONK_3_CLEAR,
+    STATE_FLIPPED_HIPPO,
+    STATE_DONE
+  } animState = STATE_INIT;
+  
+  static unsigned long stateStartTime = 0;
+  static int posX = 65;
+  static int posY = 70;
+  static bool isBonked = false;
+  static int bonkCount = 0;
 
-  if (!isBonked) {
-    for (int i = 0; i < 3; i++) { // Tres golpes animados
-      // Mostrar el palo en golpes impares
-      if (i % 2 == 0) {
+  unsigned long now = millis();
+  bool animationFinished = false;
+
+  switch (animState) {
+    
+    // ----------------------------------------------------
+    case STATE_INIT:
+      // Reinicializar variables
+      posX = 65;
+      posY = 70;
+      isBonked = false;
+      bonkCount = 0;
+      animState = STATE_BONK_1_WITH_STICK;
+      stateStartTime = now;
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_1_WITH_STICK:
+      // Primer golpe con palo (400ms)
+      if (now - stateStartTime >= 400) {
+        // Dibujar palo
         for (int j = 0; j < 4; j++) {
           display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_WHITE);
         }
-        display.setCursor(posX + 10, posY - 10); // Posición del texto
-        display.print("bonk"); // Mostrar texto "bonk"
+        
+        // Dibujar texto "bonk"
+        display.setCursor(posX + 10, posY - 10);
+        display.print("bonk");
+        
+        // Dibujar hipopótamo normal
+        display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        bonkCount++;
+        animState = STATE_BONK_1_CLEAR;
+        stateStartTime = now;
       }
-
-      display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE); // Mostrar el hipopótamo (no parpadea)
-      display.display();
-      delay(400); // El golpe dura un poco más (400 ms)
-
-      // Borrar el palo y el texto en golpes pares o después de mostrar
-      for (int j = 0; j < 4; j++) {
-        display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_BLACK);
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_1_CLEAR:
+      // Limpiar palo y texto (100ms)
+      if (now - stateStartTime >= 100) {
+        // Borrar palo
+        for (int j = 0; j < 4; j++) {
+          display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_BLACK);
+        }
+        
+        // Borrar texto
+        display.fillRect(posX + 10, posY - 10, 40, 10, SH110X_BLACK);
+        
+        // Volver a dibujar hipopótamo (sin palo)
+        display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        animState = STATE_BONK_2_WITH_STICK;
+        stateStartTime = now;
       }
-      display.fillRect(posX + 10, posY - 10, 40, 10, SH110X_BLACK); // Borrar texto "bonk"
-      display.display();
-      delay(100); // Pausa breve entre golpes
-    }
-
-    // Después del último golpe, limpiar el palo y texto una vez más
-    for (int j = 0; j < 4; j++) {
-      display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_BLACK); // Borrar palo
-    }
-    display.fillRect(posX + 10, posY - 10, 40, 10, SH110X_BLACK); // Borrar texto "bonk"
-    display.display();
-
-    // Cambiar al estado "bonked" (hipopótamo patas arriba)
-    display.fillRect(posX, posY, 60, 60, SH110X_BLACK); // Borra el hipopótamo anterior
-    display.drawBitmap(posX, posY, hippoBitMapBonked60, 60, 60, SH110X_WHITE); // Dibuja el hipopótamo patas arriba
-    display.display();
-
-    isBonked = true; // Actualizar el estado
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_2_WITH_STICK:
+      // Segundo golpe con palo (400ms)
+      if (now - stateStartTime >= 400) {
+        // Dibujar palo
+        for (int j = 0; j < 4; j++) {
+          display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_WHITE);
+        }
+        
+        // Dibujar texto "bonk"
+        display.setCursor(posX + 10, posY - 10);
+        display.print("bonk");
+        
+        // Dibujar hipopótamo
+        display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        bonkCount++;
+        animState = STATE_BONK_2_CLEAR;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_2_CLEAR:
+      // Limpiar palo y texto (100ms)
+      if (now - stateStartTime >= 100) {
+        // Borrar palo
+        for (int j = 0; j < 4; j++) {
+          display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_BLACK);
+        }
+        
+        // Borrar texto
+        display.fillRect(posX + 10, posY - 10, 40, 10, SH110X_BLACK);
+        
+        // Dibujar hipopótamo
+        display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        animState = STATE_BONK_3_WITH_STICK;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_3_WITH_STICK:
+      // Tercer golpe con palo (400ms)
+      if (now - stateStartTime >= 400) {
+        // Dibujar palo
+        for (int j = 0; j < 4; j++) {
+          display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_WHITE);
+        }
+        
+        // Dibujar texto "bonk"
+        display.setCursor(posX + 10, posY - 10);
+        display.print("bonk");
+        
+        // Dibujar hipopótamo
+        display.drawBitmap(posX, posY, hippoBitMap60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        bonkCount++;
+        animState = STATE_BONK_3_CLEAR;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_BONK_3_CLEAR:
+      // Limpiar palo y texto final (100ms)
+      if (now - stateStartTime >= 100) {
+        // Borrar palo final
+        for (int j = 0; j < 4; j++) {
+          display.drawLine(posX - 30 + j, posY + 15 + j, posX + 5 + j, posY - 15 + j, SH110X_BLACK);
+        }
+        
+        // Borrar texto final
+        display.fillRect(posX + 10, posY - 10, 40, 10, SH110X_BLACK);
+        display.display();
+        
+        animState = STATE_FLIPPED_HIPPO;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_FLIPPED_HIPPO:
+      // Mostrar hipopótamo patas arriba (500ms)
+      if (now - stateStartTime >= 500) {
+        // Borrar hipopótamo anterior
+        display.fillRect(posX, posY, 60, 60, SH110X_BLACK);
+        
+        // Dibujar hipopótamo patas arriba
+        display.drawBitmap(posX, posY, hippoBitMapBonked60, 60, 60, SH110X_WHITE);
+        display.display();
+        
+        isBonked = true;
+        animState = STATE_DONE;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_DONE:
+      // Mantener posición final (1000ms) antes de terminar
+      if (now - stateStartTime >= 1000) {
+        // Resetear para próxima ejecución
+        animState = STATE_INIT;
+        animationFinished = true;
+      }
+      break;
   }
+  
+  return animationFinished;
 }
 
 bool animateHippoChasingHeart() {
@@ -605,77 +804,167 @@ void drawHeart(int x, int y, int color) {
   }
 }
 
-void animateHippoGivingHeart() {
-  const int screenWidth = 128;  // Ancho de la pantalla
-  const int screenHeight = 128; // Alto de la pantalla
-  int hippoX = 100, hippoY = 90; // Coordenadas iniciales del hipopótamo (derecha)
-  int heartX = screenWidth / 2 + 10, heartY = 110; // Coordenadas del corazón (un poco a la derecha del centro)
+bool animateHippoGivingHeart() {
+  static enum {
+    STATE_INIT,
+    STATE_PHASE1_SLOW_MOVE,
+    STATE_PHASE2_FAST_MOVE,
+    STATE_PHASE3_JUMPING,
+    STATE_PAUSE,
+    STATE_CLEANUP,
+    STATE_DONE
+  } animState = STATE_INIT;
+  
+  static unsigned long stateStartTime = 0;
+  static unsigned long lastMoveTime = 0;
+  static int hippoX, hippoY, heartX, heartY;
+  static const int screenWidth = 128;
+  static const int screenHeight = 128;
+  static int mouthOffsetX = -5; // Desplazamiento del corazón en la boca
+  static int mouthOffsetY = 20; // Posición vertical del corazón en la boca
+  static int jumpCounter = 0;
+  static bool heartDrawn = false;
 
-  // Dibujar el corazón inicial en el suelo (sin borrar iconos)
-  drawHeart(heartX, heartY, SH110X_WHITE);
-  display.display();
+  unsigned long now = millis();
+  bool animationFinished = false;
 
-  // Fase 1: Movimiento lento hacia el corazón
-  while (hippoX > heartX + 10) {
-    // Dibujar la animación sin borrar los iconos
-    display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK); // Reducido el borrado a partir de y = 40
-
-    // Mover el hipopótamo lentamente hacia la izquierda
-    hippoX -= 1;
-
-    // Dibujar el hipopótamo y el corazón
-    display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
-    drawHeart(heartX, heartY, SH110X_WHITE);
-    display.display();
-    delay(50); // Movimiento lento
+  switch (animState) {
+    
+    // ----------------------------------------------------
+    case STATE_INIT:
+      // Inicializar variables
+      hippoX = 100;
+      hippoY = 90;
+      heartX = screenWidth / 2 + 10;
+      heartY = 110;
+      jumpCounter = 0;
+      heartDrawn = false;
+      
+      // Dibujar corazón inicial
+      if (!heartDrawn) {
+        drawHeart(heartX, heartY, SH110X_WHITE);
+        display.display();
+        heartDrawn = true;
+      }
+      
+      animState = STATE_PHASE1_SLOW_MOVE;
+      stateStartTime = now;
+      lastMoveTime = now;
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_PHASE1_SLOW_MOVE:
+      // Movimiento lento hacia el corazón (1 pixel cada 50ms)
+      if (now - lastMoveTime >= 50 && hippoX > heartX + 10) {
+        // Borrar área de animación (sin iconos superiores)
+        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        
+        // Mover hipopótamo
+        hippoX -= 1;
+        
+        // Dibujar hipopótamo y corazón
+        display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
+        drawHeart(heartX, heartY, SH110X_WHITE);
+        display.display();
+        
+        lastMoveTime = now;
+      } 
+      else if (hippoX <= heartX + 10) {
+        // Fin de fase 1
+        animState = STATE_PAUSE;
+        stateStartTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_PAUSE:
+      // Pausa de 1 segundo entre fases
+      if (now - stateStartTime >= 1000) {
+        animState = STATE_PHASE2_FAST_MOVE;
+        stateStartTime = now;
+        lastMoveTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_PHASE2_FAST_MOVE:
+      // Movimiento rápido (5 pixels cada 30ms)
+      if (now - lastMoveTime >= 30 && hippoX > heartX - 5) {
+        // Borrar área de animación
+        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        
+        // Mover hipopótamo rápidamente
+        hippoX -= 5;
+        
+        // Dibujar hipopótamo y corazón
+        display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
+        drawHeart(heartX, heartY, SH110X_WHITE);
+        display.display();
+        
+        lastMoveTime = now;
+      }
+      else if (hippoX <= heartX - 5) {
+        // Fin de fase 2 - el hipopótamo está en el corazón
+        animState = STATE_PHASE3_JUMPING;
+        stateStartTime = now;
+        lastMoveTime = now;
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_PHASE3_JUMPING:
+      // Saltitos sincronizados (15 saltos)
+      if (now - lastMoveTime >= 60) {
+        // Borrar área de animación
+        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        
+        // Saltar arriba o abajo
+        if (jumpCounter % 2 == 0) {
+          hippoY -= 10; // Subir
+        } else {
+          hippoY += 10; // Bajar
+        }
+        
+        // Moverse hacia la izquierda
+        hippoX -= 5;
+        
+        // Dibujar hipopótamo con corazón en la boca
+        display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
+        drawHeart(hippoX + mouthOffsetX, hippoY + mouthOffsetY, SH110X_WHITE);
+        display.display();
+        
+        jumpCounter++;
+        lastMoveTime = now;
+        
+        if (jumpCounter >= 20) { // 10 ciclos completos (arriba/abajo)
+          animState = STATE_CLEANUP;
+          stateStartTime = now;
+        }
+      }
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_CLEANUP:
+      // Borrar área de animación final
+      display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+      display.display();
+      
+      animState = STATE_DONE;
+      stateStartTime = now;
+      break;
+    
+    // ----------------------------------------------------
+    case STATE_DONE:
+      // Breve pausa final de 500ms antes de terminar
+      if (now - stateStartTime >= 500) {
+        // Resetear estado para próxima ejecución
+        animState = STATE_INIT;
+        animationFinished = true;
+      }
+      break;
   }
-
-  // Pausa de un segundo
-  delay(1000);
-
-  // Fase 2: Movimiento rápido hacia el corazón (acelerando un poco más)
-  while (hippoX > heartX - 5) {
-    // Dibujar la animación sin borrar los iconos
-    display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK); // Reducido el borrado a partir de y = 40
-
-    // Mover el hipopótamo rápidamente hacia la izquierda
-    hippoX -= 5;  // Acelerando el movimiento
-
-    // Dibujar el hipopótamo y el corazón
-    display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
-    drawHeart(heartX, heartY, SH110X_WHITE);
-    display.display();
-    delay(30); // Movimiento rápido
-  }
-
-  // Fase 3: Saltitos sincronizados
-  int mouthOffsetX = -5; // Desplazamiento del corazón en la boca
-  int mouthOffsetY = 20; // Posición vertical del corazón en la boca
-
-  for (int i = 0; i < 20; i++) { // Realiza 15 saltos
-    // Dibujar la animación sin borrar los iconos
-    display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK); // Reducido el borrado a partir de y = 40
-
-    // Saltar hacia arriba o volver a bajar
-    if (i % 2 == 0) hippoY -= 10; // Subir
-    else hippoY += 10;            // Bajar
-
-    // Moverse hacia la izquierda más rápido
-    hippoX -= 5;
-
-    // Dibujar el hipopótamo y el corazón en la boca
-    display.drawBitmap(hippoX, hippoY, hippoBitMap40, 40, 40, SH110X_WHITE);
-    drawHeart(hippoX + mouthOffsetX, hippoY + mouthOffsetY, SH110X_WHITE);
-    display.display();
-    delay(60); // Tiempo de cada salto reducido
-  }
-
-  // Borrar el área de animación (sin borrar los iconos)
-  display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
-  display.display();
-
-  // Pausa final de 2 segundos
-  delay(2000);
+  
+  return animationFinished;
 }
 
 void moveCursor() { 
@@ -931,34 +1220,41 @@ void drawGamesMenu() {
 }
 
 void updateHippoAnimation() {
+    static bool wasSleeping = false;
+    
     // Solo en estado IDLE
     if (mainState != STATE_IDLE) {
         currentAnimation = ANIM_NORMAL;
         animationLock = false;
+        wasSleeping = false;
         return;
     }
 
-    // 1. Animaciones forzadas (eventos)
-    if (forcedAnimation != ANIM_NONE && !animationLock) {
+    unsigned long now = millis();
+    unsigned long inactiveTime = now - lastInteraction;
+
+    // 1. PRIMERO: Animaciones forzadas (máxima prioridad)
+    if (forcedAnimation != ANIM_NONE) {
         currentAnimation = forcedAnimation;
-        animationStartTime = millis();
+        animationStartTime = now;
         animationLock = true;
         forcedAnimation = ANIM_NONE;
+        wasSleeping = false;
     }
 
-    // 2. Animaciones bloqueantes especiales (CHASING_HEART, GIVING_HEART, BONKED)
+    // 2. SEGUNDO: Animaciones especiales en curso
     if (animationLock) {
         bool animationFinished = false;
         
         switch (currentAnimation) {
             case ANIM_CHASING_HEART:
-              //  animationFinished = animateHippoChasingHeart(); 
+                animationFinished = animateHippoChasingHeart();
                 break;
             case ANIM_GIVING_HEART:
-              //  animationFinished = animateHippoGivingHeart();
+                animationFinished = animateHippoGivingHeart();
                 break;
             case ANIM_BONKED:
-             //   animationFinished = animateHippoBonked(); 
+                animationFinished = animateHippoBonked();
                 break;
             default:
                 animationLock = false;
@@ -967,37 +1263,44 @@ void updateHippoAnimation() {
         
         if (animationFinished) {
             animationLock = false;
-            lastInteraction = millis();
+            lastInteraction = now; // IMPORTANTE: resetear inactividad
+            currentAnimation = ANIM_NORMAL;
         }
         return;
     }
 
-    // 3. Animaciones por inactividad
-    unsigned long now = millis();
-    unsigned long inactiveTime = now - lastInteraction;
-
+    // 3. TERCERO: Lógica de sueño/inactividad
     if (inactiveTime > 45000) {
-        currentAnimation = ANIM_SLEEPY;
-    } else if (inactiveTime > 15000) {
-        currentAnimation = ANIM_NORMAL;
-    } else {
-        currentAnimation = ANIM_NORMAL;
+        // Más de 45 segundos sin interacción → SUEÑO
+        if (!wasSleeping) {
+            currentAnimation = ANIM_SLEEPY;
+            wasSleeping = true;
+        }
+    } 
+    else {
+        // Menos de 45 segundos → NORMAL
+        if (wasSleeping) {
+            currentAnimation = ANIM_NORMAL;
+            wasSleeping = false;
+        } 
+        else if (currentAnimation != ANIM_SLEEPY) {
+            currentAnimation = ANIM_NORMAL;
+        }
     }
 
-    // 4. Ejecutar animación (no bloqueante)
+    // 4. EJECUTAR ANIMACIÓN
     switch (currentAnimation) {
         case ANIM_NORMAL:
-            animateHippo(); // Ahora es no-bloqueante
+            animateHippo(); 
             break;
         case ANIM_SLEEPY:
-            animateHippoWithZzz(); // Debe convertirse a no-bloqueante
+            animateHippoWithZzz();
             break;
         default:
             animateHippo();
             break;
     }
 }
-
 void triggerAnimation(HippoAnimation anim) {
     forcedAnimation = anim;
     animationLock = false; 
