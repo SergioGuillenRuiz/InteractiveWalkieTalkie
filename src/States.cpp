@@ -103,28 +103,32 @@ bool handleSendMenu() {
     switch (sendSubState) {
 
         // ---------------------------------------------------
-        // ---------------------- SEND_WAIT ------------------
-        // ---------------------------------------------------
-       case SEND_WAIT:
+// ---------------------- SEND_WAIT ------------------
+// ---------------------------------------------------
+case SEND_WAIT:
 {
     static int lastSel = -1;
+    static bool firstDrawComplete = false;  // Nueva variable para controlar si ya se dibujó el título
+    
     int sel = getPotValue(1);
     if (sel < 0) sel = 0;
     if (sel > 1) sel = 1;
 
-    if (sel != lastSel) {
-        // SOLO redibujar las líneas que cambian, no toda la pantalla
-        if (lastSel != -1) {
-            // Borrar solo las dos líneas de opciones (no toda la pantalla)
+    if (!firstDrawComplete || sel != lastSel) {
+        // Si es la primera vez que entramos O cambió la selección
+        
+        if (firstDrawComplete && lastSel != -1) {
+            // No es la primera vez: solo borrar las líneas de opciones
             display.fillRect(0, 16, 128, 32, SH110X_BLACK);
         } else {
-            // Primera vez: dibujar título completo
+            // Primera vez o reset: dibujar título completo
             Display_clear();
             display.setCursor(0,0);
             display.setTextSize(1);
             display.setTextColor(SH110X_WHITE);
             display.println("Selecciona modo:");
             display.println();
+            firstDrawComplete = true;  // Marcar que ya dibujamos el título
         }
         
         // Dibujar las dos opciones
@@ -149,11 +153,17 @@ bool handleSendMenu() {
                 sendSubState = SEND_MORSE;
                 Display_clear();
                 menuTransitionDelay();
+                // Resetear para la próxima vez que entremos
+                lastSel = -1;
+                firstDrawComplete = false;
                 return true;
             } else {
                 sendSubState = SEND_INSTANT_MSG;
                 Display_clear();
                 menuTransitionDelay();
+                // Resetear para la próxima vez que entremos
+                lastSel = -1;
+                firstDrawComplete = false;
                 return true;
             }
         }
@@ -166,6 +176,9 @@ bool handleSendMenu() {
             mainState = STATE_IDLE;
             Display_clear();
             menuTransitionDelay();
+            // Resetear para la próxima vez que entremos
+            lastSel = -1;
+            firstDrawComplete = false;
             return true;
         }
     }
