@@ -61,7 +61,6 @@ int getPotValue(int maxIndex) {
   static int stable = 0;
   static int candidate = 0;
   static unsigned long since = 0;
-  static int lastStable = -1;
 
   int raw = analogRead(A0);
   int mapped = map(raw, 0, 1023, 0, maxIndex);
@@ -73,11 +72,6 @@ int getPotValue(int maxIndex) {
   } else {
     if ((unsigned long)(millis() - since) >= POT_DEBOUNCE_TIME_MS) {
       stable = candidate;
-      // Resetear temporizador solo cuando el valor estable cambia
-      if (stable != lastStable) {
-        resetAnimationTimer();
-        lastStable = stable;
-      }
     }
   }
 

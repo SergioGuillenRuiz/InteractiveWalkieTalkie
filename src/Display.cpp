@@ -969,19 +969,55 @@ bool animateHippoGivingHeart() {
 
 void moveCursor() { 
   static int lastCursorX = -1;
-  //No está bien ajustado a 3 posiciones, revisar
-  int raw = getPotValue(1023);
+  static int lastStablePos = -1;
+  static unsigned long lastChangeTime = 0;
+  
+  // Leer potenciómetro crudo
+  int raw = analogRead(A0);
+  unsigned long now = millis();
+  
   int cursorX;
   int sel = 0;
-
-  if (raw < 400) { cursorX = 20;  sel = 0; }
-  else if (raw < 800) { cursorX = 68; sel = 1; }
-  else { cursorX = 115; sel = 2; }
-
+  
+  // DEBOUNCE: Ignorar cambios muy rápidos
+  if (now - lastChangeTime < 100) { // 100ms de debounce
+    // Mantener última posición estable durante debounce
+    if (lastStablePos != -1) {
+      sel = lastStablePos;
+    }
+  } else {
+    // Determinar posición basada en rangos mejorados
+    if (raw < 350) {           // 0-349: Opción izquierda
+      sel = 0;
+    } 
+    else if (raw < 700) {      // 350-699: Opción centro (zona amplia)
+      sel = 1;
+    } 
+    else {                     // 700-1023: Opción derecha
+      sel = 2;
+    }
+    
+    // Solo registrar cambio si es diferente
+    if (sel != lastStablePos) {
+      lastStablePos = sel;
+      lastChangeTime = now;
+    }
+  }
+  
+  // Mapear selección a posición X
+  switch (sel) {
+    case 0: cursorX = 20; break;   // Izquierda
+    case 1: cursorX = 68; break;   // Centro
+    case 2: cursorX = 115; break;  // Derecha
+    default: cursorX = 20; break;
+  }
+  
   cursorPos = sel;
-
+  
+  // Solo redibujar si cambió la posición
   if (cursorX != lastCursorX) {
     if (lastCursorX >= 0) {
+      // Borrar cursor anterior
       display.fillTriangle(
         lastCursorX, 49,
         lastCursorX - 3, 55,
@@ -989,14 +1025,15 @@ void moveCursor() {
         SH110X_BLACK
       );
     }
-
+    
+    // Dibujar nuevo cursor
     display.fillTriangle(
       cursorX, 49,
       cursorX - 3, 55,
       cursorX + 3, 55,
       SH110X_WHITE
     );
-
+    
     display.display();
     lastCursorX = cursorX;
   }
@@ -1221,9 +1258,13 @@ void drawGamesMenu() {
 
 void updateHippoAnimation() {
     static bool wasSleeping = false;
+    static bool needsCleanup = false;
     
     // Solo en estado IDLE
     if (mainState != STATE_IDLE) {
+        if (currentAnimation != ANIM_NORMAL) {
+            needsCleanup = true;
+        }
         currentAnimation = ANIM_NORMAL;
         animationLock = false;
         wasSleeping = false;
@@ -1233,8 +1274,20 @@ void updateHippoAnimation() {
     unsigned long now = millis();
     unsigned long inactiveTime = now - lastInteraction;
 
-    // 1. PRIMERO: Animaciones forzadas (máxima prioridad)
+    // LIMPIAR PANTALLA SI ES NECESARIO
+    if (needsCleanup) {
+        display.fillRect(20, 50, 88, 75, SH110X_BLACK); // Área de animaciones
+        display.display();
+        needsCleanup = false;
+        currentAnimation = ANIM_NORMAL;
+    }
+
+    // 1. Animaciones forzadas (máxima prioridad)
     if (forcedAnimation != ANIM_NONE) {
+        // Limpiar antes de nueva animación
+        display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+        display.display();
+        
         currentAnimation = forcedAnimation;
         animationStartTime = now;
         animationLock = true;
@@ -1242,7 +1295,7 @@ void updateHippoAnimation() {
         wasSleeping = false;
     }
 
-    // 2. SEGUNDO: Animaciones especiales en curso
+    // 2. Animaciones especiales en curso
     if (animationLock) {
         bool animationFinished = false;
         
@@ -1263,23 +1316,30 @@ void updateHippoAnimation() {
         
         if (animationFinished) {
             animationLock = false;
-            lastInteraction = now; // IMPORTANTE: resetear inactividad
+            lastInteraction = now;
             currentAnimation = ANIM_NORMAL;
+            needsCleanup = true; // Marcar para limpiar pantalla
         }
         return;
     }
 
-    // 3. TERCERO: Lógica de sueño/inactividad
+    // 3. Lógica de sueño/inactividad
     if (inactiveTime > 45000) {
-        // Más de 45 segundos sin interacción → SUEÑO
         if (!wasSleeping) {
+            // Limpiar antes de sueño
+            display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+            display.display();
+            
             currentAnimation = ANIM_SLEEPY;
             wasSleeping = true;
         }
     } 
     else {
-        // Menos de 45 segundos → NORMAL
         if (wasSleeping) {
+            // Limpiar al salir del sueño
+            display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+            display.display();
+            
             currentAnimation = ANIM_NORMAL;
             wasSleeping = false;
         } 
@@ -1291,7 +1351,7 @@ void updateHippoAnimation() {
     // 4. EJECUTAR ANIMACIÓN
     switch (currentAnimation) {
         case ANIM_NORMAL:
-            animateHippo(); 
+            animateHippo();
             break;
         case ANIM_SLEEPY:
             animateHippoWithZzz();
@@ -1301,9 +1361,15 @@ void updateHippoAnimation() {
             break;
     }
 }
+
 void triggerAnimation(HippoAnimation anim) {
+    // Limpiar área de animación antes de nueva animación
+    display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+    display.display();
+    
     forcedAnimation = anim;
-    animationLock = false; 
+    animationLock = false;
+    lastInteraction = millis(); 
 }
 
 void resetAnimationTimer() {
