@@ -105,60 +105,73 @@ bool handleSendMenu() {
         // ---------------------------------------------------
         // ---------------------- SEND_WAIT ------------------
         // ---------------------------------------------------
-        case SEND_WAIT:
-        {
-            static int lastSel = -1;
-            int sel = getPotValue(1);
-            if (sel < 0) sel = 0;
-            if (sel > 1) sel = 1;
+       case SEND_WAIT:
+{
+    static int lastSel = -1;
+    int sel = getPotValue(1);
+    if (sel < 0) sel = 0;
+    if (sel > 1) sel = 1;
 
-            if (sel != lastSel) {
-                lastSel = sel;
+    if (sel != lastSel) {
+        // SOLO redibujar las líneas que cambian, no toda la pantalla
+        if (lastSel != -1) {
+            // Borrar solo las dos líneas de opciones (no toda la pantalla)
+            display.fillRect(0, 16, 128, 32, SH110X_BLACK);
+        } else {
+            // Primera vez: dibujar título completo
+            Display_clear();
+            display.setCursor(0,0);
+            display.setTextSize(1);
+            display.setTextColor(SH110X_WHITE);
+            display.println("Selecciona modo:");
+            display.println();
+        }
+        
+        // Dibujar las dos opciones
+        display.setCursor(0, 16);
+        display.print((sel==0) ? "> " : "  ");
+        display.println("Morse");
+        
+        display.setCursor(0, 26);
+        display.print((sel==1) ? "> " : "  ");
+        display.println("Instant");
+        
+        display.display();
+        lastSel = sel;
+    }
+
+    if (isMorsePressed()) {
+        delay(50);
+        if (isMorsePressed()) {
+            if (sel == 0) {
+                dentroMenuEnviar = true;
+                primeraVezMenu = true;
+                sendSubState = SEND_MORSE;
                 Display_clear();
-                display.setCursor(0,0);
-                display.setTextSize(1);
-                display.setTextColor(SH110X_WHITE);
-                display.println("Selecciona modo:");
-                display.println();
-                display.print((sel==0) ? "> " : "  ");
-                display.println("Morse");
-                display.print((sel==1) ? "> " : "  ");
-                display.println("Instant");
-                display.display();
+                menuTransitionDelay();
+                return true;
+            } else {
+                sendSubState = SEND_INSTANT_MSG;
+                Display_clear();
+                menuTransitionDelay();
+                return true;
             }
+        }
+    }
 
-            if (isMorsePressed()) {
-                delay(50);
-                if (isMorsePressed()) {
-                    if (sel == 0) {
-                        dentroMenuEnviar = true;
-                        primeraVezMenu = true;
-                        sendSubState = SEND_MORSE;
-                        Display_clear();
-                        menuTransitionDelay();
-                        return true;
-                    } else {
-                        sendSubState = SEND_INSTANT_MSG;
-                        Display_clear();
-                        menuTransitionDelay();
-                        return true;
-                    }
-                }
-            }
-
-            if (isFinishPressed()) {
-                delay(50);
-                if (isFinishPressed()) {
-                    sendSubState = SEND_WAIT;
-                    mainState = STATE_IDLE;
-                    Display_clear();
-                    menuTransitionDelay();
-                    return true;
-                }
-            }
-
+    if (isFinishPressed()) {
+        delay(50);
+        if (isFinishPressed()) {
+            sendSubState = SEND_WAIT;
+            mainState = STATE_IDLE;
+            Display_clear();
+            menuTransitionDelay();
             return true;
         }
+    }
+
+    return true;
+}
 
         // ---------------------------------------------------
         // ---------------------- SEND_MORSE -----------------
