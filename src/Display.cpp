@@ -969,47 +969,31 @@ bool animateHippoGivingHeart() {
 
 void moveCursor() { 
   static int lastCursorX = -1;
-  static int lastStablePos = -1;
-  static unsigned long lastChangeTime = 0;
+  static int lastRaw = -1;
   
-  // Leer potenciómetro crudo
-  int raw = analogRead(A0);
-  unsigned long now = millis();
+  int raw = getPotValue(1023);
+  
+  // DEBOUCE: Ignorar cambios menores a 10 para evitar saltos
+  if (abs(raw - lastRaw) < 10 && lastRaw != -1) {
+    raw = lastRaw;
+  }
+  lastRaw = raw;
   
   int cursorX;
   int sel = 0;
   
-  // DEBOUNCE: Ignorar cambios muy rápidos
-  if (now - lastChangeTime < 100) { // 100ms de debounce
-    // Mantener última posición estable durante debounce
-    if (lastStablePos != -1) {
-      sel = lastStablePos;
-    }
-  } else {
-    // Determinar posición basada en rangos mejorados
-    if (raw < 350) {           // 0-349: Opción izquierda
-      sel = 0;
-    } 
-    else if (raw < 700) {      // 350-699: Opción centro (zona amplia)
-      sel = 1;
-    } 
-    else {                     // 700-1023: Opción derecha
-      sel = 2;
-    }
-    
-    // Solo registrar cambio si es diferente
-    if (sel != lastStablePos) {
-      lastStablePos = sel;
-      lastChangeTime = now;
-    }
-  }
-  
-  // Mapear selección a posición X
-  switch (sel) {
-    case 0: cursorX = 20; break;   // Izquierda
-    case 1: cursorX = 68; break;   // Centro
-    case 2: cursorX = 115; break;  // Derecha
-    default: cursorX = 20; break;
+  // RANGOS CORREGIDOS: Dividir 1023 en 3 partes iguales
+  if (raw < 341) {          // 0-340 (33%)
+    cursorX = 20;  
+    sel = 0; 
+  } 
+  else if (raw < 682) {     // 341-681 (33%)
+    cursorX = 68; 
+    sel = 1; 
+  } 
+  else {                    // 682-1023 (34%)
+    cursorX = 115; 
+    sel = 2; 
   }
   
   cursorPos = sel;
@@ -1324,7 +1308,7 @@ void updateHippoAnimation() {
     }
 
     // 3. Lógica de sueño/inactividad
-    if (inactiveTime > 45000) {
+    if (inactiveTime > 5000) {
         if (!wasSleeping) {
             // Limpiar antes de sueño
             display.fillRect(20, 50, 88, 75, SH110X_BLACK);
@@ -1337,7 +1321,7 @@ void updateHippoAnimation() {
     else {
         if (wasSleeping) {
             // Limpiar al salir del sueño
-            display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+            display.clearDisplay();
             display.display();
             
             currentAnimation = ANIM_NORMAL;
@@ -1369,7 +1353,7 @@ void triggerAnimation(HippoAnimation anim) {
     
     forcedAnimation = anim;
     animationLock = false;
-    lastInteraction = millis(); 
+    lastInteraction = millis(); // Resetear inactividad
 }
 
 void resetAnimationTimer() {
