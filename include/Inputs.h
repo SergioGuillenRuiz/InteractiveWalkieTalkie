@@ -5,7 +5,7 @@
 #include "Config.h"
 
 #define BUTTON_DEBOUNCE_TIME_MS  50UL
-#define POT_DEBOUNCE_TIME_MS    150UL
+#define POT_DEBOUNCE_TIME_MS    100UL
 // ============================================================
 //  Variables globales accesibles
 // ============================================================ 
