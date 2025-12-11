@@ -5,6 +5,7 @@
 #include "Morse.h"
 #include "Inputs.h"
 #include "Historial.h"
+#include "playChoose4Me.h"
 #include <LoRa.h>
 
 //=============================================================
@@ -509,50 +510,99 @@ bool handleGamesMenu() {
     // Muestra el submenú de juegos (iconos 4x2) y permite seleccionar con el potenciómetro A0.
     drawGamesMenu();
 
-    // Si se pulsa MORSE -> "arrancar" juego (placeholder)
+    // Si se pulsa MORSE -> "arrancar" juego
     if (isMorsePressed()) {
         delay(50);
         if (isMorsePressed()) {
-            int seleccion = getPotValue(7);
+            int seleccion = getPotValue(5);
             if (seleccion < 0) seleccion = 0;
-            if (seleccion > 7) seleccion = 7;
+            if (seleccion > 4) seleccion = 4;
 
-            // Mostrar pantalla de arranque / placeholder
             String name = String(nombresJuegos[seleccion]);
-            Display_clear();
-            display.setCursor(0,20);
-            display.setTextSize(1);
-            display.setTextColor(SH110X_WHITE);
-            display.println("Arrancando:");
-            display.println(name);
-            display.display();
-
-            // Simular tentativa de arranque y mostrar que no está implementado aún
-            delay(800);
-            Display_clear();
-            display.setCursor(0,20);
-            display.setTextSize(1);
-            display.setTextColor(SH110X_WHITE);
-            display.println("Proximamente");
-            display.display();
-
-            // Esperar hasta que el usuario pulse un botón; MORSE -> volver al submenú, FINISH -> salir a idle
-            while (!isMorsePressed() && !isFinishPressed()) {
-                Lora_update();
-                Display_update();
-                yield();
-                delay(10);
+            
+            // Arrancar el juego según la selección
+            switch (seleccion) {
+                case 0: // Tetris2v2
+                    Display_clear();
+                    display.setCursor(0,20);
+                    display.setTextSize(1);
+                    display.setTextColor(SH110X_WHITE);
+                    display.println("Proximamente:");
+                    display.println(name);
+                    display.display();
+                    delay(800);
+                    break;
+                    
+                case 1: // Poker
+                    Display_clear();
+                    display.setCursor(0,20);
+                    display.setTextSize(1);
+                    display.setTextColor(SH110X_WHITE);
+                    display.println("Proximamente:");
+                    display.println(name);
+                    display.display();
+                    delay(800);
+                    break;
+                    
+                case 2: // RefillGame
+                    Display_clear();
+                    display.setCursor(0,20);
+                    display.setTextSize(1);
+                    display.setTextColor(SH110X_WHITE);
+                    display.println("Proximamente:");
+                    display.println(name);
+                    display.display();
+                    delay(800);
+                    break;
+                    
+                case 3: // Choose4Me - ¡ESTE SÍ ESTÁ IMPLEMENTADO!
+                    // Arrancar el juego Choose4Me
+                    startChoose4Me();
+                    // startChoose4Me() maneja su propia salida, así que retornamos
+                    return true;
+                    
+                case 4: // HippoRadar
+                    Display_clear();
+                    display.setCursor(0,20);
+                    display.setTextSize(1);
+                    display.setTextColor(SH110X_WHITE);
+                    display.println("Proximamente:");
+                    display.println(name);
+                    display.display();
+                    delay(800);
+                    break;
+                    
+                default:
+                    break;
             }
+            
+            // Para juegos no implementados (todos excepto Choose4Me), mostrar mensaje
+            if (seleccion != 3) {
+                Display_clear();
+                display.setCursor(0,20);
+                display.setTextSize(1);
+                display.setTextColor(SH110X_WHITE);
+                display.println("Proximamente");
+                display.display();
 
-            if (isMorsePressed()) {
-                menuTransitionDelay();
-                Display_clear();
-                return true; // volver a STATE_GAMES_MENU (se redibujará)
-            } else { // isFinishPressed()
-                menuTransitionDelay();
-                mainState = STATE_IDLE;
-                Display_clear();
-                return true;
+                // Esperar hasta que el usuario pulse un botón; MORSE -> volver al submenú, FINISH -> salir a idle
+                while (!isMorsePressed() && !isFinishPressed()) {
+                    Lora_update();
+                    Display_update();
+                    yield();
+                    delay(10);
+                }
+
+                if (isMorsePressed()) {
+                    menuTransitionDelay();
+                    Display_clear();
+                    return true; // volver a STATE_GAMES_MENU (se redibujará)
+                } else { // isFinishPressed()
+                    menuTransitionDelay();
+                    mainState = STATE_IDLE;
+                    Display_clear();
+                    return true;
+                }
             }
         }
     }
