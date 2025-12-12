@@ -9,5 +9,5 @@ void History_addMessage(const String &msg);
 String History_getMessage(int index);     // 0 = más reciente
 unsigned long History_getTimestamp(int index); // Timestamp del mensaje
 int History_count();                      // Total mensajes
-
+void History_deleteMessage(int index);
 #endif

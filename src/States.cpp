@@ -383,12 +383,14 @@ case SEND_WAIT:
 
 // ==================== STATE_HISTORY_MENU ====================
 bool handleHistoryMenu() {
-    static int topIndex = 0;          // índice del primer elemento a mostrar (0 = más reciente)
-    static int selected = 0;          // índice seleccionado (0 = más reciente)
+    static int topIndex = 0;
+    static int selected = 0;
     static int prevTop = -1;
     static int prevSelected = -1;
+    static bool forceRedraw = true;
+    static bool firstTime = true;
+    static bool justEntered = true;
 
-    // Debounce / estabilidad para la entrada analógica
     static int candidateSel = -1;
     static unsigned long candidateSince = 0;
     const unsigned long SEL_DEBOUNCE_MS = 150;
@@ -397,10 +399,11 @@ bool handleHistoryMenu() {
 
     int total = History_count();
 
-    // Si no hay mensajes, mostrar aviso (sin test messages)
     if (total == 0) {
-        if (prevTop != -2) {
-            prevTop = -2; prevSelected = -2;
+        if (prevTop != -2 || firstTime) {
+            prevTop = -2;
+            prevSelected = -2;
+            firstTime = false;
             Display_clear();
             display.setCursor(0,0);
             display.setTextSize(1);
@@ -417,95 +420,281 @@ bool handleHistoryMenu() {
                 mainState = STATE_IDLE;
                 menuTransitionDelay();
                 display.clearDisplay();
+                justEntered = true;
                 return true;
             }
         }
         return true;
     }
 
-    // Leer y mapear la entrada analógica a un índice
+    if (justEntered) {
+        justEntered = false;
+        firstTime = true;
+        forceRedraw = true;
+        prevTop = -1;
+        prevSelected = -1;
+    }
+
+    if (firstTime || forceRedraw) {
+        firstTime = false;
+        
+        Display_clear();
+        display.setCursor(0,0);
+        display.setTextSize(1);
+        display.setTextColor(SH110X_WHITE);
+        display.println("Historial");
+        
+        for (int line = 0; line < LINES_PER_PAGE; ++line) {
+            int idx = line;
+            if (idx >= total) break;
+            
+            String msg = History_getMessage(idx);
+            unsigned long ts = History_getTimestamp(idx);
+            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
+            String ageStr = String((unsigned long)ageMin) + "m";
+            
+            if (msg.length() > 18) {
+                msg = msg.substring(0, 15) + "...";
+            }
+            
+            String lineText = ((idx == selected) ? "> " : "  ") + ageStr + " " + msg;
+            display.setCursor(0, 10 + (line * 10));
+            display.println(lineText);
+        }
+        display.display();
+        
+        prevTop = 0;
+        prevSelected = selected;
+        forceRedraw = false;
+        return true;
+    }
+
     int mapped = getPotValue(max(0, total - 1));
 
-    // Debounce: aceptar el nuevo valor sólo si se mantiene estable
     if (mapped != candidateSel) {
         candidateSel = mapped;
         candidateSince = millis();
     }
     if ((millis() - candidateSince) >= SEL_DEBOUNCE_MS) {
-        selected = candidateSel;
+        if (candidateSel != selected) {
+            selected = candidateSel;
+            forceRedraw = true;
+        }
     }
 
-    // Asegurar visibilidad en ventana
-    if (selected < topIndex) topIndex = selected;
-    if (selected >= topIndex + LINES_PER_PAGE) topIndex = selected - LINES_PER_PAGE + 1;
+    if (selected < topIndex) {
+        topIndex = selected;
+        forceRedraw = true;
+    }
+    if (selected >= topIndex + LINES_PER_PAGE) {
+        topIndex = selected - LINES_PER_PAGE + 1;
+        forceRedraw = true;
+    }
 
-    // Decide si hay que redibujar:
-    bool needRedraw = (topIndex != prevTop) || (selected != prevSelected);
-
-    // Mantener cache de minutos de las líneas visibles para evitar redraw por segundos
-    static int prevMinutes[LINES_PER_PAGE] = { -1, -1, -1, -1 };
-
-    // Comprobar si alguno de los minutos visibles ha cambiado
-    for (int line = 0; line < LINES_PER_PAGE; ++line) {
-        int idx = topIndex + line;
-        if (idx >= total) {
-            if (prevMinutes[line] != -1) { prevMinutes[line] = -1; needRedraw = true; }
-            continue;
+    if (isMorsePressed()) {
+        delay(50);
+        if (isMorsePressed()) {
+            unsigned long buttonHoldStart = millis();
+            while (isMorsePressed()) {
+                if (millis() - buttonHoldStart > 1000) {
+                    menuTransitionDelay();
+                    return true;
+                }
+                delay(10);
+            }
+            delay(150);
+            
+            Display_clear();
+            display.setCursor(0, 0);
+            display.setTextSize(1);
+            display.setTextColor(SH110X_WHITE);
+            display.println("Borrar mensaje?");
+            display.println();
+            
+            String msgToDelete = History_getMessage(selected);
+            if (msgToDelete.length() > 20) {
+                msgToDelete = msgToDelete.substring(0, 17) + "...";
+            }
+            display.println(msgToDelete);
+            display.println();
+            display.println();
+            display.println("A: SI  B: NO");
+            display.display();
+            
+            while (Serial.available()) Serial.read();
+            delay(100);
+            
+            bool confirmed = false;
+            bool cancelled = false;
+            unsigned long confirmStart = millis();
+            
+            static bool morseAlreadyProcessed = false;
+            static bool finishAlreadyProcessed = false;
+            morseAlreadyProcessed = false;
+            finishAlreadyProcessed = false;
+            
+            while (!confirmed && !cancelled && (millis() - confirmStart < 5000)) {
+                if (isMorsePressed() && !morseAlreadyProcessed) {
+                    delay(80);
+                    if (isMorsePressed()) {
+                        while (isMorsePressed()) { delay(10); }
+                        delay(80);
+                        confirmed = true;
+                        morseAlreadyProcessed = true;
+                        break;
+                    }
+                }
+                
+                if (isFinishPressed() && !finishAlreadyProcessed) {
+                    delay(80);
+                    if (isFinishPressed()) {
+                        while (isFinishPressed()) { delay(10); }
+                        delay(80);
+                        cancelled = true;
+                        finishAlreadyProcessed = true;
+                        break;
+                    }
+                }
+                
+                delay(20);
+            }
+            
+            if (confirmed) {
+                History_deleteMessage(selected);
+                
+                Display_clear();
+                display.setCursor(0, 0);
+                display.setTextSize(1);
+                display.setTextColor(SH110X_WHITE);
+                display.println("Mensaje borrado");
+                display.display();
+                delay(1200);
+                
+                total = History_count();
+                
+                if (selected >= total && total > 0) {
+                    selected = total - 1;
+                }
+                if (selected < 0 && total > 0) {
+                    selected = 0;
+                }
+                
+                prevTop = -1;
+                prevSelected = -1;
+                forceRedraw = true;
+                firstTime = true;
+                justEntered = true;
+                
+                while (Serial.available()) Serial.read();
+                delay(50);
+                
+                menuTransitionDelay();
+                return true;
+            }
+            
+            if (cancelled) {
+                Display_clear();
+                display.setCursor(0, 0);
+                display.println("Cancelado");
+                display.display();
+                delay(500);
+            }
+            
+            prevTop = -1;
+            prevSelected = -1;
+            forceRedraw = true;
+            firstTime = true;
+            justEntered = true;
+            
+            menuTransitionDelay();
+            return true;
         }
-        unsigned long ts = History_getTimestamp(idx);
-        unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
-        int ageMinInt = (int)ageMin;
-        if (prevMinutes[line] != ageMinInt) {
-            needRedraw = true;
-            // no break: queremos actualizar prevMinutes de todas las líneas al redibujar
+    }
+
+    bool needRedraw = forceRedraw || (topIndex != prevTop) || (selected != prevSelected);
+    
+    static unsigned long lastMinuteCheck = 0;
+    static int cachedMinutes[LINES_PER_PAGE] = { -1, -1, -1, -1 };
+    
+    if (millis() - lastMinuteCheck > 500) {
+        lastMinuteCheck = millis();
+        
+        for (int line = 0; line < LINES_PER_PAGE; ++line) {
+            int idx = topIndex + line;
+            if (idx >= total) {
+                if (cachedMinutes[line] != -1) {
+                    cachedMinutes[line] = -1;
+                    needRedraw = true;
+                }
+                continue;
+            }
+            
+            unsigned long ts = History_getTimestamp(idx);
+            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
+            int ageMinInt = (int)ageMin;
+            
+            if (cachedMinutes[line] != ageMinInt) {
+                cachedMinutes[line] = ageMinInt;
+                needRedraw = true;
+            }
         }
     }
 
     if (needRedraw) {
-        prevTop = topIndex;
-        prevSelected = selected;
-
-        Display_clear();
+        display.fillRect(0, 0, 128, 32, SH110X_BLACK);
+        display.fillRect(0, 8, 128, 120, SH110X_BLACK);
+        
         display.setCursor(0,0);
         display.setTextSize(1);
         display.setTextColor(SH110X_WHITE);
-
+        display.println("Historial");
+        
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
             if (idx >= total) {
-                prevMinutes[line] = -1;
+                cachedMinutes[line] = -1;
                 break;
             }
 
             String msg = History_getMessage(idx);
             unsigned long ts = History_getTimestamp(idx);
             unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
-
-            // Mostrar solo minutos: "0m", "1m", "23m", ...
             String ageStr = String((unsigned long)ageMin) + "m";
 
+            if (msg.length() > 18) {
+                msg = msg.substring(0, 15) + "...";
+            }
+            
             String lineText = ((idx == selected) ? "> " : "  ") + ageStr + " " + msg;
+            display.setCursor(0, 10 + (line * 10));
             display.println(lineText);
 
-            prevMinutes[line] = (int)ageMin;
+            cachedMinutes[line] = (int)ageMin;
         }
+        
         display.display();
+        
+        prevTop = topIndex;
+        prevSelected = selected;
+        forceRedraw = false;
     }
 
-    // Salir del menú
     if (isFinishPressed()) {
-        delay(50);
+        delay(80);
         if (isFinishPressed()) {
+            while (isFinishPressed()) { delay(10); }
+            delay(50);
+            
             mainState = STATE_IDLE;
             menuTransitionDelay();
             display.clearDisplay();
+            justEntered = true;
             return true;
         }
     }
 
     return true;
 }
-
 // ==================== STATE_GAMES_MENU ====================
 bool handleGamesMenu() {
     // Muestra el submenú de juegos (iconos 4x2) y permite seleccionar con el potenciómetro A0.

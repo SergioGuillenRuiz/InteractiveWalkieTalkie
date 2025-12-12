@@ -170,3 +170,69 @@ unsigned long History_getTimestamp(int index) {
 int History_count() {
     return messageCount;
 }
+
+void History_deleteMessage(int index) {
+    if (index < 0 || index >= messageCount) {
+        Serial.println("[Historial] Índice inválido para borrar");
+        return;
+    }
+    
+    Serial.print("[Historial] Borrando mensaje índice ");
+    Serial.print(index);
+    Serial.print(" (total: ");
+    Serial.print(messageCount);
+    Serial.println(")");
+    
+    // 1. Convertir índice visual (0 = más reciente) a índice real en array
+    int realIndex;
+    if (messageCount < MAX_MESSAGES) {
+        // Buffer no lleno: los mensajes están en índices 0..messageCount-1
+        // Índice 0 visual = último mensaje = posición messageCount-1
+        realIndex = messageCount - 1 - index;
+    } else {
+        // Buffer lleno: cálculo circular
+        // nextIndex apunta al próximo slot libre
+        // Los mensajes están en posiciones circulares
+        realIndex = (nextIndex + MAX_MESSAGES - 1 - index) % MAX_MESSAGES;
+    }
+    
+    Serial.print("[Historial] Real index en array: ");
+    Serial.println(realIndex);
+    
+    // 2. Desplazar todos los mensajes posteriores una posición hacia atrás
+    // Esto mantiene el orden y elimina el hueco
+    for (int i = realIndex; i < messageCount - 1; i++) {
+        int srcIndex = (i + 1) % MAX_MESSAGES;
+        
+        // Copiar mensaje siguiente a posición actual
+        messageHistory[i] = messageHistory[srcIndex];
+        messageTime[i] = messageTime[srcIndex];
+        
+        // Actualizar EEPROM
+        saveToEEPROM(i, messageHistory[i], messageTime[i]);
+    }
+    
+    // 3. Borrar la última posición (ahora duplicada)
+    int lastIndex = (messageCount - 1) % MAX_MESSAGES;
+    
+    // Limpiar en RAM
+    messageHistory[lastIndex] = "";
+    messageTime[lastIndex] = 0;
+    
+    // Marcar como vacío en EEPROM (timestamp = 0xFFFFFFFF)
+    saveToEEPROM(lastIndex, "", 0xFFFFFFFF);
+    
+    // 4. Actualizar contadores
+    messageCount--;
+    if (messageCount < 0) messageCount = 0;
+    
+    // Actualizar nextIndex
+    if (messageCount == 0) {
+        nextIndex = 0;
+    } else {
+        nextIndex = (lastIndex + 1) % MAX_MESSAGES;
+    }
+    
+    Serial.print("[Historial] Borrado completado. Nuevo total: ");
+    Serial.println(messageCount);
+}
