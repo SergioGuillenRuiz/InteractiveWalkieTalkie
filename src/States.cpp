@@ -80,7 +80,7 @@ bool handleSleep() {
             buttonPressCount = 1;
             return true;
         }
-        if (now - firstPressTime > 5000) {
+        if (now - firstPressTime > 45000) {
             buttonPressCount = 0;
             return true;
         }
@@ -416,6 +416,7 @@ bool handleHistoryMenu() {
             if (isFinishPressed()) {
                 mainState = STATE_IDLE;
                 menuTransitionDelay();
+                display.clearDisplay();
                 return true;
             }
         }
