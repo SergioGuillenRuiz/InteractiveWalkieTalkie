@@ -3,14 +3,11 @@
 
 #include <Arduino.h>
 
-extern const int MAX_MESSAGES;
-extern String messageHistory[];
-extern int messageIndex;
-
+// Funciones esenciales con timestamps
+void History_load();                      // Llamar en setup()
 void History_addMessage(const String &msg);
-String History_getMessage(int index);
-
-int History_count();                        
-unsigned long History_getTimestamp(int index); 
+String History_getMessage(int index);     // 0 = más reciente
+unsigned long History_getTimestamp(int index); // Timestamp del mensaje
+int History_count();                      // Total mensajes
 
 #endif

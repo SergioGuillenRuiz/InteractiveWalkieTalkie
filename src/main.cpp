@@ -4,6 +4,7 @@
 #include "MyLora.h"
 #include "Morse.h"
 #include "States.h"
+#include "Historial.h"
 
 
 
@@ -17,6 +18,8 @@ void setup() {
   setupPins();
 
   Display_begin();
+
+  History_load();
 
   Lora_begin();
 
