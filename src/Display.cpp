@@ -969,39 +969,52 @@ bool animateHippoGivingHeart() {
 
 void moveCursor() { 
   static int lastCursorX = -1;
-  static int lastRaw = -1;
+  static int stableValue = 0;
+  static unsigned long lastPotRead = 0;
+  const unsigned long POT_READ_INTERVAL = 20;
   
-  int raw = getPotValue(1023);
-  
-  // DEBOUCE: Ignorar cambios menores a 10 para evitar saltos
-  if (abs(raw - lastRaw) < 10 && lastRaw != -1) {
-    raw = lastRaw;
+  unsigned long now = millis();
+  if (now - lastPotRead < POT_READ_INTERVAL) {
+    return;
   }
-  lastRaw = raw;
+  lastPotRead = now;
+  
+  int raw = analogRead(A0);
+  
+  static int readings[3] = {0, 0, 0};
+  static int readIndex = 0;
+  
+  readings[readIndex] = raw;
+  readIndex = (readIndex + 1) % 3;
+  
+  int smoothed = (readings[0] + readings[1] + readings[2]) / 3;
+  
+  // IMPORTANTE: Resetear timer de animación si hay cambio
+  if (abs(smoothed - stableValue) > 8) {
+    stableValue = smoothed;
+    resetAnimationTimer(); // Esta línea es crucial
+  }
   
   int cursorX;
   int sel = 0;
   
-  // RANGOS CORREGIDOS: Dividir 1023 en 3 partes iguales
-  if (raw < 341) {          // 0-340 (33%)
+  if (stableValue < 341) {
     cursorX = 20;  
     sel = 0; 
   } 
-  else if (raw < 682) {     // 341-681 (33%)
+  else if (stableValue < 682) {
     cursorX = 68; 
     sel = 1; 
   } 
-  else {                    // 682-1023 (34%)
+  else {
     cursorX = 115; 
     sel = 2; 
   }
   
   cursorPos = sel;
   
-  // Solo redibujar si cambió la posición
   if (cursorX != lastCursorX) {
     if (lastCursorX >= 0) {
-      // Borrar cursor anterior
       display.fillTriangle(
         lastCursorX, 49,
         lastCursorX - 3, 55,
@@ -1010,7 +1023,6 @@ void moveCursor() {
       );
     }
     
-    // Dibujar nuevo cursor
     display.fillTriangle(
       cursorX, 49,
       cursorX - 3, 55,
@@ -1308,7 +1320,7 @@ void updateHippoAnimation() {
     }
 
     // 3. Lógica de sueño/inactividad
-    if (inactiveTime > 5000) {
+    if (inactiveTime > 20000) {
         if (!wasSleeping) {
             // Limpiar antes de sueño
             display.fillRect(20, 50, 88, 75, SH110X_BLACK);
