@@ -3,6 +3,7 @@
 #include <LoRa.h>
 #include "Config.h"
 #include "MyLora.h"
+#include "SimpleCrypto.h"
 
 
 // Estado interno del módulo
@@ -52,9 +53,17 @@ bool Lora_send(const String &message) {
 
   Serial.print("[LoRa] Enviando: ");
   Serial.println(message);
+  
+  String encrypted = SimpleCrypto_encrypt(message);
+  if (encrypted.length() == 0) {
+    Serial.println("[LoRa] Error al encriptar mensaje");
+    return false;
+  }
+  Serial.print("[LoRa] Encriptado: ");
+  Serial.println(encrypted);
 
   LoRa.beginPacket();
-  LoRa.print(message);
+  LoRa.print(encrypted);
   LoRa.endPacket();
 
   return true;
@@ -73,7 +82,17 @@ bool Lora_hasMessage() {
     while (LoRa.available()) {
       lastReceived += (char)LoRa.read();
     }
-    Serial.print("[LoRa] Mensaje recibido: ");
+    Serial.print("[LoRa] Mensaje recibido (crudo): ");
+    Serial.println(lastReceived);
+    
+    String decrypted = SimpleCrypto_decrypt(lastReceived);
+    if (decrypted.length() == 0) {
+      Serial.println("[LoRa] Error al desencriptar mensaje");
+      return false;
+    }
+    lastReceived = decrypted;
+    
+    Serial.print("[LoRa] Desencriptado: ");
     Serial.println(lastReceived);
     return true;
   }
