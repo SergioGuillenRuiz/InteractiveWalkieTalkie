@@ -3,10 +3,6 @@
 #include "Inputs.h"
 #include "States.h"
 
-/*Cuando la CPU sube la apuesta, ocurre un comportamiento rarisimo,
-la CPU sube la apuesta, el juego automaticamente toma como que has hecho check
-(aunque no hayas apretado nada), le devuelve el turno otra vez a la CPU que vuelve a subir nuevamente la apuesta, 
-y ahí sí ya se te devuelve el control y todo funciona con normalidad*/
 
 // ==========================================
 // CONFIGURACIÓN Y CONSTANTES
@@ -62,9 +58,9 @@ int communityCount = 0;
 Action selectedAction = ACT_CHECK_CALL;
 String msgLine1 = "";
 
-// NUEVAS VARIABLES PARA ESTRATEGIA DE LA CPU
-int cpuRaiseCount = 0; // Contador de raises consecutivos de la CPU
-bool cpuHasRaisedThisRound = false; // Si la CPU ya hizo raise en esta ronda
+// VARIABLES ESTRATEGIA CPU
+int cpuRaiseCount = 0; 
+bool cpuHasRaisedThisRound = false; 
 
 // ==========================================
 // UTILIDADES GRÁFICAS
@@ -220,7 +216,7 @@ long evaluateScore(Card h[2], Card comm[5], int commCount) {
 
 bool btnADebounce() {
     static unsigned long lastA = 0;
-    if (isMorsePressed() && (millis() - lastA > 100)) {
+    if (isMorsePressed() && (millis() - lastA > 200)) { 
         lastA = millis();
         return true;
     }
@@ -229,7 +225,7 @@ bool btnADebounce() {
 
 bool btnBDebounce() {
     static unsigned long lastB = 0;
-    if (isFinishPressed() && (millis() - lastB > 100)) {
+    if (isFinishPressed() && (millis() - lastB > 200)) { 
         lastB = millis();
         return true;
     }
@@ -320,7 +316,7 @@ void drawInterface() {
 }
 
 // ==========================================
-// CPU V2.0 - MENOS PREVISIBLE Y MÁS ESTRATÉGICA
+// CPU LOGIC
 // ==========================================
 
 void cpuTurn() {
@@ -333,129 +329,71 @@ void cpuTurn() {
     int callCost = currentHighestBet - cpu.currentBet;
     int confidence = 0;
     
-    // LÓGICA MEJORADA PARA CPU MENOS PREVISIBLE
-    if (score > 10000) confidence = 70 + random(25);    // Manos fuertes: 70-95%
-    else if (score > 500) confidence = 45 + random(20); // Manos medias: 45-65%
-    else if (score > 50) confidence = 25 + random(15);  // Manos débiles: 25-40%
-    else confidence = random(15);                        // Manos muy débiles: 0-15%
+    // Lógica básica de confianza
+    if (score > 10000) confidence = 70 + random(25);    
+    else if (score > 500) confidence = 45 + random(20); 
+    else if (score > 50) confidence = 25 + random(15);  
+    else confidence = random(15);                        
     
-    // ESTRATEGIAS MÁS ELABORADAS
-    
-    // 1. BLUFFING CONTROLADO (20% de probabilidad con manos medias)
-    bool isBluffing = false;
+    // Bluffing
     if (score > 50 && score < 10000 && random(100) < 20) {
-        isBluffing = true;
-        confidence = 75 + random(15); // Aparentar tener mejor mano
+        confidence = 75 + random(15);
     }
     
-    // 2. LECTURA DEL JUGADOR (si el jugador ha estado agresivo, la CPU se vuelve más cuidadosa)
-    if (cpuRaiseCount > 2) {
-        confidence -= 10; // Si el jugador ha subido mucho, la CPU se vuelve más conservadora
-    }
+    // Ajuste si jugador es agresivo
+    if (cpuRaiseCount > 2) confidence -= 10;
     
-    // 3. AJUSTES SEGÚN LA FASE DEL JUEGO
+    // Pre-flop ajustes
     if (communityCount == 0) {
-        // Pre-flop: manos iniciales premium
         int highCard = max(cpu.hand[0].rank, cpu.hand[1].rank);
-        if (highCard >= 11) confidence += 15;  // J, Q, K, A
-        if (cpu.hand[0].suit == cpu.hand[1].suit) confidence += 10;  // Mismo palo
-        if (abs(cpu.hand[0].rank - cpu.hand[1].rank) <= 2) confidence += 8; // Conectados
-        
-        // ESTRATEGIA: PARES EN LA MANO INICIAL
-        if (cpu.hand[0].rank == cpu.hand[1].rank) {
-            confidence = 85 + random(10); // Pares son manos fuertes
-        }
-    } else {
-        // Post-flop: ajustar según cartas comunitarias
-        if (communityCount >= 3) {
-            if (score >= 40000) confidence += 20; // Posible escalera
-            if (score >= 50000) confidence += 25; // Posible flush
-        }
-    }
+        if (highCard >= 11) confidence += 15;
+        if (cpu.hand[0].suit == cpu.hand[1].suit) confidence += 10;
+        if (cpu.hand[0].rank == cpu.hand[1].rank) confidence = 85 + random(10);
+    } 
     
-    // 4. CÁLCULO DE POT ODDS
-    float potOdds = (callCost > 0) ? (float)pot / callCost : 999;
-    if (potOdds > 3.0 && callCost > 0) confidence += 10;  // Buenas odds
-    if (potOdds < 1.5 && callCost > 0) confidence -= 15;  // Malas odds
-    
-    // 5. HISTORIAL DE RONDAS (si la CPU ha perdido varias veces, se vuelve más agresiva)
-    static int consecutiveLosses = 0;
-    if (consecutiveLosses > 2) {
-        confidence += 15; // Desesperación controlada
-    }
-    
-    // Limitar confianza
     confidence = constrain(confidence, 0, 95);
     
-    // NUEVA LÓGICA DE DECISIÓN MENOS PREVISIBLE
-    
     if (callCost == 0) {
-        // No hay apuesta previa - CHECK o BET
+        // CPU decide CHECK o BET
         if (confidence > 75 && cpu.chips > 30) {
-            // CPU hace una apuesta inteligente según su confianza
             int betAmt = 0;
+            if (confidence > 85) betAmt = 40 + random(20);
+            else betAmt = 15 + random(15);
             
-            // ESTRATEGIA VARIABLE: No siempre apuesta lo mismo
-            int randomFactor = random(100);
-            
-            if (confidence > 85) {
-                if (randomFactor < 60) betAmt = 40 + random(20);  // 60% apuesta alta
-                else betAmt = 25 + random(15);                    // 40% apuesta media
-            }
-            else if (confidence > 70) {
-                if (randomFactor < 50) betAmt = 25 + random(15);  // 50% apuesta media
-                else betAmt = 15 + random(10);                    // 50% apuesta baja
-            }
-            else {
-                betAmt = 15 + random(10);                         // Apuesta baja
-            }
-            
-            // Asegurar que no apueste más de lo que tiene
             betAmt = min(betAmt, cpu.chips);
-            
             cpu.chips -= betAmt;
             cpu.currentBet += betAmt;
             pot += betAmt;
             currentHighestBet = cpu.currentBet; 
             msgLine1 = "CPU BET " + String(betAmt);
-            
-            // REGISTRAR QUE LA CPU HIZO BET
             cpuHasRaisedThisRound = true;
         } else {
             msgLine1 = "CPU CHECK";
         }
     } else {
-        // Hay apuesta previa - CALL, RAISE o FOLD
+        // CPU decide CALL, RAISE o FOLD
         
-        // NUEVO: EVITAR BUCLE INFINITO DE RAISES
+        // Si ya hizo raise, evita loop infinito -> Solo CALL o FOLD
         if (cpuHasRaisedThisRound && callCost > 0) {
-            // Si la CPU ya hizo raise esta ronda, solo puede CALL o FOLD
             if (confidence > 50 || (confidence > 30 && callCost < 20)) {
-                // CPU hace CALL
                 if (cpu.chips >= callCost) {
                     cpu.chips -= callCost;
                     cpu.currentBet += callCost;
                     pot += callCost;
                     msgLine1 = "CPU CALL";
                 } else {
-                    // All-in
                     pot += cpu.chips;
-                    int allInAmount = cpu.chips;
                     cpu.chips = 0;
-                    msgLine1 = "CPU ALL-IN " + String(allInAmount);
+                    msgLine1 = "CPU ALL-IN";
                 }
             } else {
-                // CPU hace FOLD
                 cpu.folded = true;
                 msgLine1 = "CPU FOLD";
             }
         }
         else {
-            // Lógica normal de CALL/RAISE/FOLD
             if (confidence > 60 || (confidence > 40 && callCost < 30)) {
-                // CPU decide CALL o RAISE
                 if (confidence > 80 && cpu.chips > callCost + 30 && !cpuHasRaisedThisRound) {
-                    // CPU hace RAISE (solo si no ha hecho raise esta ronda)
                     int raiseAmt = 30 + random(20);
                     raiseAmt = min(raiseAmt, cpu.chips - callCost);
                     
@@ -464,27 +402,21 @@ void cpuTurn() {
                     pot += (callCost + raiseAmt);
                     currentHighestBet = cpu.currentBet;
                     msgLine1 = "CPU RAISE " + String(raiseAmt);
-                    
-                    // REGISTRAR EL RAISE
                     cpuHasRaisedThisRound = true;
                     cpuRaiseCount++;
                 } else {
-                    // CPU hace CALL
                     if (cpu.chips >= callCost) {
                         cpu.chips -= callCost;
                         cpu.currentBet += callCost;
                         pot += callCost;
                         msgLine1 = "CPU CALL";
                     } else {
-                        // All-in
                         pot += cpu.chips;
-                        int allInAmount = cpu.chips;
                         cpu.chips = 0;
-                        msgLine1 = "CPU ALL-IN " + String(allInAmount);
+                        msgLine1 = "CPU ALL-IN";
                     }
                 }
             } else {
-                // CPU hace FOLD
                 cpu.folded = true;
                 msgLine1 = "CPU FOLD";
             }
@@ -509,7 +441,6 @@ void resetRound() {
     cpu.currentBet = 0;
     cpu.folded = false;
     
-    // NUEVO: Resetear contadores de estrategia
     cpuRaiseCount = 0;
     cpuHasRaisedThisRound = false;
     
@@ -579,8 +510,6 @@ void updateGame() {
             nextStateAfterBetting = ST_TURN;
             currentState = ST_BETTING;
             msgLine1 = "FLOP";
-            
-            // NUEVO: Resetear el indicador de raise al inicio de nueva ronda de apuestas
             cpuHasRaisedThisRound = false;
             break;
 
@@ -593,8 +522,6 @@ void updateGame() {
             nextStateAfterBetting = ST_RIVER;
             currentState = ST_BETTING;
             msgLine1 = "TURN";
-            
-            // NUEVO: Resetear el indicador de raise
             cpuHasRaisedThisRound = false;
             break;
 
@@ -607,8 +534,6 @@ void updateGame() {
             nextStateAfterBetting = ST_SHOWDOWN;
             currentState = ST_BETTING;
             msgLine1 = "RIVER";
-            
-            // NUEVO: Resetear el indicador de raise
             cpuHasRaisedThisRound = false;
             break;
 
@@ -628,23 +553,49 @@ void updateGame() {
                     currentState = ST_SHOWDOWN;
                 } 
                 else if (selectedAction == ACT_CHECK_CALL) {
+                    // Calculamos la diferencia
                     int callAmt = currentHighestBet - player.currentBet;
+                    
                     if (player.chips >= callAmt) {
                         player.chips -= callAmt;
                         player.currentBet += callAmt;
                         pot += callAmt;
                         
-                        msgLine1 = (callAmt == 0) ? "YOU CHECK" : "YOU CALL";
-                        drawFloatingMessage();
-                        display.display();
-                        delay(500); 
+                        // Determinar si fue Check o Call
+                        if (callAmt > 0) {
+                            // FUE UN CALL (Pagar Apuesta)
+                            msgLine1 = "YOU CALL";
+                            drawFloatingMessage();
+                            display.display();
+                            delay(500); 
+                            
+                            if (player.currentBet == currentHighestBet) {
+                                currentState = nextStateAfterBetting;
+                            }
+                        } 
+                        else {
+                            // FUE UN CHECK (Pasar)
+                            msgLine1 = "YOU CHECK";
+                            drawFloatingMessage();
+                            display.display();
+                            delay(500); 
+                            
+                            // Si pasamos, la CPU sí debe jugar
+                            cpuTurn(); 
+                            
+                            // *** FIX CRITICO ***
+                            // Esperamos a que el usuario SUELTE el botón antes de continuar
+                            // Esto evita que si la CPU apuesta, se interprete el botón presionado
+                            // en el loop anterior como un "CALL" inmediato.
+                            while(isMorsePressed() || isFinishPressed()) { delay(10); }
 
-                        cpuTurn(); 
-                        // SI LA CPU FOLDEA, IR DIRECTAMENTE AL SHOWDOWN
-                        if (cpu.folded) {
-                            currentState = ST_SHOWDOWN;
-                        } else if (player.currentBet == currentHighestBet) {
-                            currentState = nextStateAfterBetting;
+                            if (cpu.folded) {
+                                currentState = ST_SHOWDOWN;
+                            } else if (player.currentBet == currentHighestBet) {
+                                currentState = nextStateAfterBetting;
+                            }
+                            // Si CPU subió la apuesta, no entramos en el 'else if', 
+                            // nos quedamos en ST_BETTING y el jugador recupera el control.
                         }
                     }
                 } 
@@ -660,8 +611,13 @@ void updateGame() {
                         display.display();
                         delay(500); 
 
+                        // Si el jugador sube, la CPU debe responder
                         cpuTurn();
-                        // SI LA CPU FOLDEA, IR DIRECTAMENTE AL SHOWDOWN
+
+                        // *** FIX CRITICO ***
+                        // Esperamos a que se suelte el botón
+                        while(isMorsePressed() || isFinishPressed()) { delay(10); }
+
                         if (cpu.folded) {
                             currentState = ST_SHOWDOWN;
                         } else if (player.currentBet == currentHighestBet) {
@@ -711,10 +667,8 @@ void updateGame() {
             display.fillRect(10, 50, 108, 40, SH110X_BLACK);
             display.drawRect(10, 50, 108, 40, SH110X_WHITE);
             
-            // CORRECCIÓN: Forzar texto blanco porque drawTable dejó el color en negro
             display.setTextColor(SH110X_WHITE);
             
-            // CORRECCIÓN: Texto más arriba (58 en vez de 60)
             display.setCursor(20, 58);
             display.print(res);
             display.setCursor(20, 75);
@@ -724,6 +678,7 @@ void updateGame() {
             display.print("A: Continue");
             display.display(); 
             
+            // Espera a que presiones y sueltes para evitar dobles disparos
             while(!btnADebounce()) { 
                 if (isFinishPressed()) {
                      mainState = STATE_IDLE;
