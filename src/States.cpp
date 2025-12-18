@@ -6,6 +6,7 @@
 #include "Inputs.h"
 #include "Historial.h"
 #include "playChoose4Me.h"
+#include "Poker.h"
 #include <LoRa.h>
 
 //=============================================================
@@ -724,14 +725,8 @@ bool handleGamesMenu() {
                     break;
                     
                 case 1: // Poker
-                    Display_clear();
-                    display.setCursor(0,20);
-                    display.setTextSize(1);
-                    display.setTextColor(SH110X_WHITE);
-                    display.println("Proximamente:");
-                    display.println(name);
-                    display.display();
-                    delay(800);
+                    menuTransitionDelay();
+                    startPoker();
                     break;
                     
                 case 2: // RefillGame
@@ -745,10 +740,8 @@ bool handleGamesMenu() {
                     delay(800);
                     break;
                     
-                case 3: // Choose4Me - ¡ESTE SÍ ESTÁ IMPLEMENTADO!
-                    // Arrancar el juego Choose4Me
+                case 3: // Choose4Me 
                     startChoose4Me();
-                    // startChoose4Me() maneja su propia salida, así que retornamos
                     return true;
                     
                 case 4: // HippoRadar
