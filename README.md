@@ -2,21 +2,18 @@
                            BILL OF MATERIALS 
 ===============================================================================
 
-╒═════╤═══════════════════════╤═════════════════════════════════════════╤═════╕
-│ REF │ COMPONENTE            │ ESPECIFICACIONES / NOTAS                │ UDS │
-╞═════╪═══════════════════════╪═════════════════════════════════════════╪═════╡
-│ ES  │ Microcontrolador      │ ESP8266 (Placa clónica/genérica)        │  1  │
-├─────┼───────────────────────┼─────────────────────────────────────────┼─────┤
-│ LO  │ Módulo LoRa           │ SX1276 (Frecuencia: 868 MHz)            │  1  │
-├─────┼───────────────────────┼─────────────────────────────────────────┼─────┤
-│ OLD │ Pantalla OLED         │ Monocromática. Interfaz I2C (4 pines)   │  1  │
-├─────┼───────────────────────┼─────────────────────────────────────────┼─────┤
-│ PR  │ Pulsadores            │ Genéricos (Normalmente abiertos)        │  2  │
-├─────┼───────────────────────┼─────────────────────────────────────────┼─────┤
-│ PTM │ Potenciómetro         │ Genérico (Ajuste de señal analógica)    │  1  │
-├─────┼───────────────────────┼─────────────────────────────────────────┼─────┤
-│ PWR │ Batería LiPo          │ Voltaje nominal: 3.2V                   │  1  │
-╘═════╧═══════════════════════╧═════════════════════════════════════════╧═════╛
+=====================================================================
+                      BILL OF MATERIALS (BOM)
+=====================================================================
+ REF    | COMPONENTES      | ESPECIFICACIONES           | QTY 
+--------|------------------|----------------------------|------------
+ ES     | Microcontrolador | ESP8266 (Generic)          | 1
+ LO     | LoRa Module      | SX1276 (868 MHz)           | 1
+ OLD    | OLED Display     | Monochromatic I2C (4-pin)  | 1
+ PR     | Push Buttons     | Generic Tactile            | 2
+ PTR    | Potentiometer    | Generic Analog             | 1
+ PWR    | Power Source     | 3.2V LiPo Battery          | 1
+=====================================================================
 
 * Nota: El proyecto utiliza placas genéricas para el microcontrolador y la pantalla,
   usar otra placa diferente no debería suponer un problema, en caso de error,
