@@ -11,7 +11,10 @@
  PR     | Push Buttons     | Generic Tactile            | 2
  PTR    | Potentiometer    | Generic Analog             | 1
  PWR    | Power Source     | 3.2V LiPo Battery          | 1
- 
+
+
+
+ ![Vista previa de la carcasa](/Carcasa.png)
 
 * Nota: El proyecto utiliza placas genéricas para el microcontrolador y la pantalla,
   usar otra placa diferente no debería suponer un problema, en caso de error,
