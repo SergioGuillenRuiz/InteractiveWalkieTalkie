@@ -14,7 +14,7 @@
 
 
 
- ![Vista previa de la carcasa](/Carcasa.png)
+ ![Vista previa de la carcasa](planos/CarcasaPreview.png)
 
 * Nota: El proyecto utiliza placas genéricas para el microcontrolador y la pantalla,
   usar otra placa diferente no debería suponer un problema, en caso de error,
