@@ -1,10 +1,8 @@
-===============================================================================
-                           BILL OF MATERIALS 
-===============================================================================
 
-=====================================================================
-                      BILL OF MATERIALS (BOM)
-=====================================================================
+
+                           BILL OF MATERIALS 
+
+
  REF    | COMPONENTES      | ESPECIFICACIONES           | QTY 
 --------|------------------|----------------------------|------------
  ES     | Microcontrolador | ESP8266 (Generic)          | 1
@@ -13,7 +11,7 @@
  PR     | Push Buttons     | Generic Tactile            | 2
  PTR    | Potentiometer    | Generic Analog             | 1
  PWR    | Power Source     | 3.2V LiPo Battery          | 1
-=====================================================================
+ 
 
 * Nota: El proyecto utiliza placas genéricas para el microcontrolador y la pantalla,
   usar otra placa diferente no debería suponer un problema, en caso de error,
