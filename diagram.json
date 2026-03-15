@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "author": "IA",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s2-devkitm-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled_top",
+      "top": -120,
+      "left": 60,
+      "attrs": {
+        "i2cAddress": "0x3c"
+      }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled_bottom",
+      "top": -35,
+      "left": 60,
+      "attrs": {
+        "i2cAddress": "0x3d"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_morse",
+      "top": 120,
+      "left": -150,
+      "attrs": {
+        "color": "red",
+        "label": "Morse"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_finish",
+      "top": 200,
+      "left": -150,
+      "attrs": {
+        "color": "green",
+        "label": "Finish"
+      }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot",
+      "top": 30,
+      "left": -180,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [
+      "esp:3V3",
+      "oled_top:VCC",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "oled_top:GND",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:2",
+      "oled_top:SDA",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:3",
+      "oled_top:SCL",
+      "blue",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:3V3",
+      "oled_bottom:VCC",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "oled_bottom:GND",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:2",
+      "oled_bottom:SDA",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:3",
+      "oled_bottom:SCL",
+      "blue",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "btn_morse:2.l",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:4",
+      "btn_morse:1.l",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "btn_finish:2.l",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:0",
+      "btn_finish:1.l",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:3V3",
+      "pot:VCC",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "pot:GND",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:1",
+      "pot:SIG",
+      "yellow",
+      [
+        "v0"
+      ]
+    ]
+  ]
+}

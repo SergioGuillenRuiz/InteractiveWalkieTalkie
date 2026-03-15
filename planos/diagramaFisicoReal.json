@@ -1,0 +1,153 @@
+{
+    "version": 1,
+    "author": "Documentación Proyecto Gogoaty V2.0",
+    "editor": "wokwi",
+    "parts": [
+        {
+            "type": "board-esp8266",
+            "id": "nodemcu",
+            "top": 0,
+            "left": 0,
+            "attrs": {}
+        },
+        {
+            "type": "board-ssd1306",
+            "id": "oled",
+            "top": -150,
+            "left": 60,
+            "attrs": {
+                "i2cAddress": "0x3c"
+            }
+        },
+        {
+            "type": "wokwi-pushbutton",
+            "id": "btn_morse",
+            "top": 120,
+            "left": -150,
+            "attrs": {
+                "color": "red",
+                "label": "Morse (Pin 4 / D2)"
+            }
+        },
+        {
+            "type": "wokwi-pushbutton",
+            "id": "btn_finish",
+            "top": 200,
+            "left": -150,
+            "attrs": {
+                "color": "green",
+                "label": "Finish (Pin 0 / D3)"
+            }
+        },
+        {
+            "type": "wokwi-potentiometer",
+            "id": "pot",
+            "top": 30,
+            "left": -180,
+            "attrs": {}
+        },
+        {
+            "type": "wokwi-text",
+            "id": "lora_label",
+            "top": 120,
+            "left": 150,
+            "attrs": {
+                "text": "MÓDULO LORA SX127x\n------------------\nNSS  -> Pin 15 (D8)\nRST  -> Pin 16 (D0)\nDIO0 -> Pin 5  (D1)"
+            }
+        }
+    ],
+    "connections": [
+        [
+            "nodemcu:3V3",
+            "oled:VCC",
+            "red",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:GND",
+            "oled:GND",
+            "black",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:D4",
+            "oled:SDA",
+            "green",
+            [
+                "v0",
+                "h-20",
+                "v-50"
+            ]
+        ],
+        [
+            "nodemcu:RX",
+            "oled:SCL",
+            "blue",
+            [
+                "v0",
+                "h-40",
+                "v-80"
+            ]
+        ],
+        [
+            "nodemcu:GND",
+            "btn_morse:2.l",
+            "black",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:D2",
+            "btn_morse:1.l",
+            "green",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:GND",
+            "btn_finish:2.l",
+            "black",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:D3",
+            "btn_finish:1.l",
+            "green",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:3V3",
+            "pot:VCC",
+            "red",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:GND",
+            "pot:GND",
+            "black",
+            [
+                "v0"
+            ]
+        ],
+        [
+            "nodemcu:A0",
+            "pot:SIG",
+            "yellow",
+            [
+                "v0"
+            ]
+        ]
+    ]
+}
