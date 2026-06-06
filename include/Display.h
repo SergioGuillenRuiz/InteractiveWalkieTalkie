@@ -47,9 +47,10 @@ void Display_clear();
 void Display_centerText(const String &text);
 
 void drawMenu();
-void drawInstantMessagesMenu();
-void drawGamesMenu();
+void drawInstantMessagesMenu(int seleccion, bool force = false);
+void drawGamesMenu(int seleccion, bool force = false);
 void moveCursor();
+void Display_resetMenuCursor();
 
 void drawMorseSuggestion();
 void drawMorseTable();

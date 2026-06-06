@@ -23,16 +23,67 @@ MainState mainState = STATE_IDLE;
 SendSubState sendSubState = SEND_WAIT;
 
 //=============================================================
-// FUNCIONES DE GESTIÓN DE ESTADOS  
+// AYUDANTES INTERNOS
+//=============================================================
+
+// Espera (sin bloquear LoRa/Display) hasta que se pulse un botón.
+// Devuelve true si se pulsó MORSE (repetir), false si FINISH (salir).
+static bool waitButtonMorseOrFinish() {
+    while (!isMorsePressed() && !isFinishPressed()) {
+        Lora_update();
+        Display_update();
+        yield();
+        delay(10);
+    }
+    return isMorsePressed();
+}
+
+// Envía un mensaje y muestra el resultado (Enviado / Error) en pantalla.
+static void sendAndShowResult(const String &mensaje) {
+    bool ok = Lora_send(mensaje);
+    if (ok) triggerAnimation(ANIM_GIVING_HEART);
+
+    Display_clear();
+    display.setCursor(0, 0);
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    if (ok) {
+        display.println("Enviado:");
+        display.println(mensaje);
+    } else {
+        display.println("Error al enviar");
+    }
+    display.display();
+}
+
+// Reinicia las variables de creación del mensaje Morse.
+static void resetMorseState() {
+    mensajeAEnviar = "";
+    morseCode = "";
+    morsePrefix = "";
+    lastMorsePrefix = "";
+    morseScrollOffset = 0;
+}
+
+//=============================================================
+// FUNCIONES DE GESTIÓN DE ESTADOS
 //=============================================================
 
 // ==================== STATE_IDLE ====================
 bool handleIdle() {
+    static bool justEnteredIdle = true;
+
     LoRa.idle();
+
+    // El menú se redibuja en el buffer cada iteración (así se repara lo que
+    // pinten las animaciones), pero el volcado a pantalla está limitado por
+    // Display_update()/moveCursor(), no se hace en cada vuelta.
     drawMenu();
+    if (justEnteredIdle) {
+        Display_resetMenuCursor();   // forzar repintado del cursor al entrar
+        justEnteredIdle = false;
+    }
     moveCursor();
-    
-    // Gestionar animaciones (se ejecuta después del menú y cursor)
     updateHippoAnimation();
 
     if (Lora_hasMessage()) {
@@ -46,57 +97,63 @@ bool handleIdle() {
     if (isMorsePressed()) {
         delay(50);
         if (isMorsePressed()) {
-            if (cursorPos == 0) mainState = STATE_SEND_MENU;
-            if (cursorPos == 1) mainState = STATE_HISTORY_MENU;
-            if (cursorPos == 2) mainState = STATE_GAMES_MENU;
+            if (cursorPos == 0)      mainState = STATE_SEND_MENU;
+            else if (cursorPos == 1) mainState = STATE_HISTORY_MENU;
+            else if (cursorPos == 2) mainState = STATE_GAMES_MENU;
             lastInteraction = millis();
+            justEnteredIdle = true;     // saldremos del IDLE
             Display_clear();
             menuTransitionDelay();
             return true;
         }
     }
 
-    if (millis() - lastInteraction > 300000) {
+    if (millis() - lastInteraction > SLEEP_TIMEOUT) {
         mainState = STATE_SLEEP;
+        justEnteredIdle = true;
         Display_clear();
         LoRa.idle();
         menuTransitionDelay();
         return true;
     }
 
-    return false; 
+    return false;
 }
 
 // ==================== STATE_SLEEP ====================
 bool handleSleep() {
 
-    if (millis() - lastTimeReceived > 900000) {
+    if (millis() - lastTimeReceived > LORA_DEEP_SLEEP) {
         LoRa.sleep();
     }
 
-    if (isMorsePressed() || isFinishPressed()) {
+    // Para despertar hacen falta 3 pulsaciones DISTINTAS en menos de 45 s.
+    // Se detecta el flanco de subida para no contar la misma pulsación muchas
+    // veces mientras el botón permanece presionado.
+    static bool prevPressed = false;
+    bool pressed = isMorsePressed() || isFinishPressed();
+
+    if (pressed && !prevPressed) {
         unsigned long now = millis();
-        if (buttonPressCount == 0) {
+        if (buttonPressCount == 0 || (now - firstPressTime) > 45000) {
             firstPressTime = now;
             buttonPressCount = 1;
-            return true;
-        }
-        if (now - firstPressTime > 45000) {
-            buttonPressCount = 0;
-            return true;
-        }
-        buttonPressCount++;
-        if (buttonPressCount >= 3) {
-            buttonPressCount = 0;
-            Display_clear();
-            mainState = STATE_IDLE;
-            lastInteraction = millis();
-            menuTransitionDelay();
-            return true;
+        } else {
+            buttonPressCount++;
+            if (buttonPressCount >= 3) {
+                buttonPressCount = 0;
+                mainState = STATE_IDLE;
+                lastInteraction = now;
+                Display_clear();
+                menuTransitionDelay();
+                prevPressed = false;
+                return true;
+            }
         }
     }
+    prevPressed = pressed;
 
-    return true; 
+    return true;
 }
 
 // ==================== STATE_SEND_MENU ====================
@@ -194,112 +251,42 @@ case SEND_WAIT:
 
         case SEND_MORSE:
         {
+            // OJO: no tocar 'primeraVezMenu' aquí. createMorseMessage() lo usa
+            // para inicializar su temporizador de inactividad la primera vez.
             dentroMenuEnviar = true;
-            primeraVezMenu = false;
             mensajeCancelado = false;
             mensajeEnviado = false;
 
-            {
-                MorseResult res = createMorseMessage();
+            MorseResult res = createMorseMessage();
+
+            if (res == MORSE_SENT || res == MORSE_CANCELLED) {
                 if (res == MORSE_SENT) {
-                    if (Lora_send(mensajeAEnviar)) {
-                        triggerAnimation(ANIM_GIVING_HEART);
-                        Display_clear();
-                        display.setCursor(0,0);
-                        display.setTextSize(1);
-                        display.setTextColor(SH110X_WHITE);
-                        display.println("Enviado:");
-                        display.println(mensajeAEnviar);
-                        display.display();
-                    } else {
-                        Display_clear();
-                        display.setCursor(0,0);
-                        display.setTextSize(1);
-                        display.setTextColor(SH110X_WHITE);
-                        display.println("Error al enviar");
-                        display.display();
-                    }
-
-                    // Esperar hasta que el usuario pulse un botón:
-                    while (!isMorsePressed() && !isFinishPressed()) {
-                        Lora_update();
-                        Display_update();
-                        yield();
-                        delay(10);
-                    }
-
-                    if (isMorsePressed()) {
-                        menuTransitionDelay(); // consumir/release
-                        // volver a creación morse
-                        mensajeAEnviar = "";
-                        morseCode = "";
-                        morsePrefix = "";
-                        lastMorsePrefix = "";
-                        morseScrollOffset = 0;
-                        dentroMenuEnviar = true;
-                        primeraVezMenu = true;
-                        sendSubState = SEND_MORSE;
-                        Display_clear();
-                        return true;
-                    } else { // isFinishPressed()
-                        menuTransitionDelay();
-                        // volver al menú principal
-                        dentroMenuEnviar = false;
-                        mensajeAEnviar = "";
-                        morseCode = "";
-                        morsePrefix = "";
-                        lastMorsePrefix = "";
-                        morseScrollOffset = 0;
-                        sendSubState = SEND_WAIT;
-                        mainState = STATE_IDLE;
-                        Display_clear();
-                        return true;
-                    }
-                }
-                if (res == MORSE_CANCELLED) {
+                    sendAndShowResult(mensajeAEnviar);
+                } else {
                     Display_clear();
-                    display.setCursor(0,0);
+                    display.setCursor(0, 0);
                     display.setTextSize(1);
                     display.setTextColor(SH110X_WHITE);
                     display.println("Cancelado");
                     display.display();
-
-                    // Esperar hasta que el usuario pulse un botón:
-                    while (!isMorsePressed() && !isFinishPressed()) {
-                        Lora_update();
-                        Display_update();
-                        yield();
-                        delay(10);
-                    }
-
-                    if (isMorsePressed()) {
-                        menuTransitionDelay(); // consumir/release
-                        // volver a creación morse
-                        mensajeAEnviar = "";
-                        morseCode = "";
-                        morsePrefix = "";
-                        lastMorsePrefix = "";
-                        morseScrollOffset = 0;
-                        dentroMenuEnviar = true;
-                        primeraVezMenu = true;
-                        sendSubState = SEND_MORSE;
-                        Display_clear();
-                        return true;
-                    } else { // isFinishPressed()
-                        menuTransitionDelay();
-                        // volver al menú principal
-                        dentroMenuEnviar = false;
-                        mensajeAEnviar = "";
-                        morseCode = "";
-                        morsePrefix = "";
-                        lastMorsePrefix = "";
-                        morseScrollOffset = 0;
-                        sendSubState = SEND_WAIT;
-                        mainState = STATE_IDLE;
-                        Display_clear();
-                        return true;
-                    }
                 }
+
+                bool repeat = waitButtonMorseOrFinish();
+                menuTransitionDelay();
+                resetMorseState();
+
+                if (repeat) {
+                    // Volver a la creación de un nuevo mensaje Morse
+                    primeraVezMenu = true;
+                    sendSubState = SEND_MORSE;
+                } else {
+                    // Volver al menú principal
+                    dentroMenuEnviar = false;
+                    sendSubState = SEND_WAIT;
+                    mainState = STATE_IDLE;
+                }
+                Display_clear();
+                return true;
             }
 
             return true;
@@ -310,63 +297,34 @@ case SEND_WAIT:
         // ---------------------------------------------------
         case SEND_INSTANT_MSG:
         {
-            drawInstantMessagesMenu();
+            static bool needRedraw = true;
+
+            int seleccion = getPotValue(7);           // 8 mensajes: índices 0..7
+            drawInstantMessagesMenu(seleccion, needRedraw);
+            needRedraw = false;
 
             if (isMorsePressed()) {
                 delay(50);
                 if (isMorsePressed()) {
-                    int seleccion = getPotValue(7);
-                    if (seleccion < 0) seleccion = 0;
-                    if (seleccion > 7) seleccion = 7;
+                    sendAndShowResult(nombresMensajes[seleccion]);
 
-                    String mensaje = nombresMensajes[seleccion];
+                    bool repeat = waitButtonMorseOrFinish();
+                    menuTransitionDelay();
+                    needRedraw = true;
 
-                    if (Lora_send(mensaje)) {
-                        triggerAnimation(ANIM_GIVING_HEART);
-                        Display_clear();
-                        display.setCursor(0,0);
-                        display.setTextSize(1);
-                        display.setTextColor(SH110X_WHITE);
-                        display.println("Enviado:");
-                        display.println(mensaje);
-                        display.display();
-                    } else {
-                        Display_clear();
-                        display.setCursor(0,0);
-                        display.setTextSize(1);
-                        display.setTextColor(SH110X_WHITE);
-                        display.println("Error al enviar");
-                        display.display();
-                    }
-
-                    // Esperar hasta que el usuario pulse un botón:
-                    while (!isMorsePressed() && !isFinishPressed()) {
-                        Lora_update();
-                        Display_update();
-                        yield();
-                        delay(10);
-                    }
-
-                    if (isMorsePressed()) {
-                        menuTransitionDelay();
-                        // volver al submenú SEND_WAIT (seguir en enviar)
-                        sendSubState = SEND_WAIT;
-                        Display_clear();
-                        return true;
-                    } else { // isFinishPressed()
-                        menuTransitionDelay();
-                        // volver al menú principal
-                        sendSubState = SEND_WAIT;
-                        mainState = STATE_IDLE;
-                        Display_clear();
-                        return true;
-                    }
+                    // Tras enviar siempre se vuelve a la selección de modo;
+                    // con FINISH además se sale al menú principal.
+                    sendSubState = SEND_WAIT;
+                    if (!repeat) mainState = STATE_IDLE;
+                    Display_clear();
+                    return true;
                 }
             }
 
             if (isFinishPressed()) {
                 delay(50);
                 if (isFinishPressed()) {
+                    needRedraw = true;
                     sendSubState = SEND_WAIT;
                     mainState = STATE_IDLE;
                     Display_clear();
@@ -434,6 +392,8 @@ bool handleHistoryMenu() {
         forceRedraw = true;
         prevTop = -1;
         prevSelected = -1;
+        selected = 0;       // empezar siempre en el mensaje más reciente
+        topIndex = 0;
     }
 
     if (firstTime || forceRedraw) {
@@ -444,11 +404,11 @@ bool handleHistoryMenu() {
         display.setTextSize(1);
         display.setTextColor(SH110X_WHITE);
         display.println("Historial");
-        
+
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
-            int idx = line;
+            int idx = topIndex + line;
             if (idx >= total) break;
-            
+
             String msg = History_getMessage(idx);
             unsigned long ts = History_getTimestamp(idx);
             unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
@@ -463,8 +423,8 @@ bool handleHistoryMenu() {
             display.println(lineText);
         }
         display.display();
-        
-        prevTop = 0;
+
+        prevTop = topIndex;
         prevSelected = selected;
         forceRedraw = false;
         return true;
@@ -642,9 +602,8 @@ bool handleHistoryMenu() {
     }
 
     if (needRedraw) {
-        display.fillRect(0, 0, 128, 32, SH110X_BLACK);
-        display.fillRect(0, 8, 128, 120, SH110X_BLACK);
-        
+        display.fillRect(0, 0, 128, 128, SH110X_BLACK);
+
         display.setCursor(0,0);
         display.setTextSize(1);
         display.setTextColor(SH110X_WHITE);
@@ -698,92 +657,43 @@ bool handleHistoryMenu() {
 }
 // ==================== STATE_GAMES_MENU ====================
 bool handleGamesMenu() {
-    // Muestra el submenú de juegos (iconos 4x2) y permite seleccionar con el potenciómetro A0.
-    drawGamesMenu();
+    static bool needRedraw = true;
 
-    // Si se pulsa MORSE -> "arrancar" juego
+    // Submenú de iconos; selección con el potenciómetro (5 juegos: 0..4).
+    int seleccion = getPotValue(4);
+    drawGamesMenu(seleccion, needRedraw);
+    needRedraw = false;
+
+    // Si se pulsa MORSE -> arrancar el juego seleccionado
     if (isMorsePressed()) {
         delay(50);
         if (isMorsePressed()) {
-            int seleccion = getPotValue(5);
-            if (seleccion < 0) seleccion = 0;
-            if (seleccion > 4) seleccion = 4;
+            menuTransitionDelay();
+            needRedraw = true;   // al volver, refrescar el submenú
 
-            String name = String(nombresJuegos[seleccion]);
-            
-            // Arrancar el juego según la selección
             switch (seleccion) {
-                case 0: // Tetris2v2
-                    Display_clear();
-                    display.setCursor(0,20);
-                    display.setTextSize(1);
-                    display.setTextColor(SH110X_WHITE);
-                    display.println("Proximamente:");
-                    display.println(name);
-                    display.display();
-                    delay(800);
-                    break;
-                    
-                case 1: // Poker
-                    menuTransitionDelay();
+                case 1: // Poker (implementado): gestiona su propia salida a IDLE
                     startPoker();
-                    break;
-                    
-                case 2: // RefillGame
-                    Display_clear();
-                    display.setCursor(0,20);
-                    display.setTextSize(1);
-                    display.setTextColor(SH110X_WHITE);
-                    display.println("Proximamente:");
-                    display.println(name);
-                    display.display();
-                    delay(800);
-                    break;
-                    
-                case 3: // Choose4Me 
+                    return true;
+
+                case 3: // Choose4Me (implementado): deja mainState = STATE_IDLE
                     startChoose4Me();
                     return true;
-                    
-                case 4: // HippoRadar
+
+                default: { // Juegos aún no implementados (0, 2, 4)
                     Display_clear();
-                    display.setCursor(0,20);
+                    display.setCursor(0, 20);
                     display.setTextSize(1);
                     display.setTextColor(SH110X_WHITE);
                     display.println("Proximamente:");
-                    display.println(name);
+                    display.println(nombresJuegos[seleccion]);
                     display.display();
-                    delay(800);
-                    break;
-                    
-                default:
-                    break;
-            }
-            
-            // Para juegos no implementados (todos excepto Choose4Me), mostrar mensaje
-            if (seleccion != 3) {
-                Display_clear();
-                display.setCursor(0,20);
-                display.setTextSize(1);
-                display.setTextColor(SH110X_WHITE);
-                display.println("Proximamente");
-                display.display();
 
-                // Esperar hasta que el usuario pulse un botón; MORSE -> volver al submenú, FINISH -> salir a idle
-                while (!isMorsePressed() && !isFinishPressed()) {
-                    Lora_update();
-                    Display_update();
-                    yield();
-                    delay(10);
-                }
-
-                if (isMorsePressed()) {
+                    // MORSE -> volver al submenú; FINISH -> salir a IDLE
+                    bool repeat = waitButtonMorseOrFinish();
                     menuTransitionDelay();
                     Display_clear();
-                    return true; // volver a STATE_GAMES_MENU (se redibujará)
-                } else { // isFinishPressed()
-                    menuTransitionDelay();
-                    mainState = STATE_IDLE;
-                    Display_clear();
+                    if (!repeat) mainState = STATE_IDLE;
                     return true;
                 }
             }
@@ -794,6 +704,7 @@ bool handleGamesMenu() {
     if (isFinishPressed()) {
         delay(50);
         if (isFinishPressed()) {
+            needRedraw = true;
             mainState = STATE_IDLE;
             menuTransitionDelay();
             Display_clear();

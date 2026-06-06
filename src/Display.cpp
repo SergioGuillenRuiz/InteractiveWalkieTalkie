@@ -31,8 +31,10 @@ Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
 // Variables internas
 static unsigned long lastUpdate = 0;
-static String currentTitle = "";
-static String currentLine  = "";
+
+// Posición previa del cursor del menú principal (compartida entre drawMenu y
+// moveCursor para poder forzar su redibujado al re-entrar al menú).
+static int menuCursorLastX = -1;
 
 //Variables de gestión de animaciones
 static HippoAnimation currentAnimation = ANIM_NORMAL;
@@ -84,8 +86,9 @@ void Display_update() {
   unsigned long now = millis();
   if (now - lastUpdate >= DISPLAY_REFRESH_MS) {
     lastUpdate = now;
+    display.display();   // volcado periódico (las funciones de dibujo ya
+                         // refrescan al cambiar su contenido)
   }
-  display.display();
 }
 
 // -----------------------------------------------------------------------------
@@ -120,7 +123,16 @@ void drawMenu(){
   display.drawBitmap(3, 5, flechaBitMap, 40, 30, SH110X_WHITE);
   display.drawBitmap(48, 5, carpetaBitMap, 40, 30, SH110X_WHITE);
   display.drawBitmap(90, 5, iconoMando, 40, 30, SH110X_WHITE);
-  display.display();
+
+  // No se vuelca aquí: el volcado a pantalla lo hacen moveCursor() y
+  // Display_update(). Así el menú se redibuja en el buffer en cada iteración
+  // (reparando lo que pinten las animaciones) sin saturar el bus I2C.
+}
+
+// Fuerza que el siguiente moveCursor() repinte el cursor del menú principal
+// (necesario al (re)entrar al IDLE, tras un Display_clear()).
+void Display_resetMenuCursor() {
+  menuCursorLastX = -1;
 }
 
 bool animateHippo() {
@@ -449,7 +461,6 @@ bool animateHippoBonked() {
   static unsigned long stateStartTime = 0;
   static int posX = 65;
   static int posY = 70;
-  static bool isBonked = false;
   static int bonkCount = 0;
 
   unsigned long now = millis();
@@ -462,7 +473,6 @@ bool animateHippoBonked() {
       // Reinicializar variables
       posX = 65;
       posY = 70;
-      isBonked = false;
       bonkCount = 0;
       animState = STATE_BONK_1_WITH_STICK;
       stateStartTime = now;
@@ -607,8 +617,7 @@ bool animateHippoBonked() {
         // Dibujar hipopótamo patas arriba
         display.drawBitmap(posX, posY, hippoBitMapBonked60, 60, 60, SH110X_WHITE);
         display.display();
-        
-        isBonked = true;
+
         animState = STATE_DONE;
         stateStartTime = now;
       }
@@ -640,13 +649,12 @@ bool animateHippoChasingHeart() {
   
   static unsigned long stateStartTime = 0;
   static int hippoX, hippoY, heartX, heartY;
-  static bool heartOnGround, heartCaught;
 
   unsigned long now = millis();
   bool animationFinished = false;
 
   switch (animState) {
-    
+
     // ----------------------------------------------------
     case STATE_INIT:
       // Inicializar variables
@@ -654,8 +662,6 @@ bool animateHippoChasingHeart() {
       hippoY = 90;
       heartX = 10;
       heartY = 64;
-      heartOnGround = false;
-      heartCaught = false;
       animState = STATE_PEEKING;
       stateStartTime = now;
       // Dibujar posición inicial
@@ -690,7 +696,6 @@ bool animateHippoChasingHeart() {
         
         // Comprobar si llegó al suelo
         if (heartY >= hippoY + 15) {
-          heartOnGround = true;
           // Borrar la cabeza del hipopótamo que asomaba
           display.fillRect(hippoX, hippoY + 12, 40, 20, SH110X_BLACK);
           display.display();
@@ -719,7 +724,6 @@ bool animateHippoChasingHeart() {
         
         // Comprobar si atrapó el corazón
         if (abs(hippoX - heartX) < 5) {
-          heartCaught = true;
           // Borrar corazón
           drawHeart(heartX, heartY, SH110X_BLACK);
           display.display();
@@ -967,8 +971,7 @@ bool animateHippoGivingHeart() {
   return animationFinished;
 }
 
-void moveCursor() { 
-  static int lastCursorX = -1;
+void moveCursor() {
   static int stableValue = 0;
   static unsigned long lastPotRead = 0;
   const unsigned long POT_READ_INTERVAL = 20;
@@ -1013,25 +1016,25 @@ void moveCursor() {
   
   cursorPos = sel;
   
-  if (cursorX != lastCursorX) {
-    if (lastCursorX >= 0) {
+  if (cursorX != menuCursorLastX) {
+    if (menuCursorLastX >= 0) {
       display.fillTriangle(
-        lastCursorX, 49,
-        lastCursorX - 3, 55,
-        lastCursorX + 3, 55,
+        menuCursorLastX, 49,
+        menuCursorLastX - 3, 55,
+        menuCursorLastX + 3, 55,
         SH110X_BLACK
       );
     }
-    
+
     display.fillTriangle(
       cursorX, 49,
       cursorX - 3, 55,
       cursorX + 3, 55,
       SH110X_WHITE
     );
-    
+
     display.display();
-    lastCursorX = cursorX;
+    menuCursorLastX = cursorX;
   }
 }
 
@@ -1172,10 +1175,13 @@ void drawMorse() {
   display.display();
 }
 
-void drawInstantMessagesMenu() {
-  display.clearDisplay();
+void drawInstantMessagesMenu(int seleccion, bool force) {
+  // Sólo redibujar cuando cambia la selección (o cuando se fuerza al entrar).
+  static int lastSel = -1;
+  if (!force && seleccion == lastSel) return;
+  lastSel = seleccion;
 
-  int seleccion = getPotValue(7);
+  display.clearDisplay();
 
   const int cols = 3;
   const int rows = 3;
@@ -1212,10 +1218,13 @@ void drawInstantMessagesMenu() {
   display.display();
 }
 
-void drawGamesMenu() {
-  display.clearDisplay();
+void drawGamesMenu(int seleccion, bool force) {
+  // Sólo redibujar cuando cambia la selección (o cuando se fuerza al entrar).
+  static int lastSel = -1;
+  if (!force && seleccion == lastSel) return;
+  lastSel = seleccion;
 
-  int seleccion = getPotValue(5);
+  display.clearDisplay();
 
   const int cols = 3;
   const int rows = 2;

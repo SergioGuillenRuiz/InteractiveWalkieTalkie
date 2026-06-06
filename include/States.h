@@ -27,12 +27,6 @@ enum MainState {
 };
 
 extern MainState mainState;
-extern unsigned long stateSince;
-
-inline void changeState(MainState s) {
-  mainState = s;
-  stateSince = millis();
-}
 
 // ============================================================
 // Gestión de subestados de envío de mensajes
@@ -45,12 +39,6 @@ enum SendSubState {
 };
 
 extern SendSubState sendSubState;
-extern unsigned long sendSubStateSince;
-
-inline void changeSendSubState(SendSubState s) {
-    sendSubState = s;
-    sendSubStateSince = millis();
-}
 
 //=============================================================
 // FUNCIONES DE GESTIÓN DE ESTADOS

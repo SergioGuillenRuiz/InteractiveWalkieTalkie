@@ -54,33 +54,33 @@ bool isFinishPressed() {
 
 // ------------------------------------------------------------
 // Lectura estable del potenciómetro (A0) con debounce y mapeo
+//
+// El antirrebote se aplica sobre la lectura CRUDA y el mapeo se hace al
+// final. Así el estado estático no depende de "maxIndex" y la misma
+// función puede usarse desde menús distintos sin contaminación cruzada.
 // ------------------------------------------------------------
 int getPotValue(int maxIndex) {
   if (maxIndex <= 0) return 0;
 
-  static int stable = 0;
-  static int candidate = 0;
+  static int stableRaw = 0;
+  static int candidateRaw = 0;
   static unsigned long since = 0;
-  static int lastStable = -1;
+
+  const int RAW_NOISE = 8;   // umbral para ignorar el ruido del ADC
 
   int raw = analogRead(A0);
-  int mapped = map(raw, 0, 1023, 0, maxIndex);
-  mapped = constrain(mapped, 0, maxIndex);
 
-  if (mapped != candidate) {
-    candidate = mapped;
+  if (abs(raw - candidateRaw) > RAW_NOISE) {
+    candidateRaw = raw;
     since = millis();
-  } else {
-    if ((unsigned long)(millis() - since) >= POT_DEBOUNCE_TIME_MS) {
-      stable = candidate;
-      
-      // SOLO resetear timer si el valor CAMBIÓ (no cada 150ms)
-      if (stable != lastStable) {
-        resetAnimationTimer();
-        lastStable = stable;
-      }
+  } else if ((unsigned long)(millis() - since) >= POT_DEBOUNCE_TIME_MS) {
+    // El potenciómetro se ha estabilizado en un nuevo valor
+    if (candidateRaw != stableRaw) {
+      stableRaw = candidateRaw;
+      resetAnimationTimer();   // movimiento real del usuario
     }
   }
 
-  return stable;
+  int mapped = map(stableRaw, 0, 1023, 0, maxIndex);
+  return constrain(mapped, 0, maxIndex);
 }

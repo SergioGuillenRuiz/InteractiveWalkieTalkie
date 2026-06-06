@@ -35,36 +35,12 @@ void loop() {
 
   Lora_update();
   Display_update();
-  
-    // ==================== STATE_IDLE ====================
-    if (mainState == STATE_IDLE) {
-        
-        if (handleIdle()) return;
 
-    }
-
-    // ==================== STATE_SLEEP ====================
-    if (mainState == STATE_SLEEP) {
-
-        if (handleSleep()) return;
-    }
-
-    // ==================== STATE_HISTORY_MENU ====================
-    if (mainState == STATE_HISTORY_MENU) {
-
-        if (handleHistoryMenu()) return;
-    }
-
-    // ==================== STATE_GAMES_MENU ====================
-    if (mainState == STATE_GAMES_MENU) {
-
-        if (handleGamesMenu()) return;
-    }
-
-    // ==================== STATE_SEND_MENU ====================
-    if(mainState == STATE_SEND_MENU) {
-
-        if (handleSendMenu()) return;
-
-    }
+  switch (mainState) {
+    case STATE_IDLE:         handleIdle();        break;
+    case STATE_SLEEP:        handleSleep();       break;
+    case STATE_HISTORY_MENU: handleHistoryMenu(); break;
+    case STATE_GAMES_MENU:   handleGamesMenu();   break;
+    case STATE_SEND_MENU:    handleSendMenu();    break;
+  }
 }
