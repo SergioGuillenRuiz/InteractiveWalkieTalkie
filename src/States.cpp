@@ -90,12 +90,11 @@ static void resetMorseState() {
 // disparó, garantiza un tiempo mínimo en pantalla y luego espera la siguiente
 // pulsación. Devuelve true si MORSE (repetir), false si FINISH (salir).
 static bool waitAfterResult() {
-    const unsigned long MIN_RESULT_MS = 800;
     unsigned long shownAt = millis();
     while (isMorsePressed() || isFinishPressed()) {   // soltar el botón
         backgroundTick(); yield(); delay(10);
     }
-    while (millis() - shownAt < MIN_RESULT_MS) {       // tiempo mínimo visible
+    while (millis() - shownAt < RESULT_MIN_MS) {       // tiempo mínimo visible
         backgroundTick(); yield(); delay(10);
     }
     return waitButtonMorseOrFinish();
@@ -166,6 +165,7 @@ bool handleIdle() {
         mainState = STATE_SLEEP;
         justEnteredIdle = true;
         Display_clear();
+        Display_setPower(false);   // apagar el panel OLED para ahorrar batería
         LoRa.idle();
         menuTransitionDelay();
         return true;
@@ -181,23 +181,25 @@ bool handleSleep() {
         LoRa.sleep();
     }
 
-    // Para despertar hacen falta 3 pulsaciones DISTINTAS en menos de 45 s.
-    // Se detecta el flanco de subida para no contar la misma pulsación muchas
-    // veces mientras el botón permanece presionado.
+    // Para despertar hacen falta WAKE_PRESS_COUNT pulsaciones DISTINTAS dentro
+    // de WAKE_WINDOW_MS. Se detecta el flanco de subida para no contar la misma
+    // pulsación muchas veces mientras el botón permanece presionado.
     static bool prevPressed = false;
     bool pressed = isMorsePressed() || isFinishPressed();
 
     if (pressed && !prevPressed) {
         unsigned long now = millis();
-        if (buttonPressCount == 0 || (now - firstPressTime) > 45000) {
+        if (buttonPressCount == 0 || (now - firstPressTime) > WAKE_WINDOW_MS) {
             firstPressTime = now;
             buttonPressCount = 1;
         } else {
             buttonPressCount++;
-            if (buttonPressCount >= 3) {
+            if (buttonPressCount >= WAKE_PRESS_COUNT) {
                 buttonPressCount = 0;
                 mainState = STATE_IDLE;
                 lastInteraction = now;
+                LoRa.idle();              // reactivar la radio
+                Display_setPower(true);   // reactivar el panel OLED
                 Display_clear();
                 menuTransitionDelay();
                 prevPressed = false;

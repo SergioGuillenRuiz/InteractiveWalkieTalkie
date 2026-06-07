@@ -82,7 +82,10 @@ void Display_centerText(const String &text) {
 // -----------------------------------------------------------------------------
 // Refresco periódico (por si hay animaciones o indicadores activos)
 // -----------------------------------------------------------------------------
+static bool s_panelOn = true;
+
 void Display_update() {
+  if (!s_panelOn) return;   // panel apagado (suspensión): no malgastar el bus I2C
   unsigned long now = millis();
   if (now - lastUpdate >= DISPLAY_REFRESH_MS) {
     lastUpdate = now;
@@ -97,6 +100,15 @@ void Display_update() {
 void Display_clear() {
   display.clearDisplay();
   display.display();
+}
+
+// -----------------------------------------------------------------------------
+// Encendido/apagado del panel OLED (DISPLAYOFF apaga el charge-pump del panel,
+// reduciendo el consumo durante la suspensión).
+// -----------------------------------------------------------------------------
+void Display_setPower(bool on) {
+  s_panelOn = on;
+  display.oled_command(on ? SH110X_DISPLAYON : SH110X_DISPLAYOFF);
 }
 
 // -----------------------------------------------------------------------------

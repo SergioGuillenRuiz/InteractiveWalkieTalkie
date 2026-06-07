@@ -12,6 +12,8 @@
 #define SH110X_BLACK   0
 #define SH110X_WHITE   1
 #define SH110X_INVERSE 2
+#define SH110X_DISPLAYOFF 0xAE
+#define SH110X_DISPLAYON  0xAF
 
 class Adafruit_SH1107 : public Adafruit_GFX {
 public:

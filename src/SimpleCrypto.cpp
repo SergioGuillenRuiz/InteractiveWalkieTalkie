@@ -11,11 +11,30 @@ static const uint8_t KEY[16] = {
     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
 };
 
-// IV fijo (mismo en ambos dispositivos)
-static uint8_t IV[16] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
-};
+// Genera un IV aleatorio de 16 bytes. El IV viaja en claro al principio de cada
+// mensaje (es lo estándar en CBC; no es secreto). Así, dos mensajes con el mismo
+// texto producen cifrados distintos.
+static void fillRandomIV(uint8_t *iv) {
+#if defined(ESP8266)
+    for (int i = 0; i < 16; i += 4) {
+        uint32_t r = RANDOM_REG32;          // RNG por hardware del ESP8266
+        iv[i + 0] = (uint8_t)(r);
+        iv[i + 1] = (uint8_t)(r >> 8);
+        iv[i + 2] = (uint8_t)(r >> 16);
+        iv[i + 3] = (uint8_t)(r >> 24);
+    }
+#elif defined(ESP32)
+    for (int i = 0; i < 16; i += 4) {
+        uint32_t r = esp_random();
+        iv[i + 0] = (uint8_t)(r);
+        iv[i + 1] = (uint8_t)(r >> 8);
+        iv[i + 2] = (uint8_t)(r >> 16);
+        iv[i + 3] = (uint8_t)(r >> 24);
+    }
+#else
+    for (int i = 0; i < 16; i++) iv[i] = (uint8_t)random(256);
+#endif
+}
 
 // Byte a hexadecimal
 static char toHex(uint8_t nibble) {
@@ -85,44 +104,52 @@ static bool removePad(uint8_t* data, uint16_t* len) {
 
 String SimpleCrypto_encrypt(const String& text) {
     if (text.length() == 0) return "";
-    
-    uint8_t buffer[128];
+
     uint16_t len = text.length();
-    
-    if (len > 100) return "";
-    
+    // IV(16) + texto cifrado, en hex, debe caber en un paquete LoRa (<=255 bytes)
+    if (len > 95) return "";
+
+    uint8_t iv[16];
+    fillRandomIV(iv);
+
+    uint8_t buffer[128];
     memcpy(buffer, text.c_str(), len);
-    
+
     uint16_t paddedLen = addPad(buffer, len, 128);
     if (paddedLen == 0) return "";
-    
-    // Usar TinyAES correctamente
+
     struct AES_ctx ctx;
-    AES_init_ctx_iv(&ctx, KEY, IV);
+    AES_init_ctx_iv(&ctx, KEY, iv);
     AES_CBC_encrypt_buffer(&ctx, buffer, paddedLen);
-    
-    return toHexString(buffer, paddedLen);
+
+    // El IV (en claro) precede al texto cifrado
+    return toHexString(iv, 16) + toHexString(buffer, paddedLen);
 }
 
 String SimpleCrypto_decrypt(const String& hex) {
-    if (hex.length() == 0 || hex.length() % 32 != 0) return "";
-    
+    // Formato: 32 hex (IV) + N*32 hex (bloques cifrados), al menos un bloque
+    if (hex.length() < 64 || hex.length() % 32 != 0) return "";
+
+    uint8_t iv[16];
+    if (!fromHexString(hex.substring(0, 32), iv, 16)) return "";
+
+    String ctHex = hex.substring(32);
+    uint16_t byteLen = ctHex.length() / 2;
+    if (byteLen > 128) return "";
+
     uint8_t buffer[128];
-    uint16_t byteLen = hex.length() / 2;
-    
-    if (!fromHexString(hex, buffer, 128)) return "";
-    
-    // Usar TinyAES correctamente
+    if (!fromHexString(ctHex, buffer, 128)) return "";
+
     struct AES_ctx ctx;
-    AES_init_ctx_iv(&ctx, KEY, IV);
+    AES_init_ctx_iv(&ctx, KEY, iv);
     AES_CBC_decrypt_buffer(&ctx, buffer, byteLen);
-    
+
     if (!removePad(buffer, &byteLen)) return "";
-    
+
     String result;
     for (uint16_t i = 0; i < byteLen; i++) {
         result += (char)buffer[i];
     }
-    
+
     return result;
 }

@@ -13,6 +13,10 @@
 #define SYMBOL_TIMEOUT     600        // separación entre símbolos (ms)
 #define WORD_TIMEOUT       1000       // separación entre palabras (ms)
 
+#define MORSE_CANCEL_HOLD  2000       // pulsación larga de MORSE -> cancelar
+#define MORSE_SEND_HOLD    1500       // pulsación larga de FINISH -> enviar
+#define MORSE_INACTIVITY   45000      // sin actividad -> cancelar automáticamente
+
 // ============================================================
 //  Variables globales accesibles
 // ============================================================

@@ -22,10 +22,6 @@ void setup() {
   History_load();
 
   Lora_begin();
-
-  //MENSAJES DE PRUEBA: BORRAR AL TERMINAR DE TESTEEAR
-  //History_addMessage("Hola, probando.");
-  //History_addMessage("Otro mensaje para el historial.");
 }
 
 // ============================================================

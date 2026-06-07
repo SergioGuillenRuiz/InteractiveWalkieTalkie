@@ -31,11 +31,18 @@
 #define OLED_SCL 3
 
 // ------------------------------------------------------------
-// Tiempos generales
+// Tiempos generales (ms)
 // ------------------------------------------------------------
 
-#define LORA_DEEP_SLEEP    900000
-#define SLEEP_TIMEOUT      300000
+#define LORA_DEEP_SLEEP    900000   // sin recibir nada -> dormir la radio
+#define SLEEP_TIMEOUT      300000   // inactividad -> suspender (5 min)
+
+// Despertar desde SLEEP: nº de pulsaciones y ventana de tiempo
+#define WAKE_PRESS_COUNT   3
+#define WAKE_WINDOW_MS     45000
+
+// Tiempo mínimo que permanece visible una pantalla de resultado (Enviado, etc.)
+#define RESULT_MIN_MS      800
 
 // ------------------------------------------------------------
 // Función de configuración de pines

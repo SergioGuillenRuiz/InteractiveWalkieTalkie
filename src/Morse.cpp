@@ -87,7 +87,7 @@ MorseResult createMorseMessage() {
     morsePressStart = now;
     morseLongArmed = false;
   }
-  if (morsePressedNow && !morseLongArmed && (now - morsePressStart >= 2000)) {
+  if (morsePressedNow && !morseLongArmed && (now - morsePressStart >= MORSE_CANCEL_HOLD)) {
     morseLongArmed = true;
   }
   if (!morsePressedNow && morseWasPressed) {
@@ -122,7 +122,7 @@ MorseResult createMorseMessage() {
     finishPressStart = now;
     finishLongArmed = false;
   }
-  if (finishPressedNow && !finishLongArmed && (now - finishPressStart >= 1500)) {
+  if (finishPressedNow && !finishLongArmed && (now - finishPressStart >= MORSE_SEND_HOLD)) {
     finishLongArmed = true;
   }
   if (!finishPressedNow && finishWasPressed) {
@@ -158,7 +158,7 @@ MorseResult createMorseMessage() {
   }
   finishWasPressed = finishPressedNow;
 
-  if ((now - lastInputTime) > 45000) {
+  if ((now - lastInputTime) > MORSE_INACTIVITY) {
     mensajeCancelado = true;
     mensajeAEnviar = "";
     morseCode = "";
