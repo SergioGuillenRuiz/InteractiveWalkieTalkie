@@ -1,0 +1,9 @@
+# Smoke test: arranque y menu principal
+wait 300
+text
+screen
+expect text Env
+expect text Hist
+expect text Jueg
+expect serial OLED
+shot idle

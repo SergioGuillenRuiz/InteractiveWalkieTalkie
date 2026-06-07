@@ -734,11 +734,11 @@ bool animateHippoChasingHeart() {
       break;
     
     // ----------------------------------------------------
-    case STATE_JUMPING:
+    case STATE_JUMPING: {
       // Saltos de felicidad (10 saltos = 5 ciclos arriba/abajo)
       static int jumpCount = 0;
       static bool jumpingUp = true;
-      
+
       if (now - stateStartTime >= 150) {
         // Borrar hipopótamo anterior
         display.fillRect(hippoX, hippoY, 40, 40, SH110X_BLACK);
@@ -765,7 +765,8 @@ bool animateHippoChasingHeart() {
         }
       }
       break;
-    
+    }
+
     // ----------------------------------------------------
     case STATE_DONE:
       // Limpiar y terminar después de breve pausa

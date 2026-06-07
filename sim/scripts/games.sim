@@ -1,0 +1,55 @@
+# ============================================================
+#  Menu de juegos: Poker, Choose4Me y un juego "Proximamente"
+#  (incluye la regresion del bug "Proximamente" fantasma tras Poker)
+# ============================================================
+wait 300
+
+# --- POKER (implementado) ---
+pot 1000
+wait 200
+tap morse
+pot 300
+wait 250
+expect text Poker
+in 0 morse down
+in 120 morse up
+run 600
+expect text POKER          # pantalla de inicio del poker
+in 0 finish down
+in 120 finish up
+run 1200
+expect text Env            # sale limpio a IDLE
+expect notext Proximamente # REGRESION: no debe aparecer "Proximamente"
+print Poker entra y sale sin "Proximamente" fantasma
+
+# --- CHOOSE4ME (implementado) ---
+pot 1000
+wait 200
+tap morse
+pot 820
+wait 250
+expect text Choose4Me
+in 0 morse down
+in 120 morse up
+run 700
+expect text CHOOSE4ME       # pantalla de inicio del juego
+in 0 finish down
+in 120 finish up
+run 1200
+expect text Env
+print Choose4Me entra y sale correctamente
+
+# --- TETRIS (no implementado) -> Proximamente -> finish -> IDLE ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 500 finish down
+in 620 finish up
+run 1000
+expect text Env
+print Juego no implementado: flujo Proximamente -> IDLE OK

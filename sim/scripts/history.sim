@@ -1,0 +1,41 @@
+# ============================================================
+#  Historial: recibir varios mensajes, verlos y borrar uno
+# ============================================================
+wait 200
+
+lora rx cansada
+wait 300
+lora rx happy
+wait 300
+lora rx kissy
+wait 300
+expect serial Guardado: cansada
+expect serial Guardado: happy
+expect serial Guardado: kissy
+
+# Entrar al historial (cursor medio)
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text kissy
+expect text happy
+shot history_list
+
+# Seleccionar el mas reciente (indice 0) antes de borrar
+pot 0
+wait 300
+# Borrar el mas reciente (kissy): tap1 abre confirmacion, tap2 (A=SI) confirma
+in 0 morse down
+in 150 morse up
+in 600 morse down
+in 750 morse up
+run 2600
+expect serial Borrado
+print Borrado en historial verificado (sin corrupcion de lista)
+
+# La lista sigue mostrando los otros mensajes
+wait 300
+expect text happy
+expect text cansada

@@ -1,0 +1,25 @@
+# ============================================================
+#  Suspension por inactividad (5 min) y despertar con 3 pulsaciones
+# ============================================================
+wait 300
+expect text Env
+
+# Avance rapido > 5 min sin tocar nada -> STATE_SLEEP (pantalla en negro)
+ff 305000
+wait 200
+expect notext Env
+expect pixel 64 64 off
+shot sleep_blank
+print Entrada en SLEEP tras timeout OK
+
+# Una sola pulsacion NO despierta
+tap morse
+wait 300
+expect notext Env
+
+# Dos pulsaciones mas (total 3 flancos) SI despiertan
+tap morse
+tap morse
+wait 400
+expect text Env
+print Despertar con 3 pulsaciones OK

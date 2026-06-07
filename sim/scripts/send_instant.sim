@@ -1,0 +1,30 @@
+# ============================================================
+#  Enviar un mensaje instantaneo y verificar la transmision LoRa
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+
+# elegir "Instant" (pot alto -> sel 1)
+pot 1023
+wait 200
+tap morse
+wait 250
+
+# seleccionar el mensaje "kissy" (indice 3 de 8)
+pot 460
+wait 250
+expect text kissy
+shot send_instant_menu
+
+# enviar (pulsar morse): envia y vuelve a la seleccion de modo
+tap morse
+wait 300
+expect serial Enviando: kissy
+expect sent kissy
+print TX LoRa verificado: kissy cifrado y descifrado correctamente

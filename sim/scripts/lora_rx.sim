@@ -1,0 +1,21 @@
+# ============================================================
+#  Recepcion LoRa en IDLE: el mensaje se descifra y se guarda
+# ============================================================
+wait 300
+
+# Inyectar un mensaje entrante (el simulador lo cifra con la misma clave AES)
+lora rx hambrienta
+wait 400
+expect serial Mensaje recibido
+expect serial Desencriptado: hambrienta
+expect serial Guardado: hambrienta
+
+# Verlo en el historial
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text hambrienta
+shot lora_rx_history
+print Recepcion LoRa + cifrado + guardado en historial OK

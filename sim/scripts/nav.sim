@@ -1,0 +1,48 @@
+# ============================================================
+#  Navegacion por los menus principales y vuelta a IDLE
+# ============================================================
+wait 300
+expect text Env
+expect text Hist
+expect text Jueg
+
+# --- Entrar a ENVIAR (cursor Env, pot bajo) y volver ---
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+expect text Morse
+expect text Instant
+tap finish
+wait 300
+expect text Env
+
+# --- Entrar a HISTORIAL (cursor medio) y volver ---
+pot 512
+wait 200
+tap morse
+wait 200
+expect text Historial
+expect text Sin
+tap finish
+wait 300
+expect text Env
+
+# --- Entrar a JUEGOS (cursor alto) ---
+pot 1000
+wait 200
+tap morse
+wait 250
+# en el submenu de juegos elegimos el primero (Tetris)
+pot 0
+wait 250
+expect text Tetris
+# y el ultimo (HippoRadar)
+pot 1023
+wait 250
+expect text HippoRadar
+tap finish
+wait 300
+expect text Env
+shot nav_idle

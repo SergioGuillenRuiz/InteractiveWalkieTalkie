@@ -1,0 +1,30 @@
+# ============================================================
+#  Crear un mensaje en Morse y enviarlo
+#  "E" = . (un punto).  Confirmar+enviar con FINISH largo.
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR -> Morse
+pot 80
+wait 200
+tap morse
+wait 200
+pot 0
+wait 200
+tap morse
+wait 300
+expect text CREACION
+
+# Punto corto (< 250 ms) -> '.'
+tap morse 120
+wait 200
+
+# FINISH largo (>= 1500 ms) -> confirma letra 'E' y envia
+hold finish 1700
+wait 300
+expect serial Enviando: E
+expect sent E
+# salir de la pantalla "Enviado" hacia el menu principal
+tap finish
+wait 300
+print Morse: '.' -> 'E' enviado y verificado

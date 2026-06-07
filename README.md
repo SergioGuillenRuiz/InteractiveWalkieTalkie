@@ -21,3 +21,21 @@
   consulta el manual y especificaciones de la placa, probablemente se deberá a una distinta
   distribución de pines.
 
+
+---
+
+## Simulador y pruebas
+
+El directorio [`sim/`](sim/) contiene un **simulador nativo de PC** que compila y
+ejecuta el firmware real (`src/`) sin necesidad de hardware: renderiza la pantalla
+OLED 128×128, simula botones, potenciómetro y radio LoRa (con cifrado AES real), y
+permite tanto un **modo interactivo por teclado** como **tests automatizados**.
+
+```bat
+cd sim
+run_tests.bat            :: compila y ejecuta toda la batería de tests
+run.bat                  :: modo interactivo (teclado)
+```
+
+Requiere *Visual Studio Build Tools* (C++). Más detalles en [`sim/README.md`](sim/README.md).
+
