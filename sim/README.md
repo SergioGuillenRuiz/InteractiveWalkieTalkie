@@ -152,8 +152,7 @@ Sin script y sin `--interactive`, lee comandos por la entrada estándar.
 | Tiempos | reloj virtual determinista (no en tiempo real, salvo modo interactivo) |
 
 Diferencias: no se simula el RF físico (ruido, alcance), ni el ruido del ADC, ni
-la latencia exacta del bus I²C. Para esos casos sigue disponible el entorno Wokwi
-(`../wokwi.toml`, `../diagram.json`).
+la latencia exacta del bus I²C. Para eso haría falta el hardware real.
 
 ## Estructura
 
