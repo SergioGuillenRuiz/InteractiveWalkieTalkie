@@ -37,13 +37,16 @@ build.bat              ::  solo compilar -> out\walkie_sim.exe
 ### Modo interactivo (teclado)
 
 ```
-[m] / [n]   pulsar (tap) Morse / Finish
-[M] / [N]   pulsación larga Morse / Finish
-[j] / [k]   girar el potenciómetro  (-/+)
-[r]         simular recepción LoRa ("happy")
-[q]         salir
+[m] / [n]              pulsar (tap) Morse / Finish
+[Shift+M] / [Shift+N]  pulsación larga Morse / Finish
+[Flecha arriba/abajo]  girar el potenciómetro (+ / -)
+[r]                    simular recepción LoRa ("happy")
+[q]                    salir
 ```
-La pantalla OLED 128×128 se dibuja en el terminal con medios bloques Unicode.
+Las teclas también se muestran bajo la pantalla mientras corre. La pantalla OLED
+128×128 se dibuja con caracteres braille (2×4 píxeles por carácter), así ocupa
+64×32 caracteres y los píxeles se ven cuadrados, a tamaño parecido al real.
+Conviene maximizar la ventana del terminal (necesita ~34 líneas de alto).
 
 ## Tests automatizados
 

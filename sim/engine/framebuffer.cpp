@@ -6,36 +6,43 @@
 #include "framebuffer.h"
 #include "Display.h"   // extern Adafruit_SH1107 display;
 
-// Bloques Unicode en UTF-8 explícito (independiente del charset del compilador)
-static const char *BLK_FULL = "\xE2\x96\x88"; // █
-static const char *BLK_TOP  = "\xE2\x96\x80"; // ▀
-static const char *BLK_BOT  = "\xE2\x96\x84"; // ▄
-
+// Render con caracteres BRAILLE: cada celda agrupa 2x4 pixeles, asi la pantalla
+// 128x128 ocupa 64x32 caracteres (mitad de alto) y los pixeles quedan cuadrados,
+// muy parecido al tamano real del OLED.
+//
+//   distribucion de puntos braille en la celda 2x4 (col x, fila y):
+//      (0,0)=0x01  (1,0)=0x08
+//      (0,1)=0x02  (1,1)=0x10
+//      (0,2)=0x04  (1,2)=0x20
+//      (0,3)=0x40  (1,3)=0x80
 void simRenderTerminal(bool color) {
     const int W = Adafruit_SH1107::W;
     const int H = Adafruit_SH1107::H;
     std::string out;
-    out.reserve((W + 1) * (H / 2 + 4));
+    out.reserve((W / 2 * 3 + 1) * (H / 4 + 1));
 
-    std::string border(W, '-');
-    out += "+" + border + "+\n";
-    for (int y = 0; y < H; y += 2) {
-        out += "|";
-        for (int x = 0; x < W; x++) {
-            bool t = display.simPixel(x, y);
-            bool b = (y + 1 < H) ? display.simPixel(x, y + 1) : false;
-            if (t && b)      out += BLK_FULL;
-            else if (t)      out += BLK_TOP;
-            else if (b)      out += BLK_BOT;
-            else             out += " ";
+    if (color) out += "\x1b[38;5;48m";
+    for (int cy = 0; cy < H; cy += 4) {
+        for (int cx = 0; cx < W; cx += 2) {
+            unsigned char b = 0;
+            if (display.simPixel(cx,     cy))     b |= 0x01;
+            if (display.simPixel(cx,     cy + 1)) b |= 0x02;
+            if (display.simPixel(cx,     cy + 2)) b |= 0x04;
+            if (display.simPixel(cx + 1, cy))     b |= 0x08;
+            if (display.simPixel(cx + 1, cy + 1)) b |= 0x10;
+            if (display.simPixel(cx + 1, cy + 2)) b |= 0x20;
+            if (display.simPixel(cx,     cy + 3)) b |= 0x40;
+            if (display.simPixel(cx + 1, cy + 3)) b |= 0x80;
+            // U+2800 + b en UTF-8 (3 bytes)
+            out += (char)0xE2;
+            out += (char)(0xA0 + (b >> 6));
+            out += (char)(0x80 + (b & 0x3F));
         }
-        out += "|\n";
+        out += "\n";
     }
-    out += "+" + border + "+\n";
+    if (color) out += "\x1b[0m";
 
-    if (color) fputs("\x1b[38;5;48m", stdout);
     fputs(out.c_str(), stdout);
-    if (color) fputs("\x1b[0m", stdout);
     fflush(stdout);
 }
 

@@ -209,30 +209,35 @@ static void interactive() {
     system("chcp 65001 > nul");
     printf("\x1b[2J");
     int pot = 512;
+    sim::setPot(pot);
     bool running = true;
-    printf("Controles: [m]=tap Morse  [n]=tap Finish  [M]/[N]=mantener  "
-           "[j/k]=pot -/+  [r]=LoRa RX  [q]=salir\n");
-    std::this_thread::sleep_for(std::chrono::milliseconds(800));
     while (running) {
         while (_kbhit()) {
             int c = _getch();
+            if (c == 0 || c == 0xE0) {       // teclas especiales (flechas)
+                int k = _getch();
+                if (k == 72) { pot += 40; if (pot > 1023) pot = 1023; sim::setPot(pot); }  // arriba
+                else if (k == 80) { pot -= 40; if (pot < 0) pot = 0; sim::setPot(pot); }    // abajo
+                continue;
+            }
             switch (c) {
                 case 'm': tap(sim::EV_MORSE, 150); break;
                 case 'n': tap(sim::EV_FINISH, 150); break;
                 case 'M': tap(sim::EV_MORSE, 1700); break;   // pulsación larga
                 case 'N': tap(sim::EV_FINISH, 1700); break;
-                case 'j': pot = pot > 30 ? pot - 30 : 0; sim::setPot(pot); break;
-                case 'k': pot = pot < 993 ? pot + 30 : 1023; sim::setPot(pot); break;
                 case 'r': { String e = SimpleCrypto_encrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
                 case 'q': running = false; break;
             }
         }
         runFor(30);
-        printf("\x1b[H");   // cursor arriba
+        printf("\x1b[H");   // cursor arriba (redibujado en el sitio)
         simRenderTerminal(g_color);
-        printf(" t=%lus  pot=%d   (q para salir)      \n", (unsigned long)(sim::now() / 1000), sim::getPot());
+        printf("  t=%lus   pot=%d        \n", (unsigned long)(sim::now() / 1000), sim::getPot());
+        printf("  [m] Morse   [n] Finish   [Shift+M / Shift+N] pulsacion larga      \n");
+        printf("  [Flecha arriba/abajo] potenciometro   [r] recibir LoRa   [q] salir\n");
         std::this_thread::sleep_for(std::chrono::milliseconds(33));
     }
+    printf("\n");
 }
 
 // ---------------------------------------------------------------------------
