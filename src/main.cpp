@@ -6,7 +6,9 @@
 #include "States.h"
 #include "Historial.h"
 
-
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#endif
 
 // ============================================================
 // setup
@@ -14,6 +16,13 @@
 void setup() {
 
   Serial.begin(115200);
+
+#if defined(ESP8266)
+  // El proyecto NO usa WiFi, pero el ESP8266 enciende el modem al arrancar
+  // (gasta ~decenas de mA para nada). Apagarlo (modo NULL) es el mayor ahorro
+  // de batería y no afecta a nada del firmware.
+  WiFi.mode(WIFI_OFF);
+#endif
 
   setupPins();
 

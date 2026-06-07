@@ -9,6 +9,13 @@
 #include "Poker.h"
 #include <LoRa.h>
 
+#if defined(ESP8266)
+extern "C" {
+  #include "user_interface.h"   // wifi_fpm_* (light sleep)
+  #include "gpio.h"             // gpio_pin_wakeup_enable
+}
+#endif
+
 //=============================================================
 // INICIALIZACIÓN DE VARIABLES
 //=============================================================
@@ -174,6 +181,24 @@ bool handleIdle() {
     return false;
 }
 
+#if defined(ESP8266) && ENABLE_CPU_LIGHT_SLEEP
+// Duerme la CPU (light sleep) ~1 s o hasta que se pulse un botón (despertar por
+// GPIO en nivel bajo, los botones son activos en bajo). El temporizador finito
+// es una red de seguridad: aunque el despertar por GPIO fallara, la CPU vuelve
+// sola tras ~1 s, así que NUNCA puede quedarse colgada en la siesta.
+//   Consumo esperado: ~70 mA -> ~1-2 mA mientras duerme.
+//   (El consumo real y el despertar por botón hay que medirlos en la placa.)
+static void cpuLightSleep() {
+    wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
+    wifi_fpm_open();
+    gpio_pin_wakeup_enable(GPIO_ID_PIN(PIN_MORSE_BUTTON),  GPIO_PIN_INTR_LOLEVEL);
+    gpio_pin_wakeup_enable(GPIO_ID_PIN(PIN_FINISH_BUTTON), GPIO_PIN_INTR_LOLEVEL);
+    wifi_fpm_do_sleep(1000 * 1000);   // 1 s en microsegundos (o hasta GPIO)
+    delay(1001);                       // imprescindible para que la siesta ocurra
+    wifi_fpm_close();
+}
+#endif
+
 // ==================== STATE_SLEEP ====================
 bool handleSleep() {
 
@@ -208,6 +233,11 @@ bool handleSleep() {
         }
     }
     prevPressed = pressed;
+
+#if defined(ESP8266) && ENABLE_CPU_LIGHT_SLEEP
+    // Si no hay ningún botón pulsado, dormir la CPU hasta el próximo evento.
+    if (!pressed) cpuLightSleep();
+#endif
 
     return true;
 }
