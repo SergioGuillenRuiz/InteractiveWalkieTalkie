@@ -115,6 +115,7 @@ void animateDecisionMaking() {
       if (isFinishPressed()) {
         return; // Salir si presionan FINISH
       }
+      backgroundTick();
       delay(10);
     }
     
@@ -158,6 +159,7 @@ void playChoose4Me() {
         delay(50);
         if (isFinishPressed()) { running = false; waiting = false; break; }
       }
+      backgroundTick();
       delay(10);
     }
     if (!wantAnswer) break;                 // FINISH: salir del juego
@@ -220,6 +222,7 @@ void playChoose4Me() {
         delay(50);
         if (isFinishPressed()) { resultShown = false; running = false; break; }
       }
+      backgroundTick();
       delay(10);
     }
 

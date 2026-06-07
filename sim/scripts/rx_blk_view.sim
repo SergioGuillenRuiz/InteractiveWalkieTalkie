@@ -1,0 +1,21 @@
+# ============================================================
+#  Fix 3 (e): recepcion DENTRO de la vista del mensaje del
+#  historial (espera bloqueante de A/B)
+# ============================================================
+wait 200
+lora rx primero
+wait 400
+expect serial Guardado: primero
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+lora rx alfa
+lora rx bravo
+in 0 morse down
+in 120 morse up
+run 900
+expect serial Guardado: alfa
+expect serial Guardado: bravo
+print Fix 3: RX DENTRO de la vista del mensaje verificada

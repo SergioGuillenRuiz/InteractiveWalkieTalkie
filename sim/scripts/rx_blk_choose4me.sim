@@ -1,0 +1,18 @@
+# ============================================================
+#  Fix 3 (c): recepcion DENTRO del bucle de Choose4Me (bloqueante)
+# ============================================================
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 820
+wait 250
+expect text Choose4Me
+lora rx alfa
+lora rx bravo
+in 0 morse down
+in 120 morse up
+run 900
+expect serial Guardado: alfa
+expect serial Guardado: bravo
+print Fix 3: RX DENTRO de Choose4Me verificada

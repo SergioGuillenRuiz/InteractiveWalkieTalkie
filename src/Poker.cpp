@@ -679,13 +679,14 @@ void updateGame() {
             display.display(); 
             
             // Espera a que presiones y sueltes para evitar dobles disparos
-            while(!btnADebounce()) { 
+            while(!btnADebounce()) {
                 if (isFinishPressed()) {
                      mainState = STATE_IDLE;
                      Display_clear();
                      return;
                 }
-                delay(10); 
+                backgroundTick();
+                delay(10);
             }
             
             if (player.chips <= 0 || cpu.chips <= 0) {
@@ -724,7 +725,8 @@ void startPoker() {
     bool inGame = true;
     while(inGame && mainState != STATE_IDLE) {
         updateGame();
-        delay(20); 
+        backgroundTick();
+        delay(20);
         if (mainState == STATE_IDLE) inGame = false;
     }
 }

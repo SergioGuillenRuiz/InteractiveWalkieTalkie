@@ -44,10 +44,15 @@ extern SendSubState sendSubState;
 // FUNCIONES DE GESTIÓN DE ESTADOS
 //=============================================================
 
-bool handleIdle();   
+// Atiende la radio (recibe y guarda mensajes) y refresca la pantalla.
+// Llamar en el bucle principal y en cualquier espera bloqueante para poder
+// recibir mensajes en todo momento.
+void backgroundTick();
+
+bool handleIdle();
 bool handleSleep();
 bool handleSendMenu();
-bool handleHistoryMenu();  
+bool handleHistoryMenu();
 bool handleGamesMenu();
 
 #endif

@@ -33,8 +33,7 @@ void setup() {
 // ============================================================
 void loop() {
 
-  Lora_update();
-  Display_update();
+  backgroundTick();   // recibe mensajes (en todo momento) y refresca pantalla
 
   switch (mainState) {
     case STATE_IDLE:         handleIdle();        break;

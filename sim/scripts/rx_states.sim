@@ -1,0 +1,76 @@
+# ============================================================
+#  Fix 3 (a): recepcion en TODOS los estados NO bloqueantes
+# ============================================================
+wait 300
+
+# --- SEND_WAIT (menu Enviar) ---
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+lora rx uno
+wait 400
+expect serial Guardado: uno
+tap finish
+wait 250
+
+# --- SEND_INSTANT (submenu de mensajes instantaneos) ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 1023
+wait 200
+tap morse
+wait 250
+lora rx dos
+wait 400
+expect serial Guardado: dos
+tap finish
+wait 200
+tap finish
+wait 250
+
+# --- GAMES (menu de juegos) ---
+pot 1000
+wait 200
+tap morse
+wait 250
+lora rx tres
+wait 400
+expect serial Guardado: tres
+tap finish
+wait 250
+
+# --- HISTORY (lista del historial) ---
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+lora rx cuatro
+wait 400
+expect serial Guardado: cuatro
+tap finish
+wait 250
+
+# --- VARIOS de golpe: la cola se vacia entera ---
+lora rx cinco
+lora rx seis
+lora rx siete
+wait 800
+expect serial Guardado: cinco
+expect serial Guardado: seis
+expect serial Guardado: siete
+
+# --- SLEEP (suspendido por inactividad) ---
+# (margen amplio: recibir en IDLE dispara la animacion, que reinicia el
+#  temporizador de inactividad)
+ff 600000
+wait 200
+expect notext Env
+lora rx ocho
+wait 500
+expect serial Guardado: ocho
+print Fix 3: RX OK en SEND, INSTANT, GAMES, HISTORY, multiples y SLEEP

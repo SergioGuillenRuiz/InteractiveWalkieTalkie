@@ -23,15 +23,36 @@ MainState mainState = STATE_IDLE;
 SendSubState sendSubState = SEND_WAIT;
 
 //=============================================================
+// SERVICIO DE FONDO
+//=============================================================
+
+// Atiende la radio y refresca la pantalla. Es el ÚNICO punto donde se reciben
+// mensajes, así que basta con llamarlo desde el bucle principal y desde
+// cualquier espera bloqueante (menús, juegos...) para poder recibir en todo
+// momento, esté donde esté el usuario.
+void backgroundTick() {
+    Lora_update();
+
+    if (Lora_hasMessage()) {
+        String msg = Lora_readMessage();
+        History_addMessage(msg);
+        lastTimeReceived = millis();
+        // El aviso visual (animación) solo tiene sentido en la pantalla principal
+        if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+    }
+
+    Display_update();
+}
+
+//=============================================================
 // AYUDANTES INTERNOS
 //=============================================================
 
-// Espera (sin bloquear LoRa/Display) hasta que se pulse un botón.
+// Espera (sin bloquear la recepción) hasta que se pulse un botón.
 // Devuelve true si se pulsó MORSE (repetir), false si FINISH (salir).
 static bool waitButtonMorseOrFinish() {
     while (!isMorsePressed() && !isFinishPressed()) {
-        Lora_update();
-        Display_update();
+        backgroundTick();
         yield();
         delay(10);
     }
@@ -72,10 +93,10 @@ static bool waitAfterResult() {
     const unsigned long MIN_RESULT_MS = 800;
     unsigned long shownAt = millis();
     while (isMorsePressed() || isFinishPressed()) {   // soltar el botón
-        Lora_update(); Display_update(); yield(); delay(10);
+        backgroundTick(); yield(); delay(10);
     }
     while (millis() - shownAt < MIN_RESULT_MS) {       // tiempo mínimo visible
-        Lora_update(); Display_update(); yield(); delay(10);
+        backgroundTick(); yield(); delay(10);
     }
     return waitButtonMorseOrFinish();
 }
@@ -125,14 +146,7 @@ bool handleIdle() {
     }
     moveCursor();
     updateHippoAnimation();
-
-    if (Lora_hasMessage()) {
-        String msg = Lora_readMessage();
-        History_addMessage(msg);
-        lastTimeReceived = millis();
-        // Disparar animación cuando se recibe mensaje
-        triggerAnimation(ANIM_CHASING_HEART);
-    }
+    // La recepción de mensajes la gestiona backgroundTick() (bucle principal).
 
     if (isMorsePressed()) {
         delay(50);
@@ -523,7 +537,7 @@ bool handleHistoryMenu() {
                 while (!wantDelete && !goBack) {
                     if (isMorsePressed()) { delay(60); if (isMorsePressed()) { while (isMorsePressed()) delay(10); wantDelete = true; } }
                     else if (isFinishPressed()) { delay(60); if (isFinishPressed()) { while (isFinishPressed()) delay(10); goBack = true; } }
-                    Lora_update(); Display_update(); yield(); delay(15);
+                    backgroundTick(); yield(); delay(15);
                 }
                 if (goBack) {
                     prevTop = -1; prevSelected = -1;
@@ -585,10 +599,11 @@ bool handleHistoryMenu() {
                         break;
                     }
                 }
-                
+
+                backgroundTick();
                 delay(20);
             }
-            
+
             if (confirmed) {
                 History_deleteMessage(selected);
                 

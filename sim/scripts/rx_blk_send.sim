@@ -1,0 +1,25 @@
+# ============================================================
+#  Fix 3 (d): recepcion DENTRO de la espera tras enviar (pantalla
+#  "Enviado", waitAfterResult -> waitButtonMorseOrFinish)
+# ============================================================
+wait 300
+pot 80
+wait 200
+tap morse
+wait 200
+pot 1023
+wait 200
+tap morse
+wait 250
+pot 460
+wait 250
+expect text kissy
+lora rx alfa
+lora rx bravo
+in 0 morse down
+in 120 morse up
+run 900
+expect serial Enviando: kissy
+expect serial Guardado: alfa
+expect serial Guardado: bravo
+print Fix 3: RX DENTRO de la pantalla "Enviado" verificada

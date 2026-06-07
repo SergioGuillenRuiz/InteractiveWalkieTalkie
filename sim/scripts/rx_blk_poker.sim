@@ -1,0 +1,20 @@
+# ============================================================
+#  Fix 3 (b): recepcion DENTRO del bucle del Poker (bloqueante)
+#  'alfa' lo lee el bucle principal al entrar; 'bravo' SOLO puede
+#  haberlo leido el bucle del Poker (el principal ya no corre).
+# ============================================================
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 300
+wait 250
+expect text Poker
+lora rx alfa
+lora rx bravo
+in 0 morse down
+in 120 morse up
+run 900
+expect serial Guardado: alfa
+expect serial Guardado: bravo
+print Fix 3: RX DENTRO del Poker verificada
