@@ -19,12 +19,12 @@ expect text CREACION
 tap morse 120
 wait 200
 
-# FINISH largo (>= 1500 ms) -> confirma letra 'E' y envia
-hold finish 1700
-wait 300
+# FINISH largo (>=1500 ms) -> confirma 'E' y envia; luego salir con finish
+in 0 finish down
+in 1700 finish up
+in 3000 finish down
+in 3120 finish up
+run 3700
 expect serial Enviando: E
 expect sent E
-# salir de la pantalla "Enviado" hacia el menu principal
-tap finish
-wait 300
 print Morse: '.' -> 'E' enviado y verificado

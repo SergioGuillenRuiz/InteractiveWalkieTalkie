@@ -1,5 +1,6 @@
 # ============================================================
 #  Enviar un mensaje instantaneo y verificar la transmision LoRa
+#  (la pantalla "Enviado" permanece >=800 ms antes de seguir)
 # ============================================================
 wait 300
 
@@ -22,9 +23,12 @@ wait 250
 expect text kissy
 shot send_instant_menu
 
-# enviar (pulsar morse): envia y vuelve a la seleccion de modo
-tap morse
-wait 300
+# enviar (pulsar morse) y, tras la ventana minima, salir con finish
+in 0 morse down
+in 120 morse up
+in 1100 finish down
+in 1220 finish up
+run 1700
 expect serial Enviando: kissy
 expect sent kissy
 print TX LoRa verificado: kissy cifrado y descifrado correctamente

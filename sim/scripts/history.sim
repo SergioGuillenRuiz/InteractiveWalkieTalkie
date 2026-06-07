@@ -1,41 +1,43 @@
 # ============================================================
-#  Historial: recibir varios mensajes, verlos y borrar uno
+#  Historial: recibir mensajes, abrir un mensaje para leerlo
+#  completo y borrar otro (vista -> A -> SI).
 # ============================================================
 wait 200
 
-lora rx cansada
+lora rx corto
 wait 300
-lora rx happy
+lora rx hola que tal amigo espero que leas este texto completo entero
 wait 300
-lora rx kissy
-wait 300
-expect serial Guardado: cansada
-expect serial Guardado: happy
-expect serial Guardado: kissy
+expect serial Guardado: corto
 
-# Entrar al historial (cursor medio)
+# Entrar al historial
 pot 512
 wait 200
 tap morse
 wait 300
 expect text Historial
-expect text kissy
-expect text happy
-shot history_list
+expect text corto
 
-# Seleccionar el mas reciente (indice 0) antes de borrar
-pot 0
+# --- BORRAR "corto" (indice 1, el mas antiguo): abrir -> A -> SI ---
+pot 1023
 wait 300
-# Borrar el mas reciente (kissy): tap1 abre confirmacion, tap2 (A=SI) confirma
 in 0 morse down
 in 150 morse up
 in 600 morse down
 in 750 morse up
-run 2600
+in 1300 morse down
+in 1450 morse up
+run 3200
 expect serial Borrado
-print Borrado en historial verificado (sin corrupcion de lista)
-
-# La lista sigue mostrando los otros mensajes
 wait 300
-expect text happy
-expect text cansada
+
+# --- LEER el mensaje largo COMPLETO (fix 1) ---
+pot 0
+wait 300
+in 0 morse down
+in 150 morse up
+run 700
+expect text espero
+expect text Borrar
+shot history_view
+print Fix 1 (leer mensaje completo) y borrado verificados

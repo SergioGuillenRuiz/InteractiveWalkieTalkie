@@ -65,6 +65,46 @@ static void resetMorseState() {
     morseScrollOffset = 0;
 }
 
+// Tras mostrar un resultado (Enviado/Error/Cancelado): suelta el botón que lo
+// disparó, garantiza un tiempo mínimo en pantalla y luego espera la siguiente
+// pulsación. Devuelve true si MORSE (repetir), false si FINISH (salir).
+static bool waitAfterResult() {
+    const unsigned long MIN_RESULT_MS = 800;
+    unsigned long shownAt = millis();
+    while (isMorsePressed() || isFinishPressed()) {   // soltar el botón
+        Lora_update(); Display_update(); yield(); delay(10);
+    }
+    while (millis() - shownAt < MIN_RESULT_MS) {       // tiempo mínimo visible
+        Lora_update(); Display_update(); yield(); delay(10);
+    }
+    return waitButtonMorseOrFinish();
+}
+
+// Dibuja un texto largo con salto de línea por palabras (fuente 6 px -> ~21
+// caracteres por línea en los 128 px de ancho).
+static void drawWrappedMessage(const String &msg, int startY) {
+    const int MAX_CHARS = 21;
+    const int LINE_H = 10;
+    int y = startY;
+    String remaining = msg;
+    while (remaining.length() > 0 && y <= 105) {
+        int cut = remaining.length();
+        if ((int)remaining.length() > MAX_CHARS) {
+            cut = MAX_CHARS;
+            for (int i = cut; i > 0; i--) {
+                if (remaining.charAt(i) == ' ') { cut = i; break; }
+            }
+        }
+        String line = remaining.substring(0, cut);
+        remaining = remaining.substring(cut);
+        if (remaining.length() > 0 && remaining.charAt(0) == ' ')
+            remaining = remaining.substring(1);
+        display.setCursor(0, y);
+        display.println(line);
+        y += LINE_H;
+    }
+}
+
 //=============================================================
 // FUNCIONES DE GESTIÓN DE ESTADOS
 //=============================================================
@@ -271,7 +311,7 @@ case SEND_WAIT:
                     display.display();
                 }
 
-                bool repeat = waitButtonMorseOrFinish();
+                bool repeat = waitAfterResult();
                 menuTransitionDelay();
                 resetMorseState();
 
@@ -308,7 +348,7 @@ case SEND_WAIT:
                 if (isMorsePressed()) {
                     sendAndShowResult(nombresMensajes[seleccion]);
 
-                    bool repeat = waitButtonMorseOrFinish();
+                    bool repeat = waitAfterResult();
                     menuTransitionDelay();
                     needRedraw = true;
 
@@ -455,15 +495,44 @@ bool handleHistoryMenu() {
     if (isMorsePressed()) {
         delay(50);
         if (isMorsePressed()) {
-            unsigned long buttonHoldStart = millis();
-            while (isMorsePressed()) {
-                if (millis() - buttonHoldStart > 1000) {
+            while (isMorsePressed()) { delay(10); }   // esperar a soltar
+            delay(120);
+
+            // ---- VISTA DEL MENSAJE COMPLETO ----
+            {
+                String full = History_getMessage(selected);
+                unsigned long vts = History_getTimestamp(selected);
+                unsigned long vAge = (vts == 0) ? 0 : ((millis() - vts) / 60000UL);
+
+                Display_clear();
+                display.setTextSize(1);
+                display.setTextColor(SH110X_WHITE);
+                display.setCursor(0, 0);
+                display.print("Hace ");
+                display.print(vAge);
+                display.println(" min");
+                drawWrappedMessage(full, 16);
+                display.setCursor(0, 118);
+                display.print("A: Borrar  B: Volver");
+                display.display();
+
+                // Esperar accion: MORSE (A) = borrar, FINISH (B) = volver
+                while (Serial.available()) Serial.read();
+                delay(120);
+                bool wantDelete = false, goBack = false;
+                while (!wantDelete && !goBack) {
+                    if (isMorsePressed()) { delay(60); if (isMorsePressed()) { while (isMorsePressed()) delay(10); wantDelete = true; } }
+                    else if (isFinishPressed()) { delay(60); if (isFinishPressed()) { while (isFinishPressed()) delay(10); goBack = true; } }
+                    Lora_update(); Display_update(); yield(); delay(15);
+                }
+                if (goBack) {
+                    prevTop = -1; prevSelected = -1;
+                    forceRedraw = true; firstTime = true; justEntered = true;
                     menuTransitionDelay();
                     return true;
                 }
-                delay(10);
             }
-            delay(150);
+            delay(120);
             
             Display_clear();
             display.setCursor(0, 0);
