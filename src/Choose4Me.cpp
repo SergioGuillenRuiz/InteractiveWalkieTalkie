@@ -4,245 +4,190 @@
 #include "States.h"
 
 // ============================================================
-// CONSTANTES Y VARIABLES DEL JUEGO
+// Choose4Me: una bola mágica (8-ball). Piensa una pregunta y da una respuesta
+// aleatoria. Sin acentos ni 'ñ': la fuente del OLED no los representa.
 // ============================================================
 
-// Respuestas posibles (como una bola mágica)
 const char* respuestas[] = {
-  "SI",           // 0
-  "NO",           // 1
-  "DEFINITIVAMENTE",  // 2
-  "NO TE LO CREES NI TU",     // 3
-  "CLARO QUE SI",     // 4
-  "JAMAS",        // 5
-  "ES SEGURO",    // 6
-  "CONCENTRATE Y PREGUNTA DE NUEVO", // 8
-  "SIN DUDA",     // 9
-  "MI FUENTE DICE QUE NO", // 10
-  "PERSPECTIVAS BUENAS", // 11
-  "SI, DEFINITIVAMENTE", // 12
-  "NO CUENTES CON ESO", // 13
-  "PUEDES CONTAR CON ELLO", // 14
-  "TODAS LAS SENALES APUNTAN A SI", // 16
+  "SI",
+  "NO",
+  "DEFINITIVAMENTE",
+  "NO TE LO CREES NI TU",
+  "CLARO QUE SI",
+  "JAMAS",
+  "ES SEGURO",
+  "CONCENTRATE Y PREGUNTA DE NUEVO",
+  "SIN DUDA",
+  "MI FUENTE DICE QUE NO",
+  "PERSPECTIVAS BUENAS",
+  "SI, DEFINITIVAMENTE",
+  "NO CUENTES CON ESO",
+  "PUEDES CONTAR CON ELLO",
+  "TODAS LAS SENALES APUNTAN A SI"
 };
-
 const int NUM_RESPUESTAS = sizeof(respuestas) / sizeof(respuestas[0]);
 
-// ============================================================
-// FUNCIONES DEL JUEGO
-// ============================================================
+// ------------------------------------------------------------
+// Utilidades de dibujo
+// ------------------------------------------------------------
 
-// Dibuja una "bola mágica" estilo 8-ball
-void drawMagicBall(int x, int y, int size, bool shaking = false) {
-  // Círculo exterior (bola)
-  display.fillCircle(x + size/2, y + size/2, size/2, SH110X_WHITE);
-  
-  // Círculo interior (área de texto)
-  display.fillCircle(x + size/2, y + size/2, size/2 - 4, SH110X_BLACK);
-  
-  // Triángulo central (estilo 8-ball)
-  int centerX = x + size/2;
-  int centerY = y + size/2;
-  int triangleSize = size/4;
-  
-  if (shaking) {
-    // Triángulo "tembloroso" - desplazado aleatoriamente
-    int offsetX = random(-3, 4);
-    int offsetY = random(-3, 4);
-    display.fillTriangle(
-      centerX + offsetX, centerY - triangleSize + offsetY,
-      centerX - triangleSize + offsetX, centerY + triangleSize + offsetY,
-      centerX + triangleSize + offsetX, centerY + triangleSize + offsetY,
-      SH110X_WHITE
-    );
-  } else {
-    // Triángulo normal
-    display.fillTriangle(
-      centerX, centerY - triangleSize,
-      centerX - triangleSize, centerY + triangleSize,
-      centerX + triangleSize, centerY + triangleSize,
-      SH110X_WHITE
-    );
-  }
-  
-  // Número "8" en la parte inferior (opcional, pequeño)
-  display.setCursor(centerX - 3, centerY + triangleSize - 8);
-  display.setTextSize(1);
-  display.setTextColor(SH110X_BLACK, SH110X_WHITE); // Texto negro sobre fondo blanco
-  display.print("8");
+// Imprime una línea de texto centrada horizontalmente.
+static void centerPrint(const String &s, int y, uint8_t size = 1) {
+  display.setTextSize(size);
+  display.setTextColor(SH110X_WHITE);
+  int16_t bx, by; uint16_t bw, bh;
+  display.getTextBounds(s.c_str(), 0, 0, &bx, &by, &bw, &bh);
+  int x = (128 - (int)bw) / 2;
+  if (x < 0) x = 0;
+  display.setCursor(x, y);
+  display.print(s);
 }
 
-// Animación de "tirando los dados" o "girando la ruleta"
+// Dibuja la bola mágica 8-ball: bola blanca con un "8". 'shaking' la agita.
+void drawMagicBall(int x, int y, int size, bool shaking = false) {
+  int jx = 0, jy = 0;
+  if (shaking) { jx = random(-2, 3); jy = random(-2, 3); }
+  int cx = x + size / 2 + jx;
+  int cy = y + size / 2 + jy;
+  display.fillCircle(cx, cy, size / 2, SH110X_WHITE);
+  display.setTextSize(2);
+  display.setTextColor(SH110X_BLACK);   // "8" negro sobre la bola blanca
+  display.setCursor(cx - 5, cy - 7);
+  display.print("8");
+  display.setTextSize(1);
+}
+
+// Dibuja la respuesta partida por palabras y centrada en el hueco entre la bola
+// y las opciones. Si cabe en una sola línea, la muestra grande (tamaño 2).
+static void drawAnswer(const String &msg) {
+  const int MAX_CHARS = 20;
+  String lines[6];
+  int n = 0;
+  String rem = msg;
+  while (rem.length() > 0 && n < 6) {
+    int cut = rem.length();
+    if ((int)rem.length() > MAX_CHARS) {
+      cut = MAX_CHARS;
+      for (int i = cut; i > 0; i--)
+        if (rem.charAt(i) == ' ') { cut = i; break; }
+    }
+    lines[n++] = rem.substring(0, cut);
+    rem = rem.substring(cut);
+    if (rem.length() > 0 && rem.charAt(0) == ' ') rem = rem.substring(1);
+  }
+
+  // Respuesta de una sola línea que cabe a tamaño 2 -> grande y centrada.
+  if (n == 1) {
+    display.setTextSize(2);
+    int16_t bx, by; uint16_t bw, bh;
+    display.getTextBounds(lines[0].c_str(), 0, 0, &bx, &by, &bw, &bh);
+    if ((int)bw <= 124) { centerPrint(lines[0], 68, 2); return; }
+  }
+
+  // Varias líneas -> tamaño 1, centradas verticalmente entre la bola y las opciones.
+  int y = 52 + (58 - n * 12) / 2;
+  if (y < 52) y = 52;
+  for (int i = 0; i < n; i++) { centerPrint(lines[i], y); y += 12; }
+}
+
+// Animación "Pensando..." mientras se decide la respuesta.
 void animateDecisionMaking() {
-  const int DURACION_ANIMACION = 2000; // 2 segundos de animación
-  const int NUM_FRAMES = 20;
-  const int FRAME_DELAY = DURACION_ANIMACION / NUM_FRAMES;
-  
-  unsigned long startTime = millis();
+  const unsigned long DURACION = 2000;
+  const unsigned long FRAME = 120;
+  unsigned long start = millis();
   int frame = 0;
-  
-  // Posición de la "bola" o "ruleta"
-  int ballX = 44;
-  int ballY = 20;
-  int ballSize = 40;
-  
-  while (millis() - startTime < DURACION_ANIMACION) {
-    // Limpiar área de animación
-    display.fillRect(ballX - 5, ballY - 5, ballSize + 10, ballSize + 10, SH110X_BLACK);
-    
-    // Dibujar bola con efecto de "shake"
-    bool shaking = (frame % 2 == 0); // Alternar entre shaking y no shaking
-    drawMagicBall(ballX, ballY, ballSize, shaking);
-    
-    // Mostrar texto "Pensando..."
+
+  while (millis() - start < DURACION) {
+    display.clearDisplay();
+    drawMagicBall(44, 22, 40, true);
+
+    // "Pensando" centrado fijo + puntos animados que NO desplazan el texto
     display.setTextSize(1);
     display.setTextColor(SH110X_WHITE);
-    display.setCursor(30, 70);
+    int baseX = (128 - 8 * 6) / 2;   // "Pensando" tiene 8 caracteres
+    display.setCursor(baseX, 84);
     display.print("Pensando");
-    
-    // Puntos animados "..." 
-    int dots = (frame / 5) % 4;
-    for (int i = 0; i < dots; i++) {
-      display.print(".");
-    }
-    
+    int dots = frame % 4;
+    for (int i = 0; i < dots; i++) display.print(".");
     display.display();
-    
-    // Pequeña pausa no bloqueante (permitir interrupciones)
-    unsigned long frameStart = millis();
-    while (millis() - frameStart < FRAME_DELAY) {
-      // Permitir chequeo de botones (para cancelar)
-      if (isFinishPressed()) {
-        return; // Salir si presionan FINISH
-      }
+
+    unsigned long fs = millis();
+    while (millis() - fs < FRAME) {
+      if (isFinishPressed()) return;   // permitir cancelar
       backgroundTick();
       delay(10);
     }
-    
     frame++;
   }
 }
 
-// Función principal del juego Choose4Me
-// Bucle iterativo (sin recursión) para que repetir "Otra vez" no consuma pila.
+// ------------------------------------------------------------
+// Pantallas
+// ------------------------------------------------------------
+
+static void drawStartScreen() {
+  Display_clear();
+  centerPrint("CHOOSE4ME", 2, 2);
+  drawMagicBall(44, 22, 40, false);
+  centerPrint("Piensa tu pregunta", 70);
+  centerPrint("A: Preguntar", 96);
+  centerPrint("B: Salir", 110);
+  display.display();
+}
+
+static void drawResultScreen(const char *answer) {
+  Display_clear();
+  drawMagicBall(44, 6, 40, false);
+  drawAnswer(answer);
+  centerPrint("A: Otra vez", 110);
+  centerPrint("B: Salir", 120);
+  display.display();
+}
+
+// ------------------------------------------------------------
+// Bucle del juego
+// ------------------------------------------------------------
+
 void playChoose4Me() {
   bool running = true;
 
   while (running) {
-    // ---- Pantalla de inicio ----
-    Display_clear();
-    display.setCursor(20, 10);
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-    display.println("CHOOSE4ME");
-    display.println();
-    display.setCursor(0, 30);
-    display.println("Haz tu pregunta");
-    display.println("mentalmente...");
-    display.println();
-    display.println();
-    display.println();
-    display.println("A: Respuesta");
-    display.println();
-    display.println("B: Salir");
-    display.display();
+    drawStartScreen();
 
-    // ---- Esperar: MORSE = respuesta, FINISH = salir ----
+    // Esperar: MORSE = preguntar, FINISH = salir
     bool wantAnswer = false;
     bool waiting = true;
     while (waiting) {
-      if (isMorsePressed()) {
-        delay(50);
-        if (isMorsePressed()) { wantAnswer = true; waiting = false; break; }
-      }
-      if (isFinishPressed()) {
-        delay(50);
-        if (isFinishPressed()) { running = false; waiting = false; break; }
-      }
+      if (isMorsePressed()) { delay(50); if (isMorsePressed()) { wantAnswer = true; break; } }
+      if (isFinishPressed()) { delay(50); if (isFinishPressed()) { running = false; break; } }
       backgroundTick();
       delay(10);
     }
-    if (!wantAnswer) break;                 // FINISH: salir del juego
+    if (!wantAnswer) break;
+    while (isMorsePressed()) delay(10);   // esperar a soltar
 
-    // Esperar a que se suelte el botón antes de continuar
-    while (isMorsePressed()) delay(10);
-
-    // ---- Animación de "pensando" ----
+    // Pensar y mostrar respuesta
     Display_clear();
     animateDecisionMaking();
+    drawResultScreen(respuestas[random(NUM_RESPUESTAS)]);
 
-    // ---- Respuesta aleatoria ----
-    int respuestaIndex = random(NUM_RESPUESTAS);
-
-    Display_clear();
-    drawMagicBall(44, 10, 40, false);
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-
-    int lineHeight = 10;
-    int currentY = 60;
-    String remaining = respuestas[respuestaIndex];
-    while (remaining.length() > 0) {
-      int cutPoint = remaining.length();
-      if (remaining.length() > 20) {        // Aprox 20 caracteres por línea
-        cutPoint = 20;
-        for (int i = cutPoint; i > 0; i--) {  // cortar por un espacio
-          if (remaining.charAt(i) == ' ') { cutPoint = i; break; }
-        }
-      }
-
-      String line = remaining.substring(0, cutPoint);
-      remaining = remaining.substring(cutPoint);
-
-      int16_t tx, ty;
-      uint16_t tw, th;
-      display.getTextBounds(line.c_str(), 0, 0, &tx, &ty, &tw, &th);
-      int textX = (128 - tw) / 2;
-      display.setCursor(textX, currentY);
-      display.print(line);
-
-      currentY += lineHeight;
-      if (currentY > 110) break;            // No salir de pantalla
-    }
-
-    display.setCursor(20, 110);
-    display.print("A: Otra vez");
-    display.setCursor(25, 120);
-    display.print("B: Salir");
-    display.display();
-
-    // ---- Esperar decisión: MORSE = otra vez, FINISH = salir ----
+    // Esperar: MORSE = otra vez, FINISH = salir
     bool resultShown = true;
     while (resultShown) {
-      if (isMorsePressed()) {
-        delay(50);
-        if (isMorsePressed()) { resultShown = false; break; }   // otra vez
-      }
-      if (isFinishPressed()) {
-        delay(50);
-        if (isFinishPressed()) { resultShown = false; running = false; break; }
-      }
+      if (isMorsePressed()) { delay(50); if (isMorsePressed()) { resultShown = false; break; } }
+      if (isFinishPressed()) { delay(50); if (isFinishPressed()) { resultShown = false; running = false; break; } }
       backgroundTick();
       delay(10);
     }
-
-    // Esperar a que se suelten los botones antes de repetir/salir
-    while (isMorsePressed() || isFinishPressed()) delay(10);
+    while (isMorsePressed() || isFinishPressed()) delay(10);   // esperar a soltar
   }
 
-  // Limpiar pantalla al salir
   Display_clear();
 }
 
-// Función para iniciar el juego desde el menú principal
 void startChoose4Me() {
-  // Inicializar semilla aleatoria con lectura analógica
   randomSeed(analogRead(A0) + millis());
-  
-  // Ejecutar juego
   playChoose4Me();
-  
-  // Volver al estado IDLE después de jugar
   mainState = STATE_IDLE;
   Display_clear();
 }
