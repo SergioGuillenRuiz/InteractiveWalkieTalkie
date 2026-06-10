@@ -3,730 +3,524 @@
 #include "Inputs.h"
 #include "States.h"
 
+// ============================================================
+//  POKER  (Texas Hold'em heads-up: jugador vs CPU)
+//  Controles en la mesa:  B = cambiar accion,  A = confirmar.
+// ============================================================
 
-// ==========================================
-// CONFIGURACIÓN Y CONSTANTES
-// ==========================================
 #define START_CHIPS 1000
 #define SMALL_BLIND 10
-#define BIG_BLIND 20
+#define BIG_BLIND   20
 
-enum GameState {
-    ST_START,
-    ST_PREFLOP,
-    ST_FLOP,
-    ST_TURN,
-    ST_RIVER,
-    ST_BETTING,
-    ST_SHOWDOWN,
-    ST_GAMEOVER
-};
+// Ritmo (ms): bajos = mas agil
+#define D_THINK  380    // "CPU pensando"
+#define D_ACT    520    // mostrar una accion
+#define D_STREET 430    // nombre de la calle (FLOP, TURN...)
 
 enum Suit { HEARTS, DIAMONDS, CLUBS, SPADES };
 enum Rank { TWO = 2, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, NINE, TEN, JACK, QUEEN, KING, ACE };
 enum Action { ACT_CHECK_CALL, ACT_BET_RAISE, ACT_FOLD };
 
-struct Card {
-    Suit suit;
-    Rank rank;
-};
+struct Card { Suit suit; Rank rank; };
+struct Player { Card hand[2]; int chips; int bet; bool folded; bool isDealer; };
 
-struct Player {
-    Card hand[2];
-    int chips;
-    int currentBet;
-    bool folded;
-    bool isDealer;
-};
+static Card   deck[52];
+static Card   community[5];
+static Player player, cpu;
+static int    pot, currentBet, deckIndex, communityCount;
+static int    cpuRaises;
+static Action selectedAction = ACT_CHECK_CALL;
+static String msgLine = "";
 
-// ==========================================
-// VARIABLES GLOBALES
-// ==========================================
-Card deck[52];
-Card communityCards[5];
-Player player;
-Player cpu;
+long evaluateScore(Card hand[2], Card comm[5], int commCount);   // fwd
 
-GameState currentState;
-GameState nextStateAfterBetting;
-
-int pot = 0;
-int currentHighestBet = 0;
-int deckIndex = 0;
-int communityCount = 0;
-
-Action selectedAction = ACT_CHECK_CALL;
-String msgLine1 = "";
-
-// VARIABLES ESTRATEGIA CPU
-int cpuRaiseCount = 0; 
-bool cpuHasRaisedThisRound = false; 
-
-// ==========================================
-// UTILIDADES GRÁFICAS
-// ==========================================
-
-void drawSuit(int x, int y, Suit suit, uint16_t color) {
-    switch(suit) {
-        case HEARTS:
-            display.fillCircle(x-2, y-2, 2, color);
-            display.fillCircle(x+2, y-2, 2, color);
-            display.fillTriangle(x-4, y-1, x+4, y-1, x, y+4, color);
-            break;
-        case DIAMONDS:
-            display.fillTriangle(x, y-4, x-3, y, x, y+4, color);
-            display.fillTriangle(x, y-4, x+3, y, x, y+4, color);
-            break;
-        case CLUBS:
-            display.fillCircle(x, y-3, 2, color);
-            display.fillCircle(x-2, y, 2, color);
-            display.fillCircle(x+2, y, 2, color);
-            display.drawLine(x, y, x, y+4, color);
-            break;
-        case SPADES:
-            display.fillTriangle(x, y-4, x-3, y+1, x+3, y+1, color);
-            display.fillCircle(x-2, y+1, 2, color);
-            display.fillCircle(x+2, y+1, 2, color);
-            display.drawLine(x, y, x, y+4, color);
-            break;
-    }
+// ============================================================
+//  Entrada (flanco) y texto centrado
+// ============================================================
+static char pollButton() {
+  static bool pa = false, pb = false;
+  bool a = isMorsePressed(), b = isFinishPressed();
+  char r = 0;
+  if (a && !pa) r = 'A';
+  else if (b && !pb) r = 'B';
+  pa = a; pb = b;
+  return r;
 }
 
-String getRankStr(Rank r) {
-    if (r <= 9) return String(r);
-    if (r == 10) return "10";
-    if (r == JACK) return "J";
-    if (r == QUEEN) return "Q";
-    if (r == KING) return "K";
-    if (r == ACE) return "A";
-    return "?";
+static void centerAt(const String &s, int y, uint8_t size = 1) {
+  display.setTextSize(size);
+  int16_t bx, by; uint16_t bw, bh;
+  display.getTextBounds(s.c_str(), 0, 0, &bx, &by, &bw, &bh);
+  int x = (128 - (int)bw) / 2; if (x < 0) x = 0;
+  display.setCursor(x, y);
+  display.print(s);
+  display.setTextSize(1);
 }
 
-void drawCard(int x, int y, Card c, bool visible) {
-    display.fillRoundRect(x, y, 20, 28, 2, SH110X_WHITE);
-    
-    if (!visible) {
-        display.fillRoundRect(x+2, y+2, 16, 24, 1, SH110X_BLACK);
-        display.setCursor(x+6, y+10);
-        display.setTextColor(SH110X_WHITE);
-        display.setTextSize(1);
-        display.print("?");
+// ============================================================
+//  Nombres de carta / jugada
+// ============================================================
+static String rankName(int r) {
+  if (r <= 10) return String(r);
+  if (r == 11) return "J";
+  if (r == 12) return "Q";
+  if (r == 13) return "K";
+  return "A";
+}
+
+static const char *categoryName(long score) {     // en mayusculas para el rotulo grande
+  switch ((int)(score / 1048576L)) {
+    case 8: return "ESC.COLOR"; case 7: return "POKER";   case 6: return "FULL";
+    case 5: return "COLOR";     case 4: return "ESCALERA"; case 3: return "TRIO";
+    case 2: return "DOBLE PAR"; case 1: return "PAREJA";   default: return "CARTA ALTA";
+  }
+}
+
+static String handDesc(long score) {               // descripcion para el showdown
+  int cat = (int)(score / 1048576L);
+  int a   = (int)((score / 65536L) % 16);
+  switch (cat) {
+    case 8: return "Esc. de color";
+    case 7: return String("Poker de ") + rankName(a);
+    case 6: return "Full house";
+    case 5: return "Color";
+    case 4: return "Escalera";
+    case 3: return String("Trio de ") + rankName(a);
+    case 2: return "Doble pareja";
+    case 1: return String("Pareja de ") + rankName(a);
+    default: return rankName(a) + String(" alto");
+  }
+}
+
+// ============================================================
+//  Evaluacion de manos (kickers, rueda A-2-3-4-5, escalera de color)
+// ============================================================
+static int straightHigh(const bool *pres) {
+  for (int high = 14; high >= 5; high--) {
+    bool ok = true;
+    for (int k = 0; k < 5; k++) { int r = high - k; if (r == 1) r = 14; if (!pres[r]) { ok = false; break; } }
+    if (ok) return high;
+  }
+  return 0;
+}
+static long packScore(int cat, int a, int b, int c, int d, int e) {
+  return (((((long)cat * 16 + a) * 16 + b) * 16 + c) * 16 + d) * 16 + e;
+}
+static void topKickers(const int *rc, int ex1, int ex2, int want, int *out) {
+  int idx = 0;
+  for (int r = 14; r >= 2 && idx < want; r--) {
+    if (r == ex1 || r == ex2) continue;
+    int c = rc[r];
+    while (c-- > 0 && idx < want) out[idx++] = r;
+  }
+  while (idx < want) out[idx++] = 0;
+}
+long evaluateScore(Card hand[2], Card comm[5], int commCount) {
+  int n = 2 + commCount;
+  int  rc[15] = {0}, sc[4] = {0};
+  bool pres[15]; bool sp[4][15];
+  for (int i = 0; i < 15; i++) pres[i] = false;
+  for (int s = 0; s < 4; s++) for (int i = 0; i < 15; i++) sp[s][i] = false;
+  for (int i = 0; i < n; i++) {
+    Card c = (i < 2) ? hand[i] : comm[i - 2];
+    rc[c.rank]++; sc[c.suit]++; sp[c.suit][c.rank] = true; pres[c.rank] = true;
+  }
+  int flushSuit = -1;
+  for (int s = 0; s < 4; s++) if (sc[s] >= 5) { flushSuit = s; break; }
+  int sfHigh = (flushSuit >= 0) ? straightHigh(sp[flushSuit]) : 0;
+  int stHigh = straightHigh(pres);
+  int quad = 0, trips = 0, trips2 = 0, pair1 = 0, pair2 = 0;
+  for (int r = 14; r >= 2; r--) {
+    if (rc[r] == 4) quad = r;
+    else if (rc[r] == 3) { if (!trips) trips = r; else if (!trips2) trips2 = r; }
+    else if (rc[r] == 2) { if (!pair1) pair1 = r; else if (!pair2) pair2 = r; }
+  }
+  int k[5];
+  if (sfHigh) return packScore(8, sfHigh, 0, 0, 0, 0);
+  if (quad)   { topKickers(rc, quad, -1, 1, k); return packScore(7, quad, k[0], 0, 0, 0); }
+  if (trips && (pair1 || trips2)) { int bp = (trips2 > pair1) ? trips2 : pair1; return packScore(6, trips, bp, 0, 0, 0); }
+  if (flushSuit >= 0) {
+    int f[5], fi = 0;
+    for (int r = 14; r >= 2 && fi < 5; r--) if (sp[flushSuit][r]) f[fi++] = r;
+    while (fi < 5) f[fi++] = 0;
+    return packScore(5, f[0], f[1], f[2], f[3], f[4]);
+  }
+  if (stHigh) return packScore(4, stHigh, 0, 0, 0, 0);
+  if (trips)  { topKickers(rc, trips, -1, 2, k); return packScore(3, trips, k[0], k[1], 0, 0); }
+  if (pair1 && pair2) { topKickers(rc, pair1, pair2, 1, k); return packScore(2, pair1, pair2, k[0], 0, 0); }
+  if (pair1)  { topKickers(rc, pair1, -1, 3, k); return packScore(1, pair1, k[0], k[1], k[2], 0); }
+  topKickers(rc, -1, -1, 5, k);
+  return packScore(0, k[0], k[1], k[2], k[3], k[4]);
+}
+
+// ============================================================
+//  Dibujo
+// ============================================================
+static void drawSuit(int x, int y, Suit suit, uint16_t color) {
+  switch (suit) {
+    case HEARTS:
+      display.fillCircle(x - 2, y - 2, 2, color); display.fillCircle(x + 2, y - 2, 2, color);
+      display.fillTriangle(x - 4, y - 1, x + 4, y - 1, x, y + 4, color); break;
+    case DIAMONDS:
+      display.fillTriangle(x, y - 4, x - 3, y, x, y + 4, color);
+      display.fillTriangle(x, y - 4, x + 3, y, x, y + 4, color); break;
+    case CLUBS:
+      display.fillCircle(x, y - 3, 2, color); display.fillCircle(x - 2, y, 2, color);
+      display.fillCircle(x + 2, y, 2, color); display.drawLine(x, y, x, y + 4, color); break;
+    case SPADES:
+      display.fillTriangle(x, y - 4, x - 3, y + 1, x + 3, y + 1, color);
+      display.fillCircle(x - 2, y + 1, 2, color); display.fillCircle(x + 2, y + 1, 2, color);
+      display.drawLine(x, y, x, y + 4, color); break;
+  }
+}
+static String rankStr(Rank r) {
+  if (r <= 10) return String((int)r);
+  if (r == JACK) return "J"; if (r == QUEEN) return "Q"; if (r == KING) return "K"; return "A";
+}
+static void drawCard(int x, int y, Card c, bool visible) {
+  display.fillRoundRect(x, y, 20, 28, 3, SH110X_WHITE);
+  if (!visible) {
+    display.fillRoundRect(x + 2, y + 2, 16, 24, 2, SH110X_BLACK);
+    display.setTextColor(SH110X_WHITE); display.setTextSize(1);
+    display.setCursor(x + 7, y + 10); display.print("?");
+  } else {
+    display.setTextColor(SH110X_BLACK); display.setTextSize(1);
+    display.setCursor(x + 2, y + 2); display.print(rankStr(c.rank));
+    drawSuit(x + 10, y + 18, c.suit, SH110X_BLACK);
+  }
+}
+// Distintivo de repartidor: una "D" en blanco invertido (bien visible).
+static void drawDealerBadge(int x, int y) {
+  display.fillRect(x, y, 9, 9, SH110X_WHITE);
+  display.setTextColor(SH110X_BLACK);
+  display.setTextSize(1);
+  display.setCursor(x + 2, y + 1);
+  display.print("D");
+  display.setTextColor(SH110X_WHITE);
+}
+
+// reveal=false durante la partida (muestra TU jugada arriba),
+// reveal=true en el showdown (revela las cartas de la CPU).
+static void drawTable(bool reveal) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+
+  // Cabecera: fichas de cada uno + distintivo de repartidor
+  display.setCursor(0, 0);
+  display.print("CPU:");
+  display.print(cpu.chips);
+  if (cpu.isDealer) drawDealerBadge(display.getCursorX() + 2, 0);
+  {
+    String t = String("TU:") + String(player.chips);
+    int16_t x1, y1; uint16_t w, h; display.getTextBounds(t.c_str(), 0, 0, &x1, &y1, &w, &h);
+    int extra = player.isDealer ? 11 : 0;
+    int x = 128 - (int)w - extra; if (x < 0) x = 0;
+    display.setCursor(x, 0); display.print(t);
+    if (player.isDealer) drawDealerBadge(x + (int)w + 2, 0);
+  }
+
+  // Zona superior: cartas de la CPU (solo en showdown) o TU jugada actual
+  if (reveal) {
+    drawCard(40, 12, cpu.hand[0], true);
+    drawCard(64, 12, cpu.hand[1], true);
+  } else {
+    long sc = evaluateScore(player.hand, community, communityCount);
+    centerAt("TU JUGADA", 12, 1);
+    centerAt(categoryName(sc), 22, 2);
+  }
+
+  // Banda central: mensaje flotante o el bote
+  centerAt(msgLine.length() ? msgLine : (String("BOTE: ") + String(pot)), 42, 1);
+
+  // Mesa (cartas comunitarias)
+  for (int i = 0; i < communityCount; i++) drawCard(10 + i * 22, 50, community[i], true);
+
+  // Tus cartas
+  drawCard(40, 84, player.hand[0], true);
+  drawCard(64, 84, player.hand[1], true);
+}
+
+static void flashMessage(const String &m, unsigned long ms) {
+  msgLine = m;
+  drawTable(false);
+  display.display();
+  unsigned long t = millis();
+  while (millis() - t < ms) { backgroundTick(); delay(10); }
+  msgLine = "";
+}
+
+// ============================================================
+//  Baraja
+// ============================================================
+static void initDeck() {
+  int idx = 0;
+  for (int s = 0; s < 4; s++)
+    for (int r = 2; r <= 14; r++) { deck[idx].suit = (Suit)s; deck[idx].rank = (Rank)r; idx++; }
+  for (int i = 51; i > 0; i--) { int j = random(i + 1); Card t = deck[i]; deck[i] = deck[j]; deck[j] = t; }
+  deckIndex = 0;
+}
+static Card dealOne() { return deck[deckIndex++]; }
+static void dealHole() {
+  player.hand[0] = dealOne(); cpu.hand[0] = dealOne();
+  player.hand[1] = dealOne(); cpu.hand[1] = dealOne();
+}
+static void dealCommunity(int cnt) { for (int i = 0; i < cnt; i++) community[communityCount++] = dealOne(); }
+static int betSize() { int s = ((pot / 2 + 5) / 10) * 10; return (s < BIG_BLIND) ? BIG_BLIND : s; }
+
+// ============================================================
+//  Acciones (barra con opciones resaltadas: B mueve, A confirma)
+// ============================================================
+static void drawActionBar(int call, bool canRaise, int raiseSize) {
+  display.fillRect(0, 114, 128, 14, SH110X_BLACK);
+  display.drawLine(0, 113, 127, 113, SH110X_WHITE);
+  display.setTextSize(1);
+
+  String lbl[3];
+  lbl[0] = (call > 0) ? (String("VEO ") + String(call)) : String("PASO");
+  lbl[1] = String("SUBO ") + String(raiseSize);
+  lbl[2] = "TIRO";
+  const int xs[3] = {3, 49, 99};
+
+  for (int i = 0; i < 3; i++) {
+    if (i == 1 && !canRaise) continue;
+    int16_t bx, by; uint16_t bw, bh;
+    display.getTextBounds(lbl[i].c_str(), 0, 0, &bx, &by, &bw, &bh);
+    if ((int)selectedAction == i) {                  // opcion seleccionada -> resaltada
+      display.fillRect(xs[i] - 2, 116, (int)bw + 3, 11, SH110X_WHITE);
+      display.setTextColor(SH110X_BLACK);
     } else {
-        display.setTextColor(SH110X_BLACK);
-        display.setTextSize(1);
-        display.setCursor(x+2, y+2);
-        display.print(getRankStr(c.rank));
-        drawSuit(x+10, y+16, c.suit, SH110X_BLACK);
+      display.setTextColor(SH110X_WHITE);
     }
+    display.setCursor(xs[i], 118);
+    display.print(lbl[i]);
+  }
+  display.setTextColor(SH110X_WHITE);
 }
 
-// ==========================================
-// LÓGICA DE POKER
-// ==========================================
-
-void initDeck() {
-    int idx = 0;
-    for (int s = 0; s < 4; s++) {
-        for (int r = 2; r <= 14; r++) {
-            deck[idx].suit = (Suit)s;
-            deck[idx].rank = (Rank)r;
-            idx++;
-        }
+static int getHumanAction(int call, bool canRaise, int raiseSize) {
+  if (selectedAction == ACT_BET_RAISE && !canRaise) selectedAction = ACT_CHECK_CALL;
+  drawTable(false);
+  drawActionBar(call, canRaise, raiseSize);
+  display.display();
+  while (true) {
+    char kk = pollButton();
+    if (kk == 'B') {
+      do { selectedAction = (Action)((selectedAction + 1) % 3); }
+      while (selectedAction == ACT_BET_RAISE && !canRaise);
+      drawActionBar(call, canRaise, raiseSize);
+      display.display();
+    } else if (kk == 'A') {
+      return selectedAction;
     }
-    for (int i = 51; i > 0; i--) {
-        int j = random(i + 1);
-        Card temp = deck[i];
-        deck[i] = deck[j];
-        deck[j] = temp;
-    }
-    deckIndex = 0;
+    backgroundTick();
+    delay(10);
+  }
 }
 
-Card dealOne() {
-    return deck[deckIndex++];
+static int cpuDecide(int call, bool canRaise, int raiseSize) {
+  (void)raiseSize;
+  flashMessage("CPU pensando", D_THINK);
+  long score = evaluateScore(cpu.hand, community, communityCount);
+  int conf;
+  if (score >= packScore(2, 0, 0, 0, 0, 0))       conf = 70 + random(25);
+  else if (score >= packScore(1, 11, 0, 0, 0, 0)) conf = 48 + random(20);
+  else if (score >= packScore(1, 0, 0, 0, 0, 0))  conf = 30 + random(18);
+  else                                            conf = random(20);
+  if (communityCount == 0) {
+    int hi = max(cpu.hand[0].rank, cpu.hand[1].rank);
+    if (hi >= 12) conf += 15;
+    if (cpu.hand[0].suit == cpu.hand[1].suit) conf += 8;
+    if (cpu.hand[0].rank == cpu.hand[1].rank)  conf = 85 + random(10);
+  }
+  if (conf < 40 && random(100) < 15) conf = 70 + random(15);
+  conf = constrain(conf, 0, 95);
+  if (call == 0) {
+    if (conf > 72 && canRaise) return ACT_BET_RAISE;
+    return ACT_CHECK_CALL;
+  }
+  if (conf > 82 && canRaise && cpuRaises < 2) { cpuRaises++; return ACT_BET_RAISE; }
+  if (conf > 42 || (conf > 28 && call <= BIG_BLIND)) return ACT_CHECK_CALL;
+  return ACT_FOLD;
 }
 
-long evaluateScore(Card h[2], Card comm[5], int commCount) {
-    Card all[7];
-    int totalCards = 2 + commCount;
-    for(int i=0; i<2; i++) all[i] = h[i];
-    for(int i=0; i<commCount; i++) all[i+2] = comm[i];
+// ============================================================
+//  Ronda de apuestas
+// ============================================================
+static bool bettingRound(bool preflop) {
+  selectedAction = ACT_CHECK_CALL;
+  if (player.chips == 0 || cpu.chips == 0) return true;
 
-    for(int i=0; i<totalCards-1; i++) {
-        for(int j=0; j<totalCards-i-1; j++) {
-            if(all[j].rank < all[j+1].rank) {
-                Card t = all[j]; all[j] = all[j+1]; all[j+1] = t;
-            }
-        }
-    }
+  bool humanTurn = preflop ? player.isDealer : !player.isDealer;
+  int toAct = 2;
 
-    int counts[15] = {0};
-    int suits[4] = {0};
-    for(int i=0; i<totalCards; i++) {
-        counts[all[i].rank]++;
-        suits[all[i].suit]++;
-    }
+  while (toAct > 0) {
+    Player &a = humanTurn ? player : cpu;
+    Player &b = humanTurn ? cpu : player;
+    if (a.chips == 0) { toAct--; humanTurn = !humanTurn; continue; }
 
-    bool flush = false;
-    bool straight = false;
-    int maxStraightRank = 0;
+    int  call = currentBet - a.bet;
+    bool canRaise = (a.chips > call);
+    int  rs = betSize();
+    int  action = humanTurn ? getHumanAction(call, canRaise, rs)
+                            : cpuDecide(call, canRaise, rs);
+    String who = humanTurn ? "TU " : "CPU ";
 
-    for(int i=0; i<4; i++) if(suits[i] >= 5) flush = true;
-
-    int consecutive = 0;
-    for(int i=14; i>=2; i--) {
-        if(counts[i] > 0) consecutive++;
-        else consecutive = 0;
-        if(consecutive >= 5) {
-            straight = true;
-            if(maxStraightRank == 0) maxStraightRank = i + 4;
-        }
-    }
-    
-    long score = 0;
-    int fourK = 0, threeK = 0, pair1 = 0, pair2 = 0;
-    
-    for(int i=14; i>=2; i--) {
-        if(counts[i] == 4) fourK = i;
-        else if(counts[i] == 3) {
-            if (threeK == 0) threeK = i;
-            else if (pair1 == 0) pair1 = i;
-        }
-        else if(counts[i] == 2) {
-            if(pair1 == 0) pair1 = i;
-            else if(pair2 == 0) pair2 = i;
-        }
-    }
-
-    if (fourK) score = 70000 + fourK;
-    else if (threeK && pair1) score = 60000 + threeK;
-    else if (flush) score = 50000;
-    else if (straight) score = 40000 + maxStraightRank;
-    else if (threeK) score = 30000 + threeK;
-    else if (pair1 && pair2) score = 20000 + pair1;
-    else if (pair1) score = 10000 + pair1;
-    else score = all[0].rank;
-
-    return score;
-}
-
-// ==========================================
-// CONTROL DE ENTRADAS
-// ==========================================
-
-bool btnADebounce() {
-    static unsigned long lastA = 0;
-    if (isMorsePressed() && (millis() - lastA > 200)) { 
-        lastA = millis();
-        return true;
-    }
-    return false;
-}
-
-bool btnBDebounce() {
-    static unsigned long lastB = 0;
-    if (isFinishPressed() && (millis() - lastB > 200)) { 
-        lastB = millis();
-        return true;
-    }
-    return false;
-}
-
-// ==========================================
-// PANTALLAS Y LÓGICA
-// ==========================================
-
-void drawHeader() {
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-    display.setCursor(0,0);
-    display.print("CPU:");
-    display.print(cpu.chips);
-    if(cpu.isDealer) display.print(" D");
-    display.setCursor(65, 0);
-    display.print("POT:");
-    display.print(pot);
-}
-
-void drawTable(bool showCpuCards) {
-    display.clearDisplay();
-    drawHeader();
-
-    drawCard(30, 20, cpu.hand[0], showCpuCards);
-    drawCard(55, 20, cpu.hand[1], showCpuCards);
-    
-    if (cpu.folded) {
-        display.setCursor(80, 30);
-        display.print("FOLD");
-    }
-
-    int startX = 10;
-    for(int i=0; i<communityCount; i++) {
-        drawCard(startX + (i*22), 55, communityCards[i], true);
-    }
-
-    int pY = 90;
-    drawCard(30, pY, player.hand[0], true);
-    drawCard(55, pY, player.hand[1], true);
-    
-    display.setCursor(80, pY + 10);
-    display.print("YOU:");
-    display.print(player.chips);
-    if(player.isDealer) display.print(" D");
-}
-
-void drawFloatingMessage() {
-    if(msgLine1 != "") {
-        display.fillRect(10, 45, 108, 10, SH110X_BLACK); 
-        display.setCursor(12, 46);
-        display.setTextColor(SH110X_WHITE);
-        display.setTextSize(1);
-        display.print(msgLine1);
-    }
-}
-
-void drawInterface() {
-    drawTable(false);
-
-    display.fillRect(0, 118, 128, 10, SH110X_BLACK);
-    display.drawLine(0, 117, 128, 117, SH110X_WHITE);
-    
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
-    
-    int cursorX = 0;
-    if(selectedAction == ACT_CHECK_CALL) cursorX = 5;
-    if(selectedAction == ACT_BET_RAISE) cursorX = 50;
-    if(selectedAction == ACT_FOLD) cursorX = 95;
-    
-    display.fillTriangle(cursorX, 122, cursorX+3, 125, cursorX, 128, SH110X_WHITE);
-    
-    display.setCursor(10, 120);
-    int callAmount = currentHighestBet - player.currentBet;
-    if (callAmount > 0) display.print("CALL"); else display.print("CHK");
-    
-    display.setCursor(55, 120);
-    display.print("BET");
-    
-    display.setCursor(100, 120);
-    display.print("FOLD");
-
-    drawFloatingMessage();
-    display.display();
-}
-
-// ==========================================
-// CPU LOGIC
-// ==========================================
-
-void cpuTurn() {
-    msgLine1 = "CPU...";
-    drawFloatingMessage(); 
-    display.display();
-    delay(800); 
-
-    long score = evaluateScore(cpu.hand, communityCards, communityCount);
-    int callCost = currentHighestBet - cpu.currentBet;
-    int confidence = 0;
-    
-    // Lógica básica de confianza
-    if (score > 10000) confidence = 70 + random(25);    
-    else if (score > 500) confidence = 45 + random(20); 
-    else if (score > 50) confidence = 25 + random(15);  
-    else confidence = random(15);                        
-    
-    // Bluffing
-    if (score > 50 && score < 10000 && random(100) < 20) {
-        confidence = 75 + random(15);
-    }
-    
-    // Ajuste si jugador es agresivo
-    if (cpuRaiseCount > 2) confidence -= 10;
-    
-    // Pre-flop ajustes
-    if (communityCount == 0) {
-        int highCard = max(cpu.hand[0].rank, cpu.hand[1].rank);
-        if (highCard >= 11) confidence += 15;
-        if (cpu.hand[0].suit == cpu.hand[1].suit) confidence += 10;
-        if (cpu.hand[0].rank == cpu.hand[1].rank) confidence = 85 + random(10);
-    } 
-    
-    confidence = constrain(confidence, 0, 95);
-    
-    if (callCost == 0) {
-        // CPU decide CHECK o BET
-        if (confidence > 75 && cpu.chips > 30) {
-            int betAmt = 0;
-            if (confidence > 85) betAmt = 40 + random(20);
-            else betAmt = 15 + random(15);
-            
-            betAmt = min(betAmt, cpu.chips);
-            cpu.chips -= betAmt;
-            cpu.currentBet += betAmt;
-            pot += betAmt;
-            currentHighestBet = cpu.currentBet; 
-            msgLine1 = "CPU BET " + String(betAmt);
-            cpuHasRaisedThisRound = true;
-        } else {
-            msgLine1 = "CPU CHECK";
-        }
+    if (action == ACT_FOLD) { a.folded = true; flashMessage(who + "se retira", D_ACT + 150); return false; }
+    if (action == ACT_BET_RAISE && canRaise) {
+      int need = call + rs;
+      int pay = (need < a.chips) ? need : a.chips;
+      a.chips -= pay; a.bet += pay; pot += pay; currentBet = a.bet;
+      flashMessage(who + (call > 0 ? "sube +" : "apuesta ") + String(pay), D_ACT);
+      toAct = 1;
+    } else if (call <= 0) {
+      flashMessage(who + "pasa", D_ACT - 120);
+      toAct--;
     } else {
-        // CPU decide CALL, RAISE o FOLD
-        
-        // Si ya hizo raise, evita loop infinito -> Solo CALL o FOLD
-        if (cpuHasRaisedThisRound && callCost > 0) {
-            if (confidence > 50 || (confidence > 30 && callCost < 20)) {
-                if (cpu.chips >= callCost) {
-                    cpu.chips -= callCost;
-                    cpu.currentBet += callCost;
-                    pot += callCost;
-                    msgLine1 = "CPU CALL";
-                } else {
-                    pot += cpu.chips;
-                    cpu.chips = 0;
-                    msgLine1 = "CPU ALL-IN";
-                }
-            } else {
-                cpu.folded = true;
-                msgLine1 = "CPU FOLD";
-            }
-        }
-        else {
-            if (confidence > 60 || (confidence > 40 && callCost < 30)) {
-                if (confidence > 80 && cpu.chips > callCost + 30 && !cpuHasRaisedThisRound) {
-                    int raiseAmt = 30 + random(20);
-                    raiseAmt = min(raiseAmt, cpu.chips - callCost);
-                    
-                    cpu.chips -= (callCost + raiseAmt);
-                    cpu.currentBet += (callCost + raiseAmt);
-                    pot += (callCost + raiseAmt);
-                    currentHighestBet = cpu.currentBet;
-                    msgLine1 = "CPU RAISE " + String(raiseAmt);
-                    cpuHasRaisedThisRound = true;
-                    cpuRaiseCount++;
-                } else {
-                    if (cpu.chips >= callCost) {
-                        cpu.chips -= callCost;
-                        cpu.currentBet += callCost;
-                        pot += callCost;
-                        msgLine1 = "CPU CALL";
-                    } else {
-                        pot += cpu.chips;
-                        cpu.chips = 0;
-                        msgLine1 = "CPU ALL-IN";
-                    }
-                }
-            } else {
-                cpu.folded = true;
-                msgLine1 = "CPU FOLD";
-            }
-        }
+      int pay = (call < a.chips) ? call : a.chips;
+      a.chips -= pay; a.bet += pay; pot += pay;
+      if (a.chips == 0 && a.bet < currentBet) {
+        int ex = currentBet - a.bet; b.chips += ex; b.bet -= ex; pot -= ex; currentBet = a.bet;
+        flashMessage(who + "ALL-IN", D_ACT + 250); toAct = 0;
+      } else {
+        flashMessage(who + "iguala", D_ACT - 120); toAct--;
+      }
     }
-    
-    drawTable(false); 
-    drawFloatingMessage(); 
-    display.display();
-    delay(1500);
-    msgLine1 = "";
+    humanTurn = !humanTurn;
+  }
+  return true;
 }
 
-void resetRound() {
-    deckIndex = 0;
-    communityCount = 0;
-    pot = 0;
-    currentHighestBet = 0;
-    
-    player.currentBet = 0;
-    player.folded = false;
-    cpu.currentBet = 0;
-    cpu.folded = false;
-    
-    cpuRaiseCount = 0;
-    cpuHasRaisedThisRound = false;
-    
-    initDeck();
-    
-    player.hand[0] = dealOne();
-    cpu.hand[0] = dealOne();
-    player.hand[1] = dealOne();
-    cpu.hand[1] = dealOne();
-    
-    player.chips -= SMALL_BLIND;
-    player.currentBet = SMALL_BLIND;
-    cpu.chips -= BIG_BLIND;
-    cpu.currentBet = BIG_BLIND;
-    
-    pot = SMALL_BLIND + BIG_BLIND;
-    currentHighestBet = BIG_BLIND;
-    
-    currentState = ST_PREFLOP;
+// ============================================================
+//  Reparto / fin de mano
+// ============================================================
+static void resetBets() { currentBet = 0; player.bet = 0; cpu.bet = 0; }
+
+static void resetRound(bool playerDealer) {
+  initDeck();
+  communityCount = 0; pot = 0; currentBet = 0; cpuRaises = 0;
+  player.folded = cpu.folded = false; player.bet = 0; cpu.bet = 0;
+  player.isDealer = playerDealer; cpu.isDealer = !playerDealer;
+  dealHole();
+  Player &sb = playerDealer ? player : cpu;
+  Player &bb = playerDealer ? cpu : player;
+  int sbAmt = (SMALL_BLIND < sb.chips) ? SMALL_BLIND : sb.chips;
+  int bbAmt = (BIG_BLIND   < bb.chips) ? BIG_BLIND   : bb.chips;
+  sb.chips -= sbAmt; sb.bet = sbAmt;
+  bb.chips -= bbAmt; bb.bet = bbAmt;
+  pot = sbAmt + bbAmt;
+  currentBet = (bbAmt > sbAmt) ? bbAmt : sbAmt;
 }
 
-void updateGame() {
-    bool btnA = btnADebounce();
-    bool btnB = btnBDebounce();
-
-    switch (currentState) {
-        case ST_START:
-            display.clearDisplay();
-            display.setTextColor(SH110X_WHITE);
-            display.setCursor(30, 40);
-            display.setTextSize(2);
-            display.print("POKER");
-            display.setTextSize(1);
-            display.setCursor(20, 70);
-            display.print("A: START");
-            display.setCursor(20, 85);
-            display.print("B: EXIT");
-            display.display();
-            
-            if (btnA) {
-                player.chips = START_CHIPS;
-                cpu.chips = START_CHIPS;
-                player.isDealer = true; 
-                cpu.isDealer = false;
-                resetRound();
-            }
-            if (btnB) {
-                mainState = STATE_IDLE; 
-                Display_clear();
-            }
-            break;
-
-        case ST_PREFLOP:
-            nextStateAfterBetting = ST_FLOP;
-            currentState = ST_BETTING;
-            msgLine1 = "PRE-FLOP";
-            break;
-
-        case ST_FLOP:
-            communityCards[0] = dealOne();
-            communityCards[1] = dealOne();
-            communityCards[2] = dealOne();
-            communityCount = 3;
-            currentHighestBet = 0;
-            player.currentBet = 0;
-            cpu.currentBet = 0;
-            nextStateAfterBetting = ST_TURN;
-            currentState = ST_BETTING;
-            msgLine1 = "FLOP";
-            cpuHasRaisedThisRound = false;
-            break;
-
-        case ST_TURN:
-            communityCards[3] = dealOne();
-            communityCount = 4;
-            currentHighestBet = 0;
-            player.currentBet = 0;
-            cpu.currentBet = 0;
-            nextStateAfterBetting = ST_RIVER;
-            currentState = ST_BETTING;
-            msgLine1 = "TURN";
-            cpuHasRaisedThisRound = false;
-            break;
-
-        case ST_RIVER:
-            communityCards[4] = dealOne();
-            communityCount = 5;
-            currentHighestBet = 0;
-            player.currentBet = 0;
-            cpu.currentBet = 0;
-            nextStateAfterBetting = ST_SHOWDOWN;
-            currentState = ST_BETTING;
-            msgLine1 = "RIVER";
-            cpuHasRaisedThisRound = false;
-            break;
-
-        case ST_BETTING:
-            drawInterface();
-
-            if (btnB) {
-                if (selectedAction == ACT_CHECK_CALL) selectedAction = ACT_BET_RAISE;
-                else if (selectedAction == ACT_BET_RAISE) selectedAction = ACT_FOLD;
-                else selectedAction = ACT_CHECK_CALL;
-                drawInterface(); 
-            }
-
-            if (btnA) {
-                if (selectedAction == ACT_FOLD) {
-                    player.folded = true;
-                    currentState = ST_SHOWDOWN;
-                } 
-                else if (selectedAction == ACT_CHECK_CALL) {
-                    // Calculamos la diferencia
-                    int callAmt = currentHighestBet - player.currentBet;
-                    
-                    if (player.chips >= callAmt) {
-                        player.chips -= callAmt;
-                        player.currentBet += callAmt;
-                        pot += callAmt;
-                        
-                        // Determinar si fue Check o Call
-                        if (callAmt > 0) {
-                            // FUE UN CALL (Pagar Apuesta)
-                            msgLine1 = "YOU CALL";
-                            drawFloatingMessage();
-                            display.display();
-                            delay(500); 
-                            
-                            if (player.currentBet == currentHighestBet) {
-                                currentState = nextStateAfterBetting;
-                            }
-                        } 
-                        else {
-                            // FUE UN CHECK (Pasar)
-                            msgLine1 = "YOU CHECK";
-                            drawFloatingMessage();
-                            display.display();
-                            delay(500); 
-                            
-                            // Si pasamos, la CPU sí debe jugar
-                            cpuTurn(); 
-                            
-                            // *** FIX CRITICO ***
-                            // Esperamos a que el usuario SUELTE el botón antes de continuar
-                            // Esto evita que si la CPU apuesta, se interprete el botón presionado
-                            // en el loop anterior como un "CALL" inmediato.
-                            while(isMorsePressed() || isFinishPressed()) { delay(10); }
-
-                            if (cpu.folded) {
-                                currentState = ST_SHOWDOWN;
-                            } else if (player.currentBet == currentHighestBet) {
-                                currentState = nextStateAfterBetting;
-                            }
-                            // Si CPU subió la apuesta, no entramos en el 'else if', 
-                            // nos quedamos en ST_BETTING y el jugador recupera el control.
-                        }
-                    }
-                } 
-                else if (selectedAction == ACT_BET_RAISE) {
-                    int raiseAmt = 50;
-                    if (player.chips >= raiseAmt) {
-                        player.chips -= raiseAmt;
-                        player.currentBet += raiseAmt;
-                        pot += raiseAmt;
-                        currentHighestBet = player.currentBet;
-                        msgLine1 = "YOU RAISE 50";
-                        drawFloatingMessage();
-                        display.display();
-                        delay(500); 
-
-                        // Si el jugador sube, la CPU debe responder
-                        cpuTurn();
-
-                        // *** FIX CRITICO ***
-                        // Esperamos a que se suelte el botón
-                        while(isMorsePressed() || isFinishPressed()) { delay(10); }
-
-                        if (cpu.folded) {
-                            currentState = ST_SHOWDOWN;
-                        } else if (player.currentBet == currentHighestBet) {
-                            currentState = nextStateAfterBetting;
-                        }
-                    } else {
-                        msgLine1 = "NO CHIPS";
-                        drawFloatingMessage();
-                        display.display();
-                        delay(500);
-                        msgLine1 = "";
-                    }
-                }
-            }
-            break;
-
-        case ST_SHOWDOWN: {
-            drawTable(true);
-            
-            String res = "";
-            int winAmt = pot;
-            
-            if (player.folded) {
-                res = "YOU FOLDED";
-                cpu.chips += pot;
-            } else if (cpu.folded) {
-                res = "CPU FOLDED";
-                player.chips += pot;
-            } else {
-                long pScore = evaluateScore(player.hand, communityCards, 5);
-                long cScore = evaluateScore(cpu.hand, communityCards, 5);
-                
-                if (pScore > cScore) {
-                    res = "YOU WIN!";
-                    player.chips += pot;
-                } else if (cScore > pScore) {
-                    res = "CPU WINS";
-                    cpu.chips += pot;
-                } else {
-                    res = "SPLIT POT";
-                    player.chips += pot/2;
-                    cpu.chips += pot/2;
-                    winAmt = pot/2;
-                }
-            }
-            
-            display.fillRect(10, 50, 108, 40, SH110X_BLACK);
-            display.drawRect(10, 50, 108, 40, SH110X_WHITE);
-            
-            display.setTextColor(SH110X_WHITE);
-            
-            display.setCursor(20, 58);
-            display.print(res);
-            display.setCursor(20, 75);
-            display.print("+"); display.print(winAmt);
-            display.setCursor(10, 120);
-            display.setTextSize(1);
-            display.print("A: Continue");
-            display.display(); 
-            
-            // Espera a que presiones y sueltes para evitar dobles disparos
-            while(!btnADebounce()) {
-                if (isFinishPressed()) {
-                     mainState = STATE_IDLE;
-                     Display_clear();
-                     return;
-                }
-                backgroundTick();
-                delay(10);
-            }
-            
-            if (player.chips <= 0 || cpu.chips <= 0) {
-                currentState = ST_GAMEOVER;
-            } else {
-                player.isDealer = !player.isDealer;
-                cpu.isDealer = !cpu.isDealer;
-                resetRound();
-            }
-        } break;
-
-        case ST_GAMEOVER:
-            display.clearDisplay();
-            display.setTextColor(SH110X_WHITE);
-            display.setCursor(10, 50);
-            display.setTextSize(2);
-            if (player.chips > 0) display.print("VICTORY!");
-            else display.print("BANKRUPT");
-            
-            display.setTextSize(1);
-            display.setCursor(10, 80);
-            display.print("Press A to Restart");
-            display.display();
-            
-            if (btnA) {
-                currentState = ST_START;
-            }
-            break;
-    }
+static void waitContinue() {
+  while (true) {
+    char kk = pollButton();
+    if (kk == 'A') return;
+    if (kk == 'B') { mainState = STATE_IDLE; Display_clear(); return; }
+    backgroundTick();
+    delay(10);
+  }
 }
 
+static void resultBox(const String &res, const String &l1, const String &l2) {
+  display.fillRect(4, 42, 120, 44, SH110X_BLACK);
+  display.drawRect(4, 42, 120, 44, SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);
+  centerAt(res, 44, 2);
+  centerAt(l1, 62, 1);
+  centerAt(l2, 73, 1);
+  display.setCursor(8, 118); display.print("A: sigue   B: salir");
+  display.display();
+}
+
+static void awardByFold() {
+  Player &w = player.folded ? cpu : player;
+  w.chips += pot;
+  drawTable(true);
+  if (player.folded) resultBox("CPU GANA", "Te has retirado", String("Gana ") + String(pot));
+  else               resultBox("GANAS",    "CPU se retira",   String("Ganas ") + String(pot));
+  pot = 0;
+  waitContinue();
+}
+
+static void showdown() {
+  long ps = evaluateScore(player.hand, community, 5);
+  long cs = evaluateScore(cpu.hand, community, 5);
+  drawTable(true);
+  String res;
+  if (ps > cs)      { res = "GANAS";    player.chips += pot; }
+  else if (cs > ps) { res = "CPU GANA"; cpu.chips += pot; }
+  else              { res = "EMPATE";   int half = pot / 2; player.chips += pot - half; cpu.chips += half; }
+  pot = 0;
+  resultBox(res, String("TU: ") + handDesc(ps), String("CPU: ") + handDesc(cs));
+  waitContinue();
+}
+
+static void playRound(bool playerDealer) {
+  resetRound(playerDealer);
+  flashMessage("PRE-FLOP", D_STREET);
+  if (!bettingRound(true)) { awardByFold(); return; }
+  bool allIn = (player.chips == 0 || cpu.chips == 0);
+
+  dealCommunity(3); resetBets(); flashMessage("FLOP", D_STREET);
+  if (!allIn) { if (!bettingRound(false)) { awardByFold(); return; } allIn = (player.chips == 0 || cpu.chips == 0); }
+
+  dealCommunity(1); resetBets(); flashMessage("TURN", D_STREET);
+  if (!allIn) { if (!bettingRound(false)) { awardByFold(); return; } allIn = (player.chips == 0 || cpu.chips == 0); }
+
+  dealCommunity(1); resetBets(); flashMessage("RIVER", D_STREET);
+  if (!allIn) { if (!bettingRound(false)) { awardByFold(); return; } }
+
+  showdown();
+}
+
+// ============================================================
+//  Entrada
+// ============================================================
 void startPoker() {
-    randomSeed(analogRead(A0) + millis());
-    currentState = ST_START;
-    
-    bool inGame = true;
-    while(inGame && mainState != STATE_IDLE) {
-        updateGame();
-        backgroundTick();
-        delay(20);
-        if (mainState == STATE_IDLE) inGame = false;
+  randomSeed(analogRead(A0) + millis());
+
+  display.clearDisplay();
+  display.setTextColor(SH110X_WHITE);
+  centerAt("POKER", 16, 2);
+  centerAt("Heads-up vs CPU", 42, 1);
+  centerAt("A: Jugar", 64, 1);
+  centerAt("B: Salir", 78, 1);
+  centerAt("En la mesa:", 102, 1);
+  centerAt("B cambia / A confirma", 114, 1);
+  display.display();
+  while (true) {
+    char kk = pollButton();
+    if (kk == 'A') break;
+    if (kk == 'B') { mainState = STATE_IDLE; Display_clear(); return; }
+    backgroundTick(); delay(10);
+  }
+
+  player.chips = START_CHIPS;
+  cpu.chips = START_CHIPS;
+  bool playerDealer = true;
+
+  while (mainState != STATE_IDLE) {
+    playRound(playerDealer);
+    if (mainState == STATE_IDLE) return;
+
+    Serial.print("[Poker] total: ");
+    Serial.println(player.chips + cpu.chips);
+
+    if (player.chips <= 0 || cpu.chips <= 0) {
+      display.clearDisplay();
+      display.setTextColor(SH110X_WHITE);
+      centerAt(player.chips > 0 ? "GANASTE" : "BANCARROTA", 36, 2);
+      centerAt("A: Otra   B: Salir", 80, 1);
+      display.display();
+      while (true) {
+        char kk = pollButton();
+        if (kk == 'A') { player.chips = START_CHIPS; cpu.chips = START_CHIPS; playerDealer = true; break; }
+        if (kk == 'B') { mainState = STATE_IDLE; Display_clear(); return; }
+        backgroundTick(); delay(10);
+      }
+      continue;
     }
+    playerDealer = !playerDealer;
+  }
 }
