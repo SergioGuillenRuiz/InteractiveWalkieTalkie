@@ -19,6 +19,7 @@ uint32_t now();                 // millis() virtuales
 void advance(uint32_t ms);      // avanza el reloj (lo usa delay()); aplica eventos
 void setDeadline(uint32_t absMs);
 void clearDeadline();
+void setPumpHook(void (*fn)(uint32_t ms));  // modo interactivo: el motor lo llama desde cada delay()
 
 // --- Eventos temporizados de entrada ---
 void scheduleAt(uint32_t absMs, EvKind kind, int value);  // value: pot 0..1023, botón 0/1

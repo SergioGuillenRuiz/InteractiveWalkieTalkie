@@ -204,39 +204,127 @@ static void execLine(const std::string &raw) {
 
 // ---------------------------------------------------------------------------
 // Modo interactivo
+//
+// El firmware se ejecuta de forma continua, sin "deadline". El teclado se
+// sondea desde dentro de cada delay() (mediante el pump-hook del motor), de modo
+// que las esperas bloqueantes de los juegos/menus reciben las pulsaciones en
+// directo. El render y el ritmo en tiempo real tambien viven en el pump.
 // ---------------------------------------------------------------------------
+static int  g_iPot = 512;
+static bool g_iRunning = true;
+static std::chrono::steady_clock::time_point g_iLastRender;
+
+// Reproduccion de teclas con guion (para pruebas/demos sin teclado): lista de
+// (msVirtuales desde el arranque, accion). Accion = una tecla o "pot <valor>".
+static std::vector<std::pair<uint32_t, std::string>> g_keyScript;
+static size_t   g_ksIdx = 0;
+static uint32_t g_iStart = 0;
+static bool     g_keysScripted = false;
+static bool     g_ksArmed = false;   // deadline de fin de guion ya armado (una sola vez)
+
+// Programa una pulsacion (sin runFor: la aplica el avance del reloj del firmware).
+static void scheduleTap(sim::EvKind k, uint32_t durMs) {
+    uint32_t t0 = sim::now();
+    sim::scheduleAt(t0, k, 1);
+    sim::scheduleAt(t0 + durMs, k, 0);
+}
+
+static void pressKey(int c) {
+    switch (c) {
+        case 'm': scheduleTap(sim::EV_MORSE, 150); break;
+        case 'n': scheduleTap(sim::EV_FINISH, 150); break;
+        case 'M': scheduleTap(sim::EV_MORSE, 1700); break;   // pulsacion larga
+        case 'N': scheduleTap(sim::EV_FINISH, 1700); break;
+        case 'r': { String e = SimpleCrypto_encrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
+        case 'q': g_iRunning = false; break;
+    }
+}
+
+static void iHandleKeys() {
+    while (_kbhit()) {
+        int c = _getch();
+        if (c == 0 || c == 0xE0) {           // teclas especiales (flechas)
+            int k = _getch();
+            if (k == 72) { g_iPot += 40; if (g_iPot > 1023) g_iPot = 1023; sim::setPot(g_iPot); }  // arriba
+            else if (k == 80) { g_iPot -= 40; if (g_iPot < 0) g_iPot = 0; sim::setPot(g_iPot); }    // abajo
+            continue;
+        }
+        pressKey(c);
+    }
+}
+
+// Dispara las acciones del guion cuyo instante ya ha llegado. Al agotarse, arma
+// un deadline para forzar la salida (incluso si el firmware esta bloqueado).
+static void fireScriptedKeys() {
+    while (g_ksIdx < g_keyScript.size() &&
+           sim::now() - g_iStart >= g_keyScript[g_ksIdx].first) {
+        std::string act = g_keyScript[g_ksIdx++].second;
+        if (act.rfind("pot", 0) == 0) {
+            int v = atoi(trim(act.substr(3)).c_str());
+            g_iPot = v < 0 ? 0 : (v > 1023 ? 1023 : v);
+            sim::setPot(g_iPot);
+        } else if (!act.empty()) {
+            pressKey((unsigned char)act[0]);
+        }
+    }
+    if (g_ksIdx >= g_keyScript.size() && !g_ksArmed) {
+        g_ksArmed = true;
+        sim::setDeadline(sim::now() + 50);   // una sola vez: fuerza la salida del bloqueo
+    }
+}
+
+static void iRender() {
+    printf("\x1b[H");   // cursor arriba (redibujado en el sitio)
+    simRenderTerminal(g_color);
+    printf("  t=%lus   pot=%d        \n", (unsigned long)(sim::now() / 1000), sim::getPot());
+    printf("  [m] Morse   [n] Finish   [Shift+M / Shift+N] pulsacion larga      \n");
+    printf("  [Flecha arriba/abajo] potenciometro   [r] recibir LoRa   [q] salir\n");
+    fflush(stdout);
+}
+
+// Llamado por el motor desde cada delay()/advance() (y por el bucle exterior en
+// las iteraciones sin delay). Sondea teclado, redibuja a ~30 fps y duerme en
+// tiempo real para que los juegos vayan a su velocidad natural.
+static void interactivePump(uint32_t ms) {
+    iHandleKeys();
+    if (g_keysScripted) { fireScriptedKeys(); return; }   // modo prueba: rapido, sin dormir/redibujar
+    auto nowR = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(nowR - g_iLastRender).count() >= 33) {
+        g_iLastRender = nowR;
+        iRender();
+    }
+    uint32_t target = (ms > 120) ? 120 : ms;     // acota esperas largas para no congelar la UI
+    uint32_t slept = 0;
+    while (slept < target && g_iRunning) {
+        uint32_t chunk = (target - slept > 8) ? 8 : (target - slept);
+        std::this_thread::sleep_for(std::chrono::milliseconds(chunk));
+        slept += chunk;
+        iHandleKeys();                           // teclado responsivo incluso durante la espera
+    }
+}
+
 static void interactive() {
     system("chcp 65001 > nul");
     printf("\x1b[2J");
-    int pot = 512;
-    sim::setPot(pot);
-    bool running = true;
-    while (running) {
-        while (_kbhit()) {
-            int c = _getch();
-            if (c == 0 || c == 0xE0) {       // teclas especiales (flechas)
-                int k = _getch();
-                if (k == 72) { pot += 40; if (pot > 1023) pot = 1023; sim::setPot(pot); }  // arriba
-                else if (k == 80) { pot -= 40; if (pot < 0) pot = 0; sim::setPot(pot); }    // abajo
-                continue;
-            }
-            switch (c) {
-                case 'm': tap(sim::EV_MORSE, 150); break;
-                case 'n': tap(sim::EV_FINISH, 150); break;
-                case 'M': tap(sim::EV_MORSE, 1700); break;   // pulsación larga
-                case 'N': tap(sim::EV_FINISH, 1700); break;
-                case 'r': { String e = SimpleCrypto_encrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
-                case 'q': running = false; break;
-            }
-        }
-        runFor(30);
-        printf("\x1b[H");   // cursor arriba (redibujado en el sitio)
-        simRenderTerminal(g_color);
-        printf("  t=%lus   pot=%d        \n", (unsigned long)(sim::now() / 1000), sim::getPot());
-        printf("  [m] Morse   [n] Finish   [Shift+M / Shift+N] pulsacion larga      \n");
-        printf("  [Flecha arriba/abajo] potenciometro   [r] recibir LoRa   [q] salir\n");
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+    g_iPot = 512;
+    sim::setPot(g_iPot);
+    g_iRunning = true;
+    g_iLastRender = std::chrono::steady_clock::now() - std::chrono::milliseconds(100);
+    g_iStart = sim::now();
+    g_ksIdx = 0;
+    g_ksArmed = false;
+    sim::clearDeadline();                 // sin deadline: el firmware puede bloquearse esperando al usuario
+    sim::setPumpHook(interactivePump);
+    while (g_iRunning) {
+        try {
+            uint32_t before = sim::now();
+            loop();
+            if (sim::now() == before) sim::advance(TICK);   // iteracion sin delay -> avanza y bombea
+        } catch (sim::Timeout &) { break; }   // solo en modo scripted: fin del guion -> salir limpio
     }
+    sim::setPumpHook(nullptr);
+    sim::clearDeadline();
+    if (g_keysScripted) printf("\n[serial]\n%s\n", sim::serialLog().c_str());
     printf("\n");
 }
 
@@ -265,6 +353,20 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--interactive") interactiveMode = true;
+        else if (a == "--keys" && i + 1 < argc) {   // reproducir teclas con guion (pruebas/demos)
+            std::ifstream kf(argv[++i]);
+            std::string ln;
+            while (std::getline(kf, ln)) {
+                ln = trim(ln);
+                if (ln.empty() || ln[0] == '#') continue;
+                std::istringstream is(ln);
+                uint32_t ms = 0; is >> ms;
+                std::string rest; std::getline(is, rest);
+                g_keyScript.push_back({ms, trim(rest)});
+            }
+            g_keysScripted = true;
+            interactiveMode = true;
+        }
         else if (a == "--color") g_color = true;
         else if (a == "--fresh") fresh = true;
         else if (a == "--eeprom" && i + 1 < argc) eepromPath = argv[++i];

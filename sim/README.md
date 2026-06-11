@@ -46,6 +46,17 @@ build.bat              ::  solo compilar -> out\walkie_sim.exe
 Las teclas también se muestran bajo la pantalla mientras corre. La pantalla OLED
 128×128 se dibuja con caracteres braille (2×4 píxeles por carácter), así ocupa
 64×32 caracteres y los píxeles se ven cuadrados, a tamaño parecido al real.
+
+El modo interactivo corre el firmware en tiempo real y lee el teclado **incluso
+mientras un juego o menú está esperando una pulsación**, de modo que se puede
+entrar y jugar a cualquier pantalla (Poker, Choose4Me, etc.) sin bloqueos.
+
+### Reproducir teclas con guion (demos / pruebas)
+
+`run.bat --keys guion.txt` reproduce una secuencia de teclas sin necesidad de
+teclado. Cada línea es `<ms> <acción>`, donde `ms` son milisegundos (virtuales)
+desde el arranque y la acción es una tecla (`m`, `n`, `M`, `N`, `r`, `q`) o
+`pot <valor>`. Útil para reproducir un fallo o grabar una demo de un juego.
 Conviene maximizar la ventana del terminal (necesita ~34 líneas de alto).
 
 ## Tests automatizados
@@ -133,6 +144,7 @@ expect text Selecciona
 ```
 walkie_sim.exe [script.sim] [opciones]
   --interactive     modo teclado
+  --keys <fich>     modo interactivo reproduciendo teclas con guion
   --fresh           borra la EEPROM al arrancar
   --color           color en el render del terminal
   --eeprom <fich>   fichero de respaldo de EEPROM (por defecto out\eeprom.bin)

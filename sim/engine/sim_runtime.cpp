@@ -32,6 +32,7 @@ bool g_finish = false;
 std::string g_serial;
 std::vector<Ev> g_events;
 std::mt19937 g_rng(12345u);
+void (*g_pump)(uint32_t) = nullptr;   // hook del modo interactivo (teclado + render + ritmo)
 
 void applyEvent(const Ev &e) {
     switch (e.kind) {
@@ -47,6 +48,7 @@ namespace sim {
 uint32_t now() { return g_now; }
 void setDeadline(uint32_t absMs) { g_deadline = absMs; }
 void clearDeadline() { g_deadline = 0xFFFFFFFFu; }
+void setPumpHook(void (*fn)(uint32_t)) { g_pump = fn; }
 
 void scheduleAt(uint32_t absMs, EvKind kind, int value) {
     g_events.push_back(Ev{absMs, (int)kind, value});
@@ -86,6 +88,7 @@ void advance(uint32_t ms) {
     g_now = target;
     applyDue();
     if (g_now > g_deadline) throw Timeout();
+    if (g_pump) g_pump(ms);   // modo interactivo: sondea teclado, redibuja y marca el ritmo
 }
 
 void setPot(int v) { g_pot = v < 0 ? 0 : (v > 1023 ? 1023 : v); }

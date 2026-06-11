@@ -4,6 +4,7 @@ REM  Compila y ejecuta el simulador.
 REM    run.bat                     -> modo interactivo (teclado)
 REM    run.bat scripts\nav.sim     -> ejecuta un script
 REM    run.bat --color scripts\... -> con color en el render
+REM    run.bat --keys guion.txt    -> reproduce teclas con guion (demo/prueba)
 REM ============================================================
 setlocal
 set "SIM=%~dp0"
