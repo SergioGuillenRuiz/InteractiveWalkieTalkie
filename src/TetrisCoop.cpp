@@ -60,6 +60,11 @@ static unsigned long p1FallAt, p2FallAt, p1MoveAt, botActAt;
 static int botTargetX, botTargetRot;
 static bool botPlanned;
 
+// ---- 2 jugadores por LoRa ----
+static int  remoteTargetX, remoteRot, remoteDrop;   // ultimo input recibido del companero
+static int  appliedRot, appliedDrop;
+static unsigned long lastBcast, lastInput;
+
 // ============================================================
 //  Entrada (flanco)
 // ============================================================
@@ -292,27 +297,134 @@ static void drawGame() {
 }
 
 // ============================================================
-//  Pantallas
+//  Red (2 jugadores por LoRa). Los paquetes de juego empiezan por 'T' y se leen
+//  directamente (sin backgroundTick) para no mezclarlos con los mensajes.
 // ============================================================
-static int modeSelect() {     // 0=solo bot, 1=2 jugadores, -1=salir
-  int sel = 0;
+static void resetBoard();
+static bool gameOverScreen();
+
+static const char *HX = "0123456789abcdef";
+static void putB(String &s, int v) { s += HX[(v >> 4) & 0xF]; s += HX[v & 0xF]; }
+static int  hxv(char c) { if (c >= '0' && c <= '9') return c - '0'; if (c >= 'a' && c <= 'f') return c - 'a' + 10; return 0; }
+static int  getB(const String &s, int &i) { int v = hxv(s[i]) * 16 + hxv(s[i + 1]); i += 2; return v; }
+
+static void tcSend(const String &m) { Lora_send(m); }
+static String tcRecv() {
+  if (Lora_hasMessage()) { String m = Lora_readMessage(); if (m.length() && m[0] == 'T') return m; }
+  return "";
+}
+
+// Estado completo host->cliente
+static String encodeState(bool over) {
+  String s = "TS";
+  uint8_t by[23]; memset(by, 0, sizeof(by));
+  int bit = 0;
+  for (int y = 0; y < BH; y++) for (int x = 0; x < BW; x++) { if (board[y][x]) by[bit >> 3] |= (1 << (bit & 7)); bit++; }
+  for (int i = 0; i < 23; i++) putB(s, by[i]);
+  putB(s, P1.type); putB(s, P1.rot); putB(s, P1.x + 2); putB(s, P1.y + 2); putB(s, P1.alive ? 1 : 0);
+  putB(s, P2.type); putB(s, P2.rot); putB(s, P2.x + 2); putB(s, P2.y + 2); putB(s, P2.alive ? 1 : 0);
+  putB(s, (score >> 8) & 0xFF); putB(s, score & 0xFF); putB(s, lines & 0xFF); putB(s, over ? 1 : 0);
+  return s;
+}
+static void decodeState(const String &s, bool &over) {
+  int i = 2;
+  uint8_t by[23];
+  for (int k = 0; k < 23; k++) by[k] = getB(s, i);
+  int bit = 0;
+  for (int y = 0; y < BH; y++) for (int x = 0; x < BW; x++) { board[y][x] = (by[bit >> 3] >> (bit & 7)) & 1; bit++; }
+  P1.type = getB(s, i); P1.rot = getB(s, i); P1.x = getB(s, i) - 2; P1.y = getB(s, i) - 2; P1.alive = getB(s, i);
+  P2.type = getB(s, i); P2.rot = getB(s, i); P2.x = getB(s, i) - 2; P2.y = getB(s, i) - 2; P2.alive = getB(s, i);
+  score = (getB(s, i) << 8); score |= getB(s, i); lines = getB(s, i); over = getB(s, i);
+}
+
+// Input cliente->host: columna objetivo + contadores de rotacion/caida
+static String encodeInput(int tx, int rotC, int dropC) {
+  String s = "TI"; putB(s, tx + 2); putB(s, rotC & 0xFF); putB(s, dropC & 0xFF); return s;
+}
+static void decodeInput(const String &s) {
+  int i = 2; remoteTargetX = getB(s, i) - 2; remoteRot = getB(s, i); remoteDrop = getB(s, i);
+}
+
+// El host aplica el input del companero a P2 (como hace el jugador con P1).
+static void applyRemoteToP2(unsigned long now) {
+  static unsigned long mvAt = 0;
+  int pend = (remoteRot - appliedRot) & 0xFF;
+  for (int r = 0; r < pend && r < 4; r++) { Piece t = P2; t.rot = (P2.rot + 1) % 4; if (!collides(t, &P1)) P2.rot = t.rot; }
+  appliedRot = remoteRot;
+  if (now >= mvAt && P2.x != remoteTargetX && P2.alive) {
+    int dir = remoteTargetX > P2.x ? 1 : -1; Piece t = P2; t.x += dir; if (!collides(t, &P1)) P2.x = t.x;
+    mvAt = now + 80;
+  }
+  if (((remoteDrop - appliedDrop) & 0xFF) && P2.alive) { dropTo(P2, &P1); p2FallAt = 0; appliedDrop = remoteDrop; }
+}
+
+// Lobby: el host anuncia, el cliente busca. true = conectados.
+static bool lobby(bool host) {
   unsigned long t = 0;
   while (true) {
-    sel = getPotValue(1);     // 0 o 1
+    unsigned long now = millis();
+    display.clearDisplay();
+    centerPrint("TETRIS COOP", 20, 1);
+    centerPrint(host ? "Esperando" : "Buscando", 54, 1);
+    centerPrint(host ? "companero..." : "partida...", 66, 1);
+    centerPrint("B: cancelar", 100, 1);
+    display.display();
+    String m = tcRecv();
+    if (host)  { if (m == "TJ") { for (int k = 0; k < 3; k++) tcSend("TS_GO"); return true; } if (now - t > 600) { tcSend("TH"); t = now; } }
+    else       { if (m == "TH") { for (int k = 0; k < 4; k++) tcSend("TJ"); return true; } if (now - t > 700) { tcSend("TJ"); t = now; } }
+    if (isFinishPressed()) { delay(40); if (isFinishPressed()) return false; }
+    delay(25);
+  }
+}
+
+// Bucle del cliente: no simula; pinta el estado recibido y envia su input.
+static void clientGame() {
+  resetBoard();
+  bool over = false, started = false;
+  static bool pa = false, pb = false;
+  uint8_t rotC = 0, dropC = 0;
+  unsigned long bHold = 0;
+  while (isMorsePressed() || isFinishPressed()) { delay(10); }
+  while (true) {
+    unsigned long now = millis();
+    String m = tcRecv();
+    if (m.startsWith("TS") && m.length() > 10) { decodeState(m, over); started = true; }
+    if (m == "TQ") { mainState = STATE_IDLE; Display_clear(); return; }
+
+    int tx = map(getPotValue(BW - 1), 0, BW - 1, 0, BW - 4);
+    bool a = isMorsePressed(), b = isFinishPressed();
+    if (a && !pa) rotC++;
+    if (b && !pb) bHold = now;
+    if (!b && pb && now - bHold < 500) dropC++;
+    if (b && now - bHold > 800) { tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
+    pa = a; pb = b;
+    if (now - lastInput > 200) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
+
+    if (started) { drawGame(); if (over) { if (!gameOverScreen()) { mainState = STATE_IDLE; Display_clear(); return; } resetBoard(); over = false; started = false; } }
+    else { display.clearDisplay(); centerPrint("Conectando...", 56, 1); display.display(); }
+    delay(25);
+  }
+}
+
+// ============================================================
+//  Pantallas
+// ============================================================
+static int modeSelect() {     // 0=solo, 1=crear(host), 2=unirse(cliente), -1=salir
+  while (true) {
+    int sel = getPotValue(2);
     display.clearDisplay();
     centerPrint("TETRIS COOP", 8, 1);
-    // dos piezas decorativas
-    centerPrint(((sel == 0) ? "> " : "  ") + String("Solo (vs Bot)"), 50, 1);
-    centerPrint(((sel == 1) ? "> " : "  ") + String("2 Jugadores"), 64, 1);
+    centerPrint(((sel == 0) ? "> " : "  ") + String("Solo (vs Bot)"), 44, 1);
+    centerPrint(((sel == 1) ? "> " : "  ") + String("2 Jug: Crear"), 58, 1);
+    centerPrint(((sel == 2) ? "> " : "  ") + String("2 Jug: Unirse"), 72, 1);
     centerPrint("Pote: elegir", 96, 1);
-    centerPrint("A: jugar  B: salir", 112, 1);
+    centerPrint("A: ok  B: salir", 112, 1);
     display.display();
     char k = pollButton();
     if (k == 'A') return sel;
     if (k == 'B') return -1;
     backgroundTick();
     delay(20);
-    (void)t;
   }
 }
 
@@ -379,39 +491,47 @@ void startTetrisCoop() {
 
   int mode = modeSelect();
   if (mode < 0) { mainState = STATE_IDLE; Display_clear(); return; }
-  p2isBot = (mode == 0);   // (el modo 2 jugadores por LoRa se anade despues)
+
+  if (mode == 2) {                                   // unirse: cliente
+    if (lobby(false)) clientGame();
+    mainState = STATE_IDLE; Display_clear(); return;
+  }
+  if (mode == 1 && !lobby(true)) { mainState = STATE_IDLE; Display_clear(); return; }
+  p2isBot = (mode == 0);
+  bool host = (mode == 1);
 
   while (true) {
     resetBoard();
+    if (host) gravMs = 1100;                          // mas lento: la radio tiene retardo
     bool over = false;
     if (!spawnPiece(P1, 1, NULL) || !spawnPiece(P2, 5, &P1)) over = true;
     botPlanned = false;
+    appliedRot = appliedDrop = remoteRot = remoteDrop = 0; remoteTargetX = P2.x;
     unsigned long now = millis();
     p1FallAt = p2FallAt = now + gravMs;
-    p1MoveAt = botActAt = now;
-    // soltar botones de entrada
+    p1MoveAt = botActAt = now; lastBcast = lastInput = now;
     while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
 
     while (!over) {
-      backgroundTick();
+      if (host) { String m = tcRecv(); if (m.startsWith("TI")) decodeInput(m); }
+      else backgroundTick();
       now = millis();
 
-      if (playerControl(now) == 1) { mainState = STATE_IDLE; Display_clear(); return; }
+      if (playerControl(now) == 1) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
 
-      // jugador 2 (bot)
-      if (p2isBot && P2.alive && now >= botActAt) {
-        botStep();
-        botActAt = now + 110;
-      }
+      if (p2isBot && P2.alive && now >= botActAt) { botStep(); botActAt = now + 110; }
+      if (host) applyRemoteToP2(now);
 
-      // gravedad
       if (P1.alive && now >= p1FallAt) { gravityStep(P1, &P2, over, 1, false); p1FallAt = now + gravMs; }
-      if (P2.alive && now >= p2FallAt) { gravityStep(P2, &P1, over, 5, true);  p2FallAt = now + gravMs; }
+      if (P2.alive && now >= p2FallAt) { gravityStep(P2, &P1, over, 5, p2isBot); p2FallAt = now + gravMs; }
+
+      if (host && now - lastBcast > 280) { tcSend(encodeState(over)); lastBcast = now; }
 
       drawGame();
       delay(25);
     }
 
-    if (!gameOverScreen()) { mainState = STATE_IDLE; Display_clear(); return; }
+    if (host) tcSend(encodeState(true));
+    if (!gameOverScreen()) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
   }
 }
