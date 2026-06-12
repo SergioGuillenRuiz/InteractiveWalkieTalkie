@@ -8,6 +8,7 @@
 #include "playChoose4Me.h"
 #include "Poker.h"
 #include "RefillGame.h"
+#include "TetrisCoop.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -789,6 +790,10 @@ bool handleGamesMenu() {
             needRedraw = true;   // al volver, refrescar el submenú
 
             switch (seleccion) {
+                case 0: // Tetris Coop (implementado): gestiona su propia salida a IDLE
+                    startTetrisCoop();
+                    return true;
+
                 case 1: // Poker (implementado): gestiona su propia salida a IDLE
                     startPoker();
                     return true;
@@ -801,7 +806,7 @@ bool handleGamesMenu() {
                     startChoose4Me();
                     return true;
 
-                default: { // Juegos aún no implementados (0, 4)
+                default: { // Juegos aún no implementados (4: HippoRadar)
                     Display_clear();
                     display.setCursor(0, 20);
                     display.setTextSize(1);

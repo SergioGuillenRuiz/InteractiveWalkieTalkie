@@ -7,7 +7,7 @@
 
 
 const char* nombresJuegos[5] = {
-  "Tetris2v2", "Poker", "RefillGame", "Choose4Me", "HippoRadar"
+  "Tetris Coop", "Poker", "RefillGame", "Choose4Me", "HippoRadar"
 };
 
 const unsigned char* iconosJuegos[5] = {
