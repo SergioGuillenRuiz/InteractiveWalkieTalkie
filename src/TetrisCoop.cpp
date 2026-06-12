@@ -21,9 +21,9 @@
 
 #define BW 10          // ancho tablero (celdas)
 #define BH 18          // alto tablero (celdas)
-#define CELL 6         // px por celda
+#define CELL 7         // px por celda
 #define BX 3           // origen x del tablero (px)
-#define BY 8           // origen y del tablero (px)
+#define BY 1           // origen y del tablero (px)
 
 // 7 piezas x 4 rotaciones x 4 celdas (col,fila) en una caja 4x4
 static const int8_t PIECES[7][4][4][2] = {
@@ -57,7 +57,7 @@ static unsigned long gravMs;
 static unsigned long p1FallAt, p2FallAt, p1MoveAt, botActAt;
 
 // ---- bot ----
-static int botTargetX, botTargetRot;
+static int botTargetX, botTargetRot, botStuck;
 static bool botPlanned;
 
 // ---- 2 jugadores por LoRa ----
@@ -226,6 +226,10 @@ static void botPlan() {
       }
       int cl = clearLinesIn(tmp);          // limpiar antes de puntuar (clave)
       float s = evalBoard(tmp, cl);
+      if (P1.alive) {                              // deja sitio al jugador: no te pegues a su pieza
+        int d = (P1.x + 2) - (t.x + 2); if (d < 0) d = -d;
+        if (d < 3) s -= (3 - d) * 0.9f;
+      }
       if (s > best) { best = s; botTargetRot = rot; botTargetX = t.x; }
     }
   }
@@ -235,20 +239,21 @@ static void botPlan() {
 // Un paso del bot: rota o se desplaza una celda hacia el objetivo; si ya esta
 // alineado (o atascado por la otra pieza) suelta de golpe y bloquea.
 static void botStep() {
-  if (!botPlanned) botPlan();
+  if (!botPlanned) { botPlan(); botStuck = 0; }
   if (P2.rot != botTargetRot) {
     Piece t = P2; t.rot = (P2.rot + 1) % 4;
-    if (!collides(t, &P1)) { P2.rot = t.rot; return; }
+    if (!collides(t, &P1)) { P2.rot = t.rot; botStuck = 0; return; }
   }
   if (P2.x != botTargetX) {
     int dir = (botTargetX > P2.x) ? 1 : -1;
     Piece t = P2; t.x += dir;
-    if (!collides(t, &P1)) { P2.x = t.x; return; }
-    return;                                        // bloqueado por la otra pieza: esperar
+    if (!collides(t, &P1)) { P2.x = t.x; botStuck = 0; return; }
+    if (++botStuck < 4) return;                    // bloqueado por el jugador: paciencia breve...
   }
-  // alineado -> caida rapida (se fijara en la gravedad si toca pila/suelo)
+  // alineado, o se canso de esperar -> coloca su pieza (juega a su aire)
   dropTo(P2, &P1);
   p2FallAt = 0;
+  botStuck = 0;
 }
 
 // ============================================================
@@ -282,17 +287,17 @@ static void drawGame() {
       if (board[y][x]) cellFilled(x, y);
   drawPiece(P1, true);    // tu pieza: solida
   drawPiece(P2, false);   // la otra: hueca
-  // HUD derecha
-  int hx = BX + BW * CELL + 6;
+  // HUD derecha (compacto)
+  int hx = BX + BW * CELL + 4;
   display.setTextSize(1); display.setTextColor(SH110X_WHITE);
-  display.setCursor(hx, 10);  display.print("PUNTOS");
-  display.setCursor(hx, 20);  display.print(score);
-  display.setCursor(hx, 36);  display.print("LINEAS");
+  display.setCursor(hx, 8);   display.print("PTS");
+  display.setCursor(hx, 18);  display.print(score);
+  display.setCursor(hx, 36);  display.print("LIN");
   display.setCursor(hx, 46);  display.print(lines);
-  display.setCursor(hx, 64);  display.print(p2isBot ? "vs BOT" : "COOP");
+  display.setCursor(hx, 64);  display.print(p2isBot ? "CPU" : "COOP");
   // leyenda piezas
-  display.fillRect(hx, 84, 5, 5, SH110X_WHITE);  display.setCursor(hx + 9, 84); display.print("Tu");
-  display.drawRect(hx, 96, 5, 5, SH110X_WHITE);  display.setCursor(hx + 9, 96); display.print(p2isBot ? "Bot" : "P2");
+  display.fillRect(hx, 86, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 86); display.print("Tu");
+  display.drawRect(hx, 98, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 98); display.print(p2isBot ? "CPU" : "P2");
   display.display();
 }
 
@@ -414,7 +419,7 @@ static int modeSelect() {     // 0=solo, 1=crear(host), 2=unirse(cliente), -1=sa
     int sel = getPotValue(2);
     display.clearDisplay();
     centerPrint("TETRIS COOP", 8, 1);
-    centerPrint(((sel == 0) ? "> " : "  ") + String("Solo (vs Bot)"), 44, 1);
+    centerPrint(((sel == 0) ? "> " : "  ") + String("Jugar con CPU"), 44, 1);
     centerPrint(((sel == 1) ? "> " : "  ") + String("2 Jug: Crear"), 58, 1);
     centerPrint(((sel == 2) ? "> " : "  ") + String("2 Jug: Unirse"), 72, 1);
     centerPrint("Pote: elegir", 96, 1);
@@ -519,7 +524,7 @@ void startTetrisCoop() {
 
       if (playerControl(now) == 1) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
 
-      if (p2isBot && P2.alive && now >= botActAt) { botStep(); botActAt = now + 110; }
+      if (p2isBot && P2.alive && now >= botActAt) { botStep(); botActAt = now + 90; }
       if (host) applyRemoteToP2(now);
 
       if (P1.alive && now >= p1FallAt) { gravityStep(P1, &P2, over, 1, false); p1FallAt = now + gravMs; }
