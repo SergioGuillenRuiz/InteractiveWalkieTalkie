@@ -6,22 +6,36 @@
 #include "framebuffer.h"
 #include "Display.h"   // extern Adafruit_SH1107 display;
 
-// Render con caracteres BRAILLE: cada celda agrupa 2x4 pixeles, asi la pantalla
-// 128x128 ocupa 64x32 caracteres (mitad de alto) y los pixeles quedan cuadrados,
-// muy parecido al tamano real del OLED.
+// Render con MEDIOS BLOQUES: cada caracter pinta 2 pixeles verticales RELLENOS
+// (mitad de arriba / mitad de abajo), asi los pixeles salen CUADRADOS y solidos,
+// igual que el OLED. La pantalla 128x128 ocupa 128x64 caracteres.
 //
-//   distribucion de puntos braille en la celda 2x4 (col x, fila y):
-//      (0,0)=0x01  (1,0)=0x08
-//      (0,1)=0x02  (1,1)=0x10
-//      (0,2)=0x04  (1,2)=0x20
-//      (0,3)=0x40  (1,3)=0x80
-void simRenderTerminal(bool color) {
+//   ' ' = ambos apagados   '▀' U+2580 = arriba   '▄' U+2584 = abajo   '█' U+2588 = ambos
+static void renderHalfBlocks(std::string &out, bool color) {
     const int W = Adafruit_SH1107::W;
     const int H = Adafruit_SH1107::H;
-    std::string out;
-    out.reserve((W / 2 * 3 + 1) * (H / 4 + 1));
+    if (color) out += "\x1b[38;2;210;255;225m";   // color "encendido" parecido al OLED
+    for (int cy = 0; cy < H; cy += 2) {
+        for (int x = 0; x < W; x++) {
+            bool top = display.simPixel(x, cy);
+            bool bot = display.simPixel(x, cy + 1);
+            if (top && bot) { out += (char)0xE2; out += (char)0x96; out += (char)0x88; }      // █
+            else if (top)   { out += (char)0xE2; out += (char)0x96; out += (char)0x80; }      // ▀
+            else if (bot)   { out += (char)0xE2; out += (char)0x96; out += (char)0x84; }      // ▄
+            else            out += ' ';                                                       // apagado = fondo
+        }
+        out += "\n";
+    }
+    if (color) out += "\x1b[0m";
+}
 
-    if (color) out += "\x1b[38;5;48m";
+// Render compacto con BRAILLE: 2x4 pixeles por celda -> 64x32 caracteres. Cabe en
+// ventanas bajas (los puntos se ven redondos). Solo se usa cuando la ventana no
+// tiene alto para el cuadrado, para que NO se corte la parte de arriba.
+static void renderBraille(std::string &out, bool color) {
+    const int W = Adafruit_SH1107::W;
+    const int H = Adafruit_SH1107::H;
+    if (color) out += "\x1b[38;2;210;255;225m";
     for (int cy = 0; cy < H; cy += 4) {
         for (int cx = 0; cx < W; cx += 2) {
             unsigned char b = 0;
@@ -33,7 +47,6 @@ void simRenderTerminal(bool color) {
             if (display.simPixel(cx + 1, cy + 2)) b |= 0x20;
             if (display.simPixel(cx,     cy + 3)) b |= 0x40;
             if (display.simPixel(cx + 1, cy + 3)) b |= 0x80;
-            // U+2800 + b en UTF-8 (3 bytes)
             out += (char)0xE2;
             out += (char)(0xA0 + (b >> 6));
             out += (char)(0x80 + (b & 0x3F));
@@ -41,7 +54,15 @@ void simRenderTerminal(bool color) {
         out += "\n";
     }
     if (color) out += "\x1b[0m";
+}
 
+void simRenderTerminal(bool color, bool compact) {
+    const int W = Adafruit_SH1107::W;
+    const int H = Adafruit_SH1107::H;
+    std::string out;
+    out.reserve((size_t)(W * 3 + 8) * (H / 2 + 1));
+    if (compact) renderBraille(out, color);
+    else         renderHalfBlocks(out, color);
     fputs(out.c_str(), stdout);
     fflush(stdout);
 }

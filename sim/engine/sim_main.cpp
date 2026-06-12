@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
+#include <csignal>
 #include <conio.h>
 #include <thread>
 #include <chrono>
@@ -210,9 +212,63 @@ static void execLine(const std::string &raw) {
 // que las esperas bloqueantes de los juegos/menus reciben las pulsaciones en
 // directo. El render y el ritmo en tiempo real tambien viven en el pump.
 // ---------------------------------------------------------------------------
+// Sube la resolucion del temporizador de Windows a 1 ms (por defecto ~15 ms),
+// para que los sleep cortos del ritmo en tiempo real no se pasen de largo.
+extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int);
+extern "C" __declspec(dllimport) unsigned int __stdcall timeEndPeriod(unsigned int);
+#pragma comment(lib, "winmm.lib")
+
 static int  g_iPot = 512;
 static bool g_iRunning = true;
 static std::chrono::steady_clock::time_point g_iLastRender;
+static std::chrono::steady_clock::time_point g_iRealEpoch;   // ancla de tiempo real
+static uint32_t g_iVirtEpoch = 0;                            // ancla de tiempo virtual
+
+// --- Encuadre: alto/ancho REALES del terminal ---
+// La API de consola da valores erroneos bajo Windows Terminal, asi que medimos
+// con la secuencia DSR: mover el cursor al fondo-derecha y preguntar su posicion.
+static int g_termRows = 0, g_termCols = 0;
+static std::chrono::steady_clock::time_point g_lastProbe;
+
+static void queryTermSize(int timeoutMs) {
+    fputs("\x1b[9999;9999H\x1b[6n", stdout);   // ir al fondo-derecha y pedir posicion
+    fflush(stdout);
+    char buf[40]; int n = 0;
+    auto t0 = std::chrono::steady_clock::now();
+    while (n < 39) {
+        if (_kbhit()) {
+            int c = _getch();
+            if (n == 0 && c != 0x1b) { _ungetch(c); break; }   // era una tecla, no la respuesta
+            buf[n++] = (char)c;
+            if (c == 'R') break;
+        } else if (std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - t0).count() > timeoutMs) {
+            break;   // sin respuesta (timeout)
+        }
+    }
+    buf[n] = 0;
+    const char *p = strchr(buf, '[');
+    int r = 0, c = 0;
+    if (p && sscanf(p + 1, "%d;%d", &r, &c) == 2 && r > 0) { g_termRows = r; g_termCols = c; }
+}
+
+// El cuadrado necesita 128 columnas y 68 filas (128x64 + estado + holgura). Si la
+// ventana no llega, usamos braille para que NO se corte la parte de arriba. Si aun
+// no se ha medido, cuadrado.
+static bool needCompact() {
+    if (g_termRows <= 0) return false;
+    return g_termRows < 68 || g_termCols < 128;
+}
+
+// A tiempo real "de pared" el sim iba mas rapido que la placa (que tiene su
+// propio coste de E/S por vuelta). Este factor calibra el ritmo contra el
+// hardware real: ms virtuales que avanzan por cada ms real.
+static const double VIRT_PER_REAL = 0.6;
+
+static long long iRealMs() {
+    return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now() - g_iRealEpoch).count();
+}
 
 // Reproduccion de teclas con guion (para pruebas/demos sin teclado): lista de
 // (msVirtuales desde el arranque, accion). Accion = una tecla o "pot <valor>".
@@ -274,37 +330,64 @@ static void fireScriptedKeys() {
 }
 
 static void iRender() {
+    // Re-medir el terminal cada ~700 ms para detectar redimensionados. La primera
+    // medida se hace en interactive() ANTES del primer frame, asi que aqui no hay
+    // que medir en la primera vuelta (no hay cambio de modo al arrancar).
+    static int lastCompact = -1;
+    auto nowR = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(nowR - g_lastProbe).count() > 700) {
+        g_lastProbe = nowR;
+        queryTermSize(30);
+    }
+    bool compact = needCompact();
+    if ((int)compact != lastCompact) {   // al cambiar de modo, limpiar restos del anterior
+        printf("\x1b[2J");
+        lastCompact = (int)compact;
+    }
     printf("\x1b[H");   // cursor arriba (redibujado en el sitio)
-    simRenderTerminal(g_color);
+    simRenderTerminal(g_color, compact);
     printf("  t=%lus   pot=%d        \n", (unsigned long)(sim::now() / 1000), sim::getPot());
     printf("  [m] Morse   [n] Finish   [Shift+M / Shift+N] pulsacion larga      \n");
     printf("  [Flecha arriba/abajo] potenciometro   [r] recibir LoRa   [q] salir\n");
+    if (compact) printf("  (ventana baja: vista compacta; agrandala o reduce la fuente para pixeles cuadrados)\n");
     fflush(stdout);
 }
 
 // Llamado por el motor desde cada delay()/advance() (y por el bucle exterior en
-// las iteraciones sin delay). Sondea teclado, redibuja a ~30 fps y duerme en
-// tiempo real para que los juegos vayan a su velocidad natural.
+// las iteraciones sin delay). Sondea teclado, redibuja a ~30 fps y marca el
+// ritmo en tiempo real anclando el reloj virtual al reloj de pared.
 static void interactivePump(uint32_t ms) {
+    (void)ms;
     iHandleKeys();
-    if (g_keysScripted) { fireScriptedKeys(); return; }   // modo prueba: rapido, sin dormir/redibujar
+    if (g_keysScripted) { fireScriptedKeys(); return; }   // modo prueba: rapido
+
     auto nowR = std::chrono::steady_clock::now();
     if (std::chrono::duration_cast<std::chrono::milliseconds>(nowR - g_iLastRender).count() >= 33) {
         g_iLastRender = nowR;
         iRender();
     }
-    uint32_t target = (ms > 120) ? 120 : ms;     // acota esperas largas para no congelar la UI
-    uint32_t slept = 0;
-    while (slept < target && g_iRunning) {
-        uint32_t chunk = (target - slept > 8) ? 8 : (target - slept);
-        std::this_thread::sleep_for(std::chrono::milliseconds(chunk));
-        slept += chunk;
-        iHandleKeys();                           // teclado responsivo incluso durante la espera
+
+    // El tiempo virtual sigue al real segun el factor de calibracion: el objetivo
+    // es virt = VIRT_PER_REAL * real. Si el virtual va por delante, dormimos lo
+    // justo para que el real lo alcance. Es auto-correctivo: si una espera del SO
+    // se pasa de largo, la siguiente vuelta no dormira (sin acumular retraso).
+    double virt  = (double)(sim::now() - g_iVirtEpoch);
+    double real  = (double)iRealMs();
+    double ahead = virt - VIRT_PER_REAL * real;
+    if (ahead > 0.0) {
+        double s = ahead / VIRT_PER_REAL;    // tiempo real que falta para alcanzar el objetivo
+        if (s > 33.0) s = 33.0;              // nunca dormir mucho de golpe: teclado siempre vivo
+        std::this_thread::sleep_for(std::chrono::milliseconds((long long)s));
+        iHandleKeys();
     }
 }
 
+// Restaura el cursor si se sale con Ctrl+C (lo ocultamos durante el render).
+static void iRestoreOnSignal(int) { fputs("\x1b[?25h", stdout); fflush(stdout); _exit(0); }
+
 static void interactive() {
     system("chcp 65001 > nul");
+    if (!g_keysScripted) { printf("\x1b[?25l"); signal(SIGINT, iRestoreOnSignal); }   // ocultar cursor (evita parpadeos del DSR)
     printf("\x1b[2J");
     g_iPot = 512;
     sim::setPot(g_iPot);
@@ -313,17 +396,43 @@ static void interactive() {
     g_iStart = sim::now();
     g_ksIdx = 0;
     g_ksArmed = false;
+    g_iRealEpoch = std::chrono::steady_clock::now();
+    g_iVirtEpoch = sim::now();
+    // Medir el terminal ANTES del primer frame, para arrancar ya en el modo
+    // correcto (cuadrado o compacto) sin un cambio de modo visible al inicio.
+    g_lastProbe = std::chrono::steady_clock::now();
+    if (!g_keysScripted) queryTermSize(150);
+    if (!g_keysScripted) timeBeginPeriod(1);   // temporizador fino (solo en interactivo real)
     sim::clearDeadline();                 // sin deadline: el firmware puede bloquearse esperando al usuario
     sim::setPumpHook(interactivePump);
     while (g_iRunning) {
         try {
             uint32_t before = sim::now();
             loop();
-            if (sim::now() == before) sim::advance(TICK);   // iteracion sin delay -> avanza y bombea
+            if (sim::now() == before) {
+                // El firmware no ha avanzado el reloj (idle). Hay que empujarlo.
+                if (g_keysScripted) {
+                    sim::advance(TICK);                     // modo prueba: rapido
+                } else {
+                    // Tiempo real: avanzar el virtual hasta el objetivo VIRT_PER_REAL*real,
+                    // absorbiendo el coste de dibujar/computar (que consume real sin
+                    // avanzar virtual). Asi las animaciones van a su velocidad natural.
+                    double behind = VIRT_PER_REAL * (double)iRealMs() - (double)(sim::now() - g_iVirtEpoch);
+                    if (behind < 3.0) {                     // al dia: siesta corta (no quemar CPU)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                        behind = VIRT_PER_REAL * (double)iRealMs() - (double)(sim::now() - g_iVirtEpoch);
+                    }
+                    if (behind < 1.0)  behind = 1.0;
+                    if (behind > 50.0) behind = 50.0;       // no saltar mas de 50 ms de golpe
+                    sim::advance((uint32_t)behind);
+                }
+            }
         } catch (sim::Timeout &) { break; }   // solo en modo scripted: fin del guion -> salir limpio
     }
     sim::setPumpHook(nullptr);
     sim::clearDeadline();
+    if (!g_keysScripted) timeEndPeriod(1);
+    if (!g_keysScripted) printf("\x1b[?25h");   // restaurar cursor
     if (g_keysScripted) printf("\n[serial]\n%s\n", sim::serialLog().c_str());
     printf("\n");
 }

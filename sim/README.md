@@ -44,8 +44,12 @@ build.bat              ::  solo compilar -> out\walkie_sim.exe
 [q]                    salir
 ```
 Las teclas también se muestran bajo la pantalla mientras corre. La pantalla OLED
-128×128 se dibuja con caracteres braille (2×4 píxeles por carácter), así ocupa
-64×32 caracteres y los píxeles se ven cuadrados, a tamaño parecido al real.
+128×128 se dibuja con **medios bloques** (`▀ ▄ █`): cada carácter pinta 2 píxeles
+verticales rellenos, así los píxeles salen **cuadrados y sólidos**, igual que el
+OLED real. Ocupa siempre **128×64 caracteres** (alto fijo), por lo que el terminal
+debe tener al menos 128 columnas y ~68 filas; **maximiza la ventana** y, si no
+cabe entera, **reduce la fuente** (Ctrl + −) — eso además hace los píxeles más
+pequeños y más parecidos al hardware.
 
 El modo interactivo corre el firmware en tiempo real y lee el teclado **incluso
 mientras un juego o menú está esperando una pulsación**, de modo que se puede
