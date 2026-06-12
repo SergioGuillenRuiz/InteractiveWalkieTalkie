@@ -319,7 +319,13 @@ static void fireScriptedKeys() {
             int v = atoi(trim(act.substr(3)).c_str());
             g_iPot = v < 0 ? 0 : (v > 1023 ? 1023 : v);
             sim::setPot(g_iPot);
-        } else if (!act.empty()) {
+        } else if (act.rfind("shot", 0) == 0) {
+            doShot(trim(act.substr(4)));            // captura BMP del frame actual
+        } else if (act == "mdown") { sim::setMorse(true); }    // pulsacion mantenida (control fino)
+        else if (act == "mup")     { sim::setMorse(false); }
+        else if (act == "fdown")   { sim::setFinish(true); }
+        else if (act == "fup")     { sim::setFinish(false); }
+        else if (!act.empty()) {
             pressKey((unsigned char)act[0]);
         }
     }

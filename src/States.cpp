@@ -7,6 +7,7 @@
 #include "Historial.h"
 #include "playChoose4Me.h"
 #include "Poker.h"
+#include "RefillGame.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -792,11 +793,15 @@ bool handleGamesMenu() {
                     startPoker();
                     return true;
 
+                case 2: // RefillGame (implementado): gestiona su propia salida a IDLE
+                    startRefillGame();
+                    return true;
+
                 case 3: // Choose4Me (implementado): deja mainState = STATE_IDLE
                     startChoose4Me();
                     return true;
 
-                default: { // Juegos aún no implementados (0, 2, 4)
+                default: { // Juegos aún no implementados (0, 4)
                     Display_clear();
                     display.setCursor(0, 20);
                     display.setTextSize(1);
