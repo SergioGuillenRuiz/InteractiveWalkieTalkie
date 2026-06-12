@@ -54,11 +54,17 @@ static int   bag[7], bagN;
 
 // ---- temporizadores ----
 static unsigned long gravMs;
-static unsigned long p1FallAt, p2FallAt, p1MoveAt, botActAt;
+static unsigned long p1FallAt, p2FallAt, p1MoveAt, botActAt, bot1ActAt;
 
-// ---- bot ----
-static int botTargetX, botTargetRot, botStuck;
-static bool botPlanned;
+// ---- bot (CPU) ----
+struct Bot { int tx, tr; bool planned; unsigned long dropAt; };
+static Bot  botB;                 // controla la pieza P2 (la CPU)
+static Bot  botA;                 // P1 jugada por CPU (solo para validar con 2 CPUs)
+static bool twoBots = false;      // si true, P1 tambien la juega una CPU
+
+// ---- anti-atasco (tablero bloqueado) ----
+static unsigned long lastProgress;
+static int prevP1y, prevP2y, prevLines;
 
 // ---- 2 jugadores por LoRa ----
 static int  remoteTargetX, remoteRot, remoteDrop;   // ultimo input recibido del companero
@@ -175,13 +181,12 @@ static void dropTo(Piece &pc, const Piece *other) {
 
 // Un paso de gravedad. Solo se BLOQUEA si se apoya en la pila o el suelo; si solo
 // le estorba la otra pieza activa, espera (no flota ni se fija en el aire).
-static bool gravityStep(Piece &pc, Piece *other, bool &over, int spawnX, bool isBot) {
+static bool gravityStep(Piece &pc, Piece *other, bool &over, int spawnX) {
   Piece t = pc; t.y++;
   if (!collides(t, other)) { pc.y = t.y; return false; }   // hueco libre: baja
   if (collides(t, NULL)) {                                  // pila/suelo: fijar
     lockPiece(pc);
     applyClearAndScore(clearLines());
-    if (isBot) botPlanned = false;
     if (!spawnPiece(pc, spawnX, other)) over = true;
     return true;
   }
@@ -207,53 +212,79 @@ static float evalBoard(uint8_t b[BH][BW], int justCleared) {
   return -0.510066f * aggH + 0.760666f * justCleared - 0.35663f * holes - 0.184483f * bump;
 }
 
-static void botPlan() {
+// colision contra un tablero dado (sin la otra pieza)
+static bool collidesB(const Piece &pc, uint8_t b[BH][BW]) {
+  for (int i = 0; i < 4; i++) {
+    int cx = pc.x + PIECES[pc.type][pc.rot][i][0];
+    int cy = pc.y + PIECES[pc.type][pc.rot][i][1];
+    if (cx < 0 || cx >= BW || cy >= BH) return true;
+    if (cy >= 0 && b[cy][cx]) return true;
+  }
+  return false;
+}
+static void stampPiece(const Piece &pc, uint8_t b[BH][BW]) {
+  for (int i = 0; i < 4; i++) {
+    int cx = pc.x + PIECES[pc.type][pc.rot][i][0];
+    int cy = pc.y + PIECES[pc.type][pc.rot][i][1];
+    if (cy >= 0 && cy < BH && cx >= 0 && cx < BW) b[cy][cx] = 1;
+  }
+}
+
+static void botPlan(const Piece &me, const Piece *partner, Bot &b) {
+  // Tablero base = pila + donde caeria la pieza del companero. Asi la CPU COOPERA:
+  // completa filas contando con la otra jugada, en vez de construir por su cuenta.
+  uint8_t base[BH][BW];
+  memcpy(base, board, sizeof(board));
+  if (partner && partner->alive) {
+    Piece p = *partner, d = *partner; d.y++;
+    while (!collidesB(d, base)) { p.y = d.y; d.y++; }
+    stampPiece(p, base);
+  }
+
   float best = -1e9f;
-  botTargetRot = P2.rot; botTargetX = P2.x;
+  b.tr = me.rot; b.tx = me.x;
   for (int rot = 0; rot < 4; rot++) {
     for (int x = -2; x < BW; x++) {
-      Piece t; t.type = P2.type; t.rot = rot; t.x = x; t.y = 0; t.alive = true;
-      if (collides(t, NULL)) continue;
-      while (!collides(t, NULL)) t.y++;       // caer
-      t.y--;
+      Piece t; t.type = me.type; t.rot = rot; t.x = x; t.y = 0; t.alive = true;
+      if (collidesB(t, base)) continue;
+      Piece d = t; d.y++;
+      while (!collidesB(d, base)) { t.y = d.y; d.y++; }
       if (t.y < 0) continue;
       uint8_t tmp[BH][BW];
-      memcpy(tmp, board, sizeof(board));
-      for (int i = 0; i < 4; i++) {
-        int cx = t.x + PIECES[t.type][rot][i][0];
-        int cy = t.y + PIECES[t.type][rot][i][1];
-        if (cy >= 0 && cy < BH && cx >= 0 && cx < BW) tmp[cy][cx] = 1;
-      }
-      int cl = clearLinesIn(tmp);          // limpiar antes de puntuar (clave)
+      memcpy(tmp, base, sizeof(base));
+      stampPiece(t, tmp);
+      int cl = clearLinesIn(tmp);
       float s = evalBoard(tmp, cl);
-      if (P1.alive) {                              // deja sitio al jugador: no te pegues a su pieza
-        int d = (P1.x + 2) - (t.x + 2); if (d < 0) d = -d;
-        if (d < 3) s -= (3 - d) * 0.9f;
-      }
-      if (s > best) { best = s; botTargetRot = rot; botTargetX = t.x; }
+      if (s > best) { best = s; b.tr = rot; b.tx = t.x; }
     }
   }
-  botPlanned = true;
+  b.planned = true;
 }
 
 // Un paso del bot: rota o se desplaza una celda hacia el objetivo; si ya esta
 // alineado (o atascado por la otra pieza) suelta de golpe y bloquea.
-static void botStep() {
-  if (!botPlanned) { botPlan(); botStuck = 0; }
-  if (P2.rot != botTargetRot) {
-    Piece t = P2; t.rot = (P2.rot + 1) % 4;
-    if (!collides(t, &P1)) { P2.rot = t.rot; botStuck = 0; return; }
+// El bot coloca arriba RAPIDO (limpio, antes de que la gravedad lo arrastre) pero
+// baja DESPACIO (tranquilo). Asi no se atasca ni se ve frenetico.
+static void botStep(Piece &me, Piece *partner, Bot &b, unsigned long &fallAt) {
+  if (!b.planned) { botPlan(me, partner, b); b.dropAt = millis() + 240; }
+  if (me.rot != b.tr) {                              // 1. rotar (mientras esta arriba)
+    Piece t = me; t.rot = (me.rot + 1) % 4;
+    if (!collides(t, partner)) { me.rot = t.rot; return; }
   }
-  if (P2.x != botTargetX) {
-    int dir = (botTargetX > P2.x) ? 1 : -1;
-    Piece t = P2; t.x += dir;
-    if (!collides(t, &P1)) { P2.x = t.x; botStuck = 0; return; }
-    if (++botStuck < 4) return;                    // bloqueado por el jugador: paciencia breve...
+  if (me.x != b.tx) {                                // 2. acercarse a la columna objetivo
+    int dir = (b.tx > me.x) ? 1 : -1;
+    Piece t = me; t.x += dir;
+    if (!collides(t, partner)) { me.x = t.x; return; }
+    Piece d = me; d.y++;                              // la otra pieza estorba -> esquivar por debajo
+    if (!collides(d, partner)) { me.y = d.y; return; }
   }
-  // alineado, o se canso de esperar -> coloca su pieza (juega a su aire)
-  dropTo(P2, &P1);
-  p2FallAt = 0;
-  botStuck = 0;
+  // 3. ya colocado: bajar una celda a ritmo tranquilo; al apoyarse en pila/suelo, fijar
+  if (millis() >= b.dropAt) {
+    Piece t = me; t.y++;
+    if (!collides(t, partner)) me.y = t.y;
+    else if (collides(t, NULL)) fallAt = 0;
+    b.dropAt = millis() + 220;
+  }
 }
 
 // ============================================================
@@ -510,11 +541,12 @@ void startTetrisCoop() {
     if (host) gravMs = 1100;                          // mas lento: la radio tiene retardo
     bool over = false;
     if (!spawnPiece(P1, 1, NULL) || !spawnPiece(P2, 5, &P1)) over = true;
-    botPlanned = false;
+    botA.planned = botB.planned = false;
     appliedRot = appliedDrop = remoteRot = remoteDrop = 0; remoteTargetX = P2.x;
     unsigned long now = millis();
     p1FallAt = p2FallAt = now + gravMs;
-    p1MoveAt = botActAt = now; lastBcast = lastInput = now;
+    p1MoveAt = botActAt = bot1ActAt = now; lastBcast = lastInput = now;
+    lastProgress = now; prevP1y = P1.y; prevP2y = P2.y; prevLines = lines;
     while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
 
     while (!over) {
@@ -522,15 +554,21 @@ void startTetrisCoop() {
       else backgroundTick();
       now = millis();
 
-      if (playerControl(now) == 1) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
+      if (twoBots) { if (P1.alive && now >= bot1ActAt) { botStep(P1, &P2, botA, p1FallAt); bot1ActAt = now + 90; } }
+      else if (playerControl(now) == 1) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
 
-      if (p2isBot && P2.alive && now >= botActAt) { botStep(); botActAt = now + 90; }
+      if (p2isBot && P2.alive && now >= botActAt) { botStep(P2, &P1, botB, p2FallAt); botActAt = now + 90; }
       if (host) applyRemoteToP2(now);
 
-      if (P1.alive && now >= p1FallAt) { gravityStep(P1, &P2, over, 1, false); p1FallAt = now + gravMs; }
-      if (P2.alive && now >= p2FallAt) { gravityStep(P2, &P1, over, 5, p2isBot); p2FallAt = now + gravMs; }
+      if (P1.alive && now >= p1FallAt) { if (gravityStep(P1, &P2, over, 1)) botA.planned = false; p1FallAt = now + gravMs; }
+      if (P2.alive && now >= p2FallAt) { if (gravityStep(P2, &P1, over, 5)) botB.planned = false; p2FallAt = now + gravMs; }
 
       if (host && now - lastBcast > 280) { tcSend(encodeState(over)); lastBcast = now; }
+
+      // anti-atasco: si nada se mueve durante un rato, el tablero esta bloqueado
+      if (lines != prevLines || P1.y != prevP1y || P2.y != prevP2y) {
+        prevLines = lines; prevP1y = P1.y; prevP2y = P2.y; lastProgress = now;
+      } else if (now - lastProgress > 2200) { over = true; }
 
       drawGame();
       delay(25);
