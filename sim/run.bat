@@ -11,7 +11,10 @@ set "SIM=%~dp0"
 call "%SIM%build.bat"
 if errorlevel 1 exit /b 1
 if "%~1"=="" (
-  "%SIM%out\walkie_sim.exe" --interactive --color
+  REM Forzar consola clasica (conhost): Windows Terminal ignora la API de fuente,
+  REM asi que la usamos para fijar fuente/tamano y ver pixeles CUADRADOS de serie,
+  REM sin tener que reducir el zoom a mano.
+  conhost.exe "%SIM%out\walkie_sim.exe" --interactive --color
 ) else (
   "%SIM%out\walkie_sim.exe" %*
 )

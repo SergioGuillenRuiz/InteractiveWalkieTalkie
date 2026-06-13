@@ -31,6 +31,10 @@ extern void setup();
 extern void loop();
 extern Adafruit_SH1107 display;   // definido en src/Display.cpp
 
+// Configuracion de consola (Windows): fija fuente/tamano para pixeles cuadrados.
+// Devuelve el tamano resultante en caracteres (0 si no aplica, p.ej. en WT).
+extern "C" void simSetupConsole(int wantCols, int wantRows, int *outCols, int *outRows);
+
 // ---------------------------------------------------------------------------
 // Estado del driver
 // ---------------------------------------------------------------------------
@@ -404,10 +408,22 @@ static void interactive() {
     g_ksArmed = false;
     g_iRealEpoch = std::chrono::steady_clock::now();
     g_iVirtEpoch = sim::now();
-    // Medir el terminal ANTES del primer frame, para arrancar ya en el modo
-    // correcto (cuadrado o compacto) sin un cambio de modo visible al inicio.
+    // Ajustar la consola (consola clasica): fija fuente y tamano para que quepa
+    // el render cuadrado (128x68) sin tocar el zoom a mano. En Windows Terminal
+    // es no-op y caemos a medir por DSR. Luego pintamos YA el primer frame para
+    // que no se quede en negro hasta pulsar una tecla.
     g_lastProbe = std::chrono::steady_clock::now();
-    if (!g_keysScripted) queryTermSize(150);
+    if (!g_keysScripted) {
+        int cc = 0, rr = 0;
+        simSetupConsole(130, 70, &cc, &rr);
+        if (cc >= 128 && rr >= 68) { g_termCols = cc; g_termRows = rr; }
+        else {
+            fputs("\x1b[8;70;132t", stdout); fflush(stdout);   // pedir tamano a Windows Terminal
+            queryTermSize(150);
+        }
+        printf("\x1b[2J");
+        iRender();          // primer frame inmediato
+    }
     if (!g_keysScripted) timeBeginPeriod(1);   // temporizador fino (solo en interactivo real)
     sim::clearDeadline();                 // sin deadline: el firmware puede bloquearse esperando al usuario
     sim::setPumpHook(interactivePump);
