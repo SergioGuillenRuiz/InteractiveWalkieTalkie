@@ -12,11 +12,13 @@
 #include <cstdlib>
 #include <csignal>
 #include <conio.h>
+#include <process.h>
 #include <thread>
 #include <chrono>
 
 #include "sim_state.h"
 #include "framebuffer.h"
+#include "air_channel.h"
 #include "EEPROM.h"
 #include "SimpleCrypto.h"      // String SimpleCrypto_encrypt/decrypt
 #include <Adafruit_SH110X.h>   // tipo del display
@@ -191,6 +193,21 @@ static void execLine(const std::string &raw) {
             printf("  LoRa TX (hex)=%s  descifrado=\"%s\"\n", last.c_str(), dec.c_str());
         }
     }
+    else if (cmd == "chatmsg") {   // inyecta un MENSAJE de chat de un peer: chatmsg <emisor> <msgId> <texto>
+        int sender = 0, mid = 0; is >> sender >> mid;
+        std::string txt = restAfter(line, 3);
+        String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
+        String enc = SimpleCrypto_encrypt(p);
+        simLoraInject(std::string(enc.c_str(), enc.length()));
+        printf("  Chat MSG inyectado de #%d (msg %d): \"%s\"\n", sender, mid, txt.c_str());
+    }
+    else if (cmd == "chatack") {   // inyecta un ACK de un peer: chatack <destino> <msgId>
+        int target = 0, mid = 0; is >> target >> mid;
+        String p; p += (char)0x06; p += (char)target; p += (char)mid;
+        String enc = SimpleCrypto_encrypt(p);
+        simLoraInject(std::string(enc.c_str(), enc.length()));
+        printf("  Chat ACK inyectado para #%d (msg %d)\n", target, mid);
+    }
     else if (cmd == "screen") { simRenderTerminal(g_color); }
     else if (cmd == "text") { printf("  [texto pantalla] \"%s\"\n", display.simText().c_str()); }
     else if (cmd == "serial") { printf("%s", sim::serialLog().c_str()); }
@@ -334,6 +351,21 @@ static void fireScriptedKeys() {
             String p = String("HR"); p += (char)0xAB;          // id de companero ficticio
             String e = SimpleCrypto_encrypt(p);
             simLoraInject(std::string(e.c_str(), e.length()), rssi);
+        }
+        else if (act.rfind("cmsg", 0) == 0) {                  // mensaje de chat de un peer: cmsg <emisor> <msgId> <texto>
+            std::istringstream as(act.substr(4));
+            int sender = 0, mid = 0; as >> sender >> mid;
+            std::string txt; std::getline(as, txt); txt = trim(txt);
+            String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
+            String e = SimpleCrypto_encrypt(p);
+            simLoraInject(std::string(e.c_str(), e.length()));
+        }
+        else if (act.rfind("cack", 0) == 0) {                  // ACK de un peer: cack <destino> <msgId>
+            std::istringstream as(act.substr(4));
+            int target = 0, mid = 0; as >> target >> mid;
+            String p; p += (char)0x06; p += (char)target; p += (char)mid;
+            String e = SimpleCrypto_encrypt(p);
+            simLoraInject(std::string(e.c_str(), e.length()));
         }
         else if (!act.empty()) {
             pressKey((unsigned char)act[0]);
@@ -486,6 +518,8 @@ int main(int argc, char **argv) {
     std::string scriptPath;
     std::string eepromPath = base + "\\eeprom.bin";
     bool interactiveMode = false, fresh = false;
+    std::string airDir, airNode;
+    int airRssi = -50;
 
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -509,7 +543,16 @@ int main(int argc, char **argv) {
         else if (a == "--eeprom" && i + 1 < argc) eepromPath = argv[++i];
         else if (a == "--shots" && i + 1 < argc) g_shotsDir = argv[++i];
         else if (a == "--scale" && i + 1 < argc) g_scale = atoi(argv[++i]);
+        else if (a == "--air" && i + 1 < argc) airDir = argv[++i];     // directorio del "aire" compartido
+        else if (a == "--node" && i + 1 < argc) airNode = argv[++i];   // etiqueta unica del dispositivo
+        else if (a == "--rssi" && i + 1 < argc) airRssi = atoi(argv[++i]); // dBm con que oyen los demas
         else if (!a.empty() && a[0] != '-') scriptPath = a;
+    }
+
+    // Aire compartido entre procesos (comunicacion real multi-dispositivo).
+    if (!airDir.empty()) {
+        if (airNode.empty()) airNode = "p" + std::to_string(_getpid());
+        air_init(airDir.c_str(), airNode.c_str(), airRssi);
     }
 
     EEPROM.setBackingFile(eepromPath.c_str());

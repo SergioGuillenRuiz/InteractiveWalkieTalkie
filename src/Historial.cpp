@@ -2,33 +2,47 @@
 #include <EEPROM.h>
 
 // ============================================================
-// CONFIGURACIÓN
+// CONFIGURACION
 // ============================================================
 #define MAX_MSG_LENGTH 100                       // chars por mensaje (incluye terminador)
-#define MAX_MESSAGES   10                        // mensajes máximo
-// Cada slot: 4 bytes timestamp + 1 byte longitud + texto + '\0'
-#define MSG_SLOT_SIZE  (MAX_MSG_LENGTH + 5)
-#define EEPROM_SIZE    (MSG_SLOT_SIZE * MAX_MESSAGES)
+#define MAX_MESSAGES   10                        // mensajes maximo
 
-// Historial en RAM. Almacenado de forma lineal y cronológica:
-//   índice 0           = mensaje más ANTIGUO
-//   índice count-1     = mensaje más RECIENTE
-// (la API expone el índice 0 como el más reciente, ver History_getMessage)
+// Cabecera: 3 bytes de magia + 1 de version. Si no coincide al cargar, la EEPROM
+// es de un formato antiguo (o esta sin inicializar) y se reformatea vacia.
+#define HDR_SIZE       4
+static const uint8_t MAGIC[3] = { 'W', 'M', '2' };   // Walkie Messages v2
+#define FORMAT_VERSION 1
+
+// Cada slot: 4B timestamp + 1B flags + 1B sender + 1B longitud + texto + '\0'
+#define MSG_SLOT_SIZE  (4 + 1 + 1 + 1 + MAX_MSG_LENGTH)
+#define EEPROM_SIZE    (HDR_SIZE + MSG_SLOT_SIZE * MAX_MESSAGES)
+
+#define FLAG_OUTGOING  0x01                       // bit0: el mensaje lo envie yo
+
+// Historial en RAM (cronologico): 0 = mas antiguo, count-1 = mas reciente.
+// (la API expone el indice 0 como el mas RECIENTE)
 static String        messageHistory[MAX_MESSAGES];
 static unsigned long messageTime[MAX_MESSAGES];
+static uint8_t       messageFlags[MAX_MESSAGES];
+static uint8_t       messageSender[MAX_MESSAGES];
+static bool          messageThisBoot[MAX_MESSAGES];   // RAM: recibido/enviado en esta sesion
 static int           messageCount = 0;
 
 // ============================================================
-// FUNCIONES EEPROM (asumen EEPROM.begin() ya llamado)
+// EEPROM (asumen EEPROM.begin() ya llamado)
 // ============================================================
+static int slotAddr(int slot) { return HDR_SIZE + slot * MSG_SLOT_SIZE; }
 
-static void writeSlot(int slot, const String &msg, unsigned long timestamp) {
-    int addr = slot * MSG_SLOT_SIZE;
+static void writeSlot(int slot, const String &msg, unsigned long ts, uint8_t flags, uint8_t sender) {
+    int addr = slotAddr(slot);
 
-    EEPROM.write(addr++, (timestamp >> 24) & 0xFF);
-    EEPROM.write(addr++, (timestamp >> 16) & 0xFF);
-    EEPROM.write(addr++, (timestamp >> 8) & 0xFF);
-    EEPROM.write(addr++, timestamp & 0xFF);
+    EEPROM.write(addr++, (ts >> 24) & 0xFF);
+    EEPROM.write(addr++, (ts >> 16) & 0xFF);
+    EEPROM.write(addr++, (ts >> 8) & 0xFF);
+    EEPROM.write(addr++, ts & 0xFF);
+
+    EEPROM.write(addr++, flags);
+    EEPROM.write(addr++, sender);
 
     uint8_t len = (uint8_t)min((size_t)msg.length(), (size_t)(MAX_MSG_LENGTH - 1));
     EEPROM.write(addr++, len);
@@ -37,15 +51,18 @@ static void writeSlot(int slot, const String &msg, unsigned long timestamp) {
     EEPROM.write(addr + len, '\0');
 }
 
-static bool readSlot(int slot, String &msg, unsigned long &timestamp) {
-    int addr = slot * MSG_SLOT_SIZE;
+static bool readSlot(int slot, String &msg, unsigned long &ts, uint8_t &flags, uint8_t &sender) {
+    int addr = slotAddr(slot);
 
-    timestamp  = (unsigned long)EEPROM.read(addr++) << 24;
-    timestamp |= (unsigned long)EEPROM.read(addr++) << 16;
-    timestamp |= (unsigned long)EEPROM.read(addr++) << 8;
-    timestamp |= (unsigned long)EEPROM.read(addr++);
+    ts  = (unsigned long)EEPROM.read(addr++) << 24;
+    ts |= (unsigned long)EEPROM.read(addr++) << 16;
+    ts |= (unsigned long)EEPROM.read(addr++) << 8;
+    ts |= (unsigned long)EEPROM.read(addr++);
 
-    if (timestamp == 0xFFFFFFFF) return false;   // slot vacío
+    if (ts == 0xFFFFFFFF) return false;   // slot vacio
+
+    flags  = EEPROM.read(addr++);
+    sender = EEPROM.read(addr++);
 
     uint8_t len = EEPROM.read(addr++);
     if (len == 0 || len > MAX_MSG_LENGTH - 1) return false;
@@ -59,32 +76,54 @@ static bool readSlot(int slot, String &msg, unsigned long &timestamp) {
     return true;
 }
 
-// Persiste todo el historial en una sola operación de flash.
+static bool magicOk() {
+    for (int i = 0; i < 3; i++) if (EEPROM.read(i) != MAGIC[i]) return false;
+    return true;
+}
+
+static void writeHeader() {
+    for (int i = 0; i < 3; i++) EEPROM.write(i, MAGIC[i]);
+    EEPROM.write(3, FORMAT_VERSION);
+}
+
+// Persiste todo el historial en una sola operacion de flash.
 static void saveAll() {
     EEPROM.begin(EEPROM_SIZE);
+    writeHeader();
     for (int i = 0; i < MAX_MESSAGES; i++) {
-        if (i < messageCount) writeSlot(i, messageHistory[i], messageTime[i]);
-        else                  writeSlot(i, "", 0xFFFFFFFF);   // marcar vacío
+        if (i < messageCount) writeSlot(i, messageHistory[i], messageTime[i], messageFlags[i], messageSender[i]);
+        else                  writeSlot(i, "", 0xFFFFFFFF, 0, 0);   // marcar vacio
     }
     EEPROM.commit();
     EEPROM.end();
 }
 
 // ============================================================
-// FUNCIONES PÚBLICAS
+// API PUBLICA
 // ============================================================
-
-// 1. Cargar todo al iniciar
 void History_load() {
     messageCount = 0;
 
     EEPROM.begin(EEPROM_SIZE);
+
+    if (!magicOk()) {
+        // Formato antiguo o EEPROM virgen: reformatear vacio.
+        writeHeader();
+        for (int i = 0; i < MAX_MESSAGES; i++) writeSlot(i, "", 0xFFFFFFFF, 0, 0);
+        EEPROM.commit();
+        EEPROM.end();
+        Serial.println("[Historial] EEPROM inicializada (formato nuevo)");
+        return;
+    }
+
     for (int i = 0; i < MAX_MESSAGES; i++) {
-        String msg;
-        unsigned long timestamp;
-        if (readSlot(i, msg, timestamp)) {
+        String msg; unsigned long ts; uint8_t flags, sender;
+        if (readSlot(i, msg, ts, flags, sender)) {
             messageHistory[messageCount] = msg;
-            messageTime[messageCount]    = timestamp;
+            messageTime[messageCount]    = ts;
+            messageFlags[messageCount]   = flags;
+            messageSender[messageCount]  = sender;
+            messageThisBoot[messageCount] = false;   // cargado de antes -> antiguedad no fiable
             messageCount++;
         }
     }
@@ -95,34 +134,46 @@ void History_load() {
     Serial.println(" mensajes");
 }
 
-// 2. Añadir mensaje (guarda automáticamente en EEPROM)
-void History_addMessage(const String &msg) {
+// Nucleo de insercion: anade un mensaje con sus metadatos y lo persiste.
+static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
     if (msg.length() == 0) return;
 
     String shortMsg = msg;
     if (shortMsg.length() > MAX_MSG_LENGTH - 1)
         shortMsg = shortMsg.substring(0, MAX_MSG_LENGTH - 1);
 
-    unsigned long timestamp = millis();
+    unsigned long ts = millis();
 
     if (messageCount < MAX_MESSAGES) {
-        // Hay hueco: añadir al final y guardar sólo ese slot
-        messageHistory[messageCount] = shortMsg;
-        messageTime[messageCount]    = timestamp;
+        // Hay hueco: anadir al final y guardar solo ese slot
+        int i = messageCount;
+        messageHistory[i]  = shortMsg;
+        messageTime[i]     = ts;
+        messageFlags[i]    = flags;
+        messageSender[i]   = sender;
+        messageThisBoot[i] = true;
         messageCount++;
 
         EEPROM.begin(EEPROM_SIZE);
-        writeSlot(messageCount - 1, shortMsg, timestamp);
+        writeHeader();
+        writeSlot(i, shortMsg, ts, flags, sender);
         EEPROM.commit();
         EEPROM.end();
     } else {
-        // Buffer lleno: descartar el más antiguo y desplazar el resto
+        // Buffer lleno: descartar el mas antiguo y desplazar el resto
         for (int i = 0; i < MAX_MESSAGES - 1; i++) {
-            messageHistory[i] = messageHistory[i + 1];
-            messageTime[i]    = messageTime[i + 1];
+            messageHistory[i]  = messageHistory[i + 1];
+            messageTime[i]     = messageTime[i + 1];
+            messageFlags[i]    = messageFlags[i + 1];
+            messageSender[i]   = messageSender[i + 1];
+            messageThisBoot[i] = messageThisBoot[i + 1];
         }
-        messageHistory[MAX_MESSAGES - 1] = shortMsg;
-        messageTime[MAX_MESSAGES - 1]    = timestamp;
+        int last = MAX_MESSAGES - 1;
+        messageHistory[last]  = shortMsg;
+        messageTime[last]     = ts;
+        messageFlags[last]    = flags;
+        messageSender[last]   = sender;
+        messageThisBoot[last] = true;
         saveAll();
     }
 
@@ -130,41 +181,59 @@ void History_addMessage(const String &msg) {
     Serial.println(shortMsg);
 }
 
-// 3. Obtener mensaje (índice 0 = más reciente)
+void History_addIncoming(const String &msg, uint8_t sender) { addEntry(msg, 0, sender); }
+void History_addOutgoing(const String &msg)                 { addEntry(msg, FLAG_OUTGOING, 0); }
+void History_addMessage(const String &msg)                  { addEntry(msg, 0, 0); }
+
 String History_getMessage(int index) {
     if (index < 0 || index >= messageCount) return "";
     return messageHistory[messageCount - 1 - index];
 }
 
-// 4. Obtener timestamp del mensaje (índice 0 = más reciente)
 unsigned long History_getTimestamp(int index) {
     if (index < 0 || index >= messageCount) return 0;
     return messageTime[messageCount - 1 - index];
 }
 
-// 5. Contar mensajes
-int History_count() {
-    return messageCount;
+bool History_isOutgoing(int index) {
+    if (index < 0 || index >= messageCount) return false;
+    return (messageFlags[messageCount - 1 - index] & FLAG_OUTGOING) != 0;
 }
 
-// 6. Borrar mensaje (índice 0 = más reciente)
+uint8_t History_getSender(int index) {
+    if (index < 0 || index >= messageCount) return 0;
+    return messageSender[messageCount - 1 - index];
+}
+
+bool History_isFromThisBoot(int index) {
+    if (index < 0 || index >= messageCount) return false;
+    return messageThisBoot[messageCount - 1 - index];
+}
+
+int History_count() { return messageCount; }
+
 void History_deleteMessage(int index) {
     if (index < 0 || index >= messageCount) {
         Serial.println("[Historial] Indice invalido para borrar");
         return;
     }
 
-    int realIndex = messageCount - 1 - index;   // posición real en el array
+    int realIndex = messageCount - 1 - index;
 
-    // Desplazar los posteriores una posición hacia atrás para tapar el hueco
     for (int i = realIndex; i < messageCount - 1; i++) {
-        messageHistory[i] = messageHistory[i + 1];
-        messageTime[i]    = messageTime[i + 1];
+        messageHistory[i]  = messageHistory[i + 1];
+        messageTime[i]     = messageTime[i + 1];
+        messageFlags[i]    = messageFlags[i + 1];
+        messageSender[i]   = messageSender[i + 1];
+        messageThisBoot[i] = messageThisBoot[i + 1];
     }
 
     messageCount--;
-    messageHistory[messageCount] = "";
-    messageTime[messageCount]    = 0;
+    messageHistory[messageCount]  = "";
+    messageTime[messageCount]     = 0;
+    messageFlags[messageCount]    = 0;
+    messageSender[messageCount]   = 0;
+    messageThisBoot[messageCount] = false;
 
     saveAll();
 

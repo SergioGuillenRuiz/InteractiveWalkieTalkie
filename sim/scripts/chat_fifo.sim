@@ -1,0 +1,33 @@
+# ============================================================
+#  Historial FIFO: se reciben 11 mensajes pero solo caben 10; el mas antiguo
+#  se descarta y los metadatos del resto se conservan.
+# ============================================================
+wait 300
+
+chatmsg 60 1 uno
+chatmsg 60 2 dos
+chatmsg 60 3 tres
+chatmsg 60 4 cuatro
+chatmsg 60 5 cinco
+chatmsg 60 6 seis
+chatmsg 60 7 siete
+chatmsg 60 8 ocho
+chatmsg 60 9 nueve
+chatmsg 60 10 diez
+chatmsg 60 11 once
+wait 800
+
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text once            # el mas reciente
+
+# Desplazar al mas antiguo guardado y comprobar la expulsion del primero
+pot 1023
+wait 400
+expect text dos             # el mas antiguo que SIGUE en el historial
+expect notext uno           # "uno" fue descartado (FIFO)
+shot chat_fifo
+print FIFO del historial (10 max, cae el mas viejo) OK

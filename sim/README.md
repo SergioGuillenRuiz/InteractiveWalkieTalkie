@@ -63,6 +63,47 @@ desde el arranque y la acción es una tecla (`m`, `n`, `M`, `N`, `r`, `q`) o
 `pot <valor>`. Útil para reproducir un fallo o grabar una demo de un juego.
 Conviene maximizar la ventana del terminal (necesita ~34 líneas de alto).
 
+## Comunicación multi-dispositivo (varios equipos a la vez)
+
+Para probar la comunicación **real** entre equipos, el simulador puede unir varios
+procesos en un **"aire" compartido**: lo que **transmite** un dispositivo lo
+**reciben** todos los demás (menos él mismo, half-duplex), igual que la difusión
+RF real. Cada proceso es un dispositivo **independiente y real**: su propio
+firmware, su propia EEPROM y su propia identidad de equipo (`Device_id`).
+
+No es una maqueta: el cifrado AES, el sobre de chat, el auto-ACK de entrega y el
+historial son los mismos que en la placa. Lo único simulado es el medio (un
+directorio donde cada transmisión es un fichero de paquete que los demás leen).
+
+### Interactivo — varias ventanas que se hablan
+
+```bat
+cd sim
+net.bat 3      ::  abre 3 dispositivos, cada uno en su ventana, comunicados por radio
+net.bat        ::  por defecto, 2 dispositivos
+```
+
+Cada ventana es un equipo con su teclado (`m`/`n`, mayúsculas para pulsación larga,
+flechas para el potenciómetro, `q` para salir). Envía un mensaje desde uno y
+aparecerá en el historial de los demás; verás la confirmación **"Entregado"** en
+el emisor cuando otro equipo lo recibe.
+
+### Automatizado — para testear futuras funciones de comunicación
+
+`net_test.ps1` lanza varios dispositivos en paralelo (sin teclado), conduce un
+intercambio y comprueba aserciones sobre lo que cada uno recibió. Es la **plantilla
+para probar futuras funciones** que impliquen a más de un equipo:
+
+```bat
+cd sim
+powershell -ExecutionPolicy Bypass -File net_test.ps1
+```
+
+Lanza 3 equipos reales; el #1 difunde un mensaje y se verifica que #2 y #3 lo
+reciben y que el #1 recibe el ACK de ambos. Internamente cada equipo corre en modo
+`--keys` (tiempo real, con guion de teclas) y comparte el aire con
+`--air <dir> --node <id>`; su salida serie se vuelca a un fichero y se comprueba.
+
 ## Tests automatizados
 
 Los scripts viven en `scripts/*.sim`. Cada uno conduce el firmware y comprueba
@@ -75,6 +116,7 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `send_morse.sim`   | Crear una letra en Morse y enviarla |
 | `lora_rx.sim`      | Recepción LoRa: descifrado y guardado en historial |
 | `history.sim`      | Recibir varios mensajes, verlos y borrar uno |
+| `chat.sim`         | Chat: id de emisor, auto-ACK, enviados en historial, entrega y fechas tras reinicio |
 | `sleep_wake.sim`   | Suspensión por inactividad y despertar con 3 pulsaciones |
 | `games.sim`        | Poker, Choose4Me y juego "Próximamente" (incluye regresiones) |
 
@@ -114,6 +156,8 @@ lora rx <texto>     inyecta un mensaje entrante (lo cifra con la clave del firmw
 lora rxraw <hex>    inyecta bytes crudos
 lora loopback on|off  reenvía lo transmitido como recibido
 lora sent           muestra el último paquete transmitido (y su descifrado)
+chatmsg <emisor> <msgId> <texto>   inyecta un MENSAJE de chat de un peer (con sobre)
+chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de entrega)
 ```
 
 **Inspección y aserciones**
@@ -154,8 +198,13 @@ walkie_sim.exe [script.sim] [opciones]
   --eeprom <fich>   fichero de respaldo de EEPROM (por defecto out\eeprom.bin)
   --shots <dir>     carpeta de capturas (por defecto la del .exe)
   --scale <n>       escala de las capturas BMP (por defecto 4 -> 512×512)
+  --air <dir>       conecta este dispositivo al "aire" compartido (radio multi-dispositivo)
+  --node <etiqueta> identidad única en el aire (para no oír lo propio)
+  --rssi <dBm>      potencia con que los demás oyen sus transmisiones (por defecto -50)
 ```
 Sin script y sin `--interactive`, lee comandos por la entrada estándar.
+Para dar un id de equipo distinto a cada dispositivo, exporta `SIM_CHIPID` antes de
+lanzarlo (`Device_id()` lo deriva de ahí en el simulador).
 
 ## Fidelidad respecto al hardware real
 
@@ -167,7 +216,7 @@ Sin script y sin `--interactive`, lee comandos por la entrada estándar.
 | Historial / EEPROM | respaldado en fichero; persiste entre ejecuciones |
 | Botones (antirrebote) | reloj virtual; el antirrebote se ejerce de verdad |
 | Potenciómetro | valor 0–1023 controlable |
-| LoRa (SX1276) | mock: captura TX, inyecta RX, eco opcional |
+| LoRa (SX1276) | mock: captura TX, inyecta RX, eco opcional; **aire compartido real entre varios procesos** (`--air`) |
 | Tiempos | reloj virtual determinista (no en tiempo real, salvo modo interactivo) |
 
 Diferencias: no se simula el RF físico (ruido, alcance), ni el ruido del ADC, ni

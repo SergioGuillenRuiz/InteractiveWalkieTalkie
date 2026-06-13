@@ -1,0 +1,78 @@
+# ============================================================
+#  Chat avanzado: id de emisor, auto-ACK, mensajes enviados en el
+#  historial, confirmacion de entrega, y antiguedad fiable tras reinicio.
+#
+#  El id propio se deriva del chip; en el simulador sin SIM_CHIPID es 137.
+# ============================================================
+wait 300
+expect serial Equipo #137
+
+# --- Recibir un mensaje de un peer #50: se guarda y se auto-confirma (ACK) ---
+chatmsg 50 7 hola amigo
+wait 400
+expect serial Guardado: hola amigo
+expect serial ACK a #50
+
+# Verlo en el historial y abrir el detalle -> debe indicar el emisor "De #50"
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text hola amigo
+in 0 morse down
+in 150 morse up
+run 600
+expect text De #50
+shot chat_detail_in
+# volver a la lista y salir a IDLE
+in 0 finish down
+in 150 finish up
+run 500
+in 0 finish down
+in 150 finish up
+run 500
+
+# --- Enviar "happy": va al historial como ENVIADO y queda pendiente de ACK ---
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+pot 1023
+wait 200
+tap morse
+wait 250
+pot 585
+wait 250
+expect text happy
+in 0 morse down
+in 120 morse up
+run 400
+expect text Enviado
+expect serial Chat] Enviando: happy
+expect serial Guardado: happy
+
+# El peer confirma la entrega (destino = mi id 137, msgId = 1 = primer envio)
+chatack 137 1
+wait 300
+expect serial Confirmado: entregado
+
+# Salir a IDLE
+in 0 finish down
+in 150 finish up
+run 600
+
+# --- Reinicio: persiste todo y las fechas viejas pasan a "--" (no basura) ---
+reboot
+wait 300
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text Tu:happy
+expect text hola amigo
+expect text --
+shot chat_after_reboot
+print Chat: emisor, auto-ACK, enviados en historial, entrega y fechas-tras-reinicio OK

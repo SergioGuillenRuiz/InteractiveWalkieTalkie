@@ -1,9 +1,12 @@
 // Implementación del mock de radio LoRa.
 #include <string>
 #include <deque>
+#include <vector>
+#include <utility>
 
 #include "LoRa.h"
 #include "sim_state.h"
+#include "air_channel.h"
 
 namespace {
 struct Pkt { std::string data; int rssi; };
@@ -24,12 +27,18 @@ size_t LoRaClass::write(uint8_t b) { g_txAccum += (char)b; return 1; }
 
 int LoRaClass::endPacket(bool /*async*/) {
     g_lastSent = g_txAccum;
-    if (g_loopback) g_rx.push_back({g_txAccum, -42});   // eco: lo enviado vuelve como recibido
+    if (air_enabled())   air_publish(g_txAccum);        // difusion al resto de dispositivos
+    else if (g_loopback) g_rx.push_back({g_txAccum, -42});   // eco: lo enviado vuelve como recibido
     g_txAccum.clear();
     return 1;
 }
 
 int LoRaClass::parsePacket(int /*size*/) {
+    if (air_enabled()) {                                // recoger lo que han emitido los demas
+        std::vector<std::pair<std::string, int>> pkts;
+        air_poll(pkts);
+        for (auto &p : pkts) g_rx.push_back({p.first, p.second});
+    }
     if (g_rx.empty()) return 0;
     g_curRx = g_rx.front().data;
     g_curRssi = g_rx.front().rssi;

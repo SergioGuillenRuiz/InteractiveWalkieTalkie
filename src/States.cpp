@@ -5,6 +5,8 @@
 #include "Morse.h"
 #include "Inputs.h"
 #include "Historial.h"
+#include "Chat.h"
+#include "Identity.h"
 #include "playChoose4Me.h"
 #include "Poker.h"
 #include "RefillGame.h"
@@ -44,11 +46,27 @@ void backgroundTick() {
     Lora_update();
 
     if (Lora_hasMessage()) {
-        String msg = Lora_readMessage();
-        History_addMessage(msg);
-        lastTimeReceived = millis();
-        // El aviso visual (animación) solo tiene sentido en la pantalla principal
-        if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+        String raw = Lora_readMessage();
+        String text; uint8_t sender = 0, msgId = 0;
+        ChatKind kind = Chat_parse(raw, text, sender, msgId);
+
+        if (kind == CHAT_ACK) {
+            // Confirmacion de entrega de un mensaje que enviamos: no es un mensaje
+            // nuevo, solo actualiza el estado de "Entregado".
+            Chat_noteAck(sender, msgId);
+        } else if (kind == CHAT_MSG) {
+            if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
+                History_addIncoming(text, sender);
+                Chat_sendAck(sender, msgId);    // confirmar recepcion al emisor
+                lastTimeReceived = millis();
+                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+            }
+        } else {
+            // Mensaje plano/legado (sin sobre): comportamiento anterior.
+            History_addIncoming(raw, 0);
+            lastTimeReceived = millis();
+            if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+        }
     }
 
     Display_update();
@@ -58,33 +76,70 @@ void backgroundTick() {
 // AYUDANTES INTERNOS
 //=============================================================
 
+// --- Pantalla de resultado de envío, con confirmación de entrega (ACK) ---
+// Tras enviar mostramos "Enviado / esperando confirm..."; si llega el ACK del
+// receptor pasa a "Entregado!"; si no llega en unos segundos, "(sin confirmar)".
+static String        g_resMsg;
+static bool          g_resIsSend = false;   // el último resultado fue un envío correcto
+static unsigned long g_resAt = 0;
+static int           g_resPhase = 0;        // 0=esperando ACK, 1=entregado, 2=sin confirmar
+
+static void drawSendResult(int phase) {
+    Display_clear();
+    display.setCursor(0, 0);
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    display.println(phase == 1 ? "Entregado!" : "Enviado:");
+    display.println(g_resMsg);
+    display.println();
+    if (phase == 0)      display.println("esperando confirm...");
+    else if (phase == 2) display.println("(sin confirmar)");
+    else                 display.println("visto por el otro");
+    display.display();
+}
+
+// Refresca la pantalla de resultado si cambia el estado de entrega. No hace nada
+// si el último resultado no fue un envío (p.ej. "Cancelado").
+static void updateSendResultScreen() {
+    if (!g_resIsSend || g_resPhase != 0) return;
+    if (Chat_awaitingAck() && Chat_delivered()) { g_resPhase = 1; drawSendResult(1); }
+    else if (millis() - g_resAt > 3000)         { g_resPhase = 2; drawSendResult(2); }
+}
+
 // Espera (sin bloquear la recepción) hasta que se pulse un botón.
 // Devuelve true si se pulsó MORSE (repetir), false si FINISH (salir).
 static bool waitButtonMorseOrFinish() {
     while (!isMorsePressed() && !isFinishPressed()) {
         backgroundTick();
+        updateSendResultScreen();
         yield();
         delay(10);
     }
     return isMorsePressed();
 }
 
-// Envía un mensaje y muestra el resultado (Enviado / Error) en pantalla.
+// Envía un mensaje de chat y muestra el resultado. El mensaje se guarda también
+// en el historial como ENVIADO (Chat_send) y se arma la espera del ACK.
 static void sendAndShowResult(const String &mensaje) {
-    bool ok = Lora_send(mensaje);
+    Chat_resetPending();
+    bool ok = Chat_send(mensaje);
     if (ok) triggerAnimation(ANIM_GIVING_HEART);
 
-    Display_clear();
-    display.setCursor(0, 0);
-    display.setTextSize(1);
-    display.setTextColor(SH110X_WHITE);
+    g_resMsg = mensaje;
+    g_resIsSend = ok;
+    g_resAt = millis();
+    g_resPhase = 0;
+
     if (ok) {
-        display.println("Enviado:");
-        display.println(mensaje);
+        drawSendResult(0);
     } else {
+        Display_clear();
+        display.setCursor(0, 0);
+        display.setTextSize(1);
+        display.setTextColor(SH110X_WHITE);
         display.println("Error al enviar");
+        display.display();
     }
-    display.display();
 }
 
 // Reinicia las variables de creación del mensaje Morse.
@@ -102,12 +157,14 @@ static void resetMorseState() {
 static bool waitAfterResult() {
     unsigned long shownAt = millis();
     while (isMorsePressed() || isFinishPressed()) {   // soltar el botón
-        backgroundTick(); yield(); delay(10);
+        backgroundTick(); updateSendResultScreen(); yield(); delay(10);
     }
     while (millis() - shownAt < RESULT_MIN_MS) {       // tiempo mínimo visible
-        backgroundTick(); yield(); delay(10);
+        backgroundTick(); updateSendResultScreen(); yield(); delay(10);
     }
-    return waitButtonMorseOrFinish();
+    bool repeat = waitButtonMorseOrFinish();
+    g_resIsSend = false;   // salimos de la pantalla de resultado
+    return repeat;
 }
 
 // Dibuja un texto largo con salto de línea por palabras (fuente 6 px -> ~21
@@ -133,6 +190,32 @@ static void drawWrappedMessage(const String &msg, int startY) {
         display.println(line);
         y += LINE_H;
     }
+}
+
+// Antigüedad legible de un mensaje del historial. Si viene de una sesión anterior
+// (millis() se reinició al apagar), no es fiable -> "--".
+static String histAgeStr(int idx) {
+    if (!History_isFromThisBoot(idx)) return "--";
+    unsigned long ts = History_getTimestamp(idx);
+    unsigned long now = millis();
+    unsigned long ageMin = (now >= ts) ? ((now - ts) / 60000UL) : 0;
+    return String(ageMin) + "m";
+}
+
+// Edad en minutos para el cacheo de refresco (-2 = fija, no cambia: msg antiguo).
+static int histAgeMinForCache(int idx) {
+    if (!History_isFromThisBoot(idx)) return -2;
+    unsigned long ts = History_getTimestamp(idx);
+    unsigned long now = millis();
+    return (int)((now >= ts) ? ((now - ts) / 60000UL) : 0);
+}
+
+// Una línea de la lista del historial: cursor + antigüedad + (Tu: si es enviado) + texto.
+static String histListLine(int idx, bool selected) {
+    String body = History_getMessage(idx);
+    if (History_isOutgoing(idx)) body = "Tu:" + body;
+    if (body.length() > 18) body = body.substring(0, 15) + "...";
+    return (selected ? "> " : "  ") + histAgeStr(idx) + " " + body;
 }
 
 //=============================================================
@@ -498,18 +581,8 @@ bool handleHistoryMenu() {
             int idx = topIndex + line;
             if (idx >= total) break;
 
-            String msg = History_getMessage(idx);
-            unsigned long ts = History_getTimestamp(idx);
-            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
-            String ageStr = String((unsigned long)ageMin) + "m";
-            
-            if (msg.length() > 18) {
-                msg = msg.substring(0, 15) + "...";
-            }
-            
-            String lineText = ((idx == selected) ? "> " : "  ") + ageStr + " " + msg;
             display.setCursor(0, 10 + (line * 10));
-            display.println(lineText);
+            display.println(histListLine(idx, idx == selected));
         }
         display.display();
 
@@ -550,16 +623,24 @@ bool handleHistoryMenu() {
             // ---- VISTA DEL MENSAJE COMPLETO ----
             {
                 String full = History_getMessage(selected);
-                unsigned long vts = History_getTimestamp(selected);
-                unsigned long vAge = (vts == 0) ? 0 : ((millis() - vts) / 60000UL);
 
                 Display_clear();
                 display.setTextSize(1);
                 display.setTextColor(SH110X_WHITE);
                 display.setCursor(0, 0);
-                display.print("Hace ");
-                display.print(vAge);
-                display.println(" min");
+                if (History_isOutgoing(selected)) {
+                    display.print("Enviado");
+                } else {
+                    display.print("De ");
+                    uint8_t s = History_getSender(selected);
+                    if (s) { display.print("#"); display.print(s); }
+                    else   { display.print("?"); }
+                }
+                if (History_isFromThisBoot(selected)) {
+                    display.print("  hace ");
+                    display.print(histAgeStr(selected));
+                }
+                display.println();
                 drawWrappedMessage(full, 16);
                 display.setCursor(0, 118);
                 display.print("A: Borrar  B: Volver");
@@ -709,10 +790,8 @@ bool handleHistoryMenu() {
                 continue;
             }
             
-            unsigned long ts = History_getTimestamp(idx);
-            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
-            int ageMinInt = (int)ageMin;
-            
+            int ageMinInt = histAgeMinForCache(idx);
+
             if (cachedMinutes[line] != ageMinInt) {
                 cachedMinutes[line] = ageMinInt;
                 needRedraw = true;
@@ -735,20 +814,10 @@ bool handleHistoryMenu() {
                 break;
             }
 
-            String msg = History_getMessage(idx);
-            unsigned long ts = History_getTimestamp(idx);
-            unsigned long ageMin = (ts == 0) ? 0 : ((millis() - ts) / 60000UL);
-            String ageStr = String((unsigned long)ageMin) + "m";
-
-            if (msg.length() > 18) {
-                msg = msg.substring(0, 15) + "...";
-            }
-            
-            String lineText = ((idx == selected) ? "> " : "  ") + ageStr + " " + msg;
             display.setCursor(0, 10 + (line * 10));
-            display.println(lineText);
+            display.println(histListLine(idx, idx == selected));
 
-            cachedMinutes[line] = (int)ageMin;
+            cachedMinutes[line] = histAgeMinForCache(idx);
         }
         
         display.display();

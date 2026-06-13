@@ -1,0 +1,64 @@
+# ============================================================
+#  Chat (casos borde): migracion de EEPROM, guard anti-eco, emisores distintos
+#  con su id, y mensaje largo con ajuste de linea. (id propio = 137)
+# ============================================================
+wait 300
+expect serial Equipo #137
+expect serial EEPROM inicializada       # arranque fresco -> reformatea (guard de magia)
+
+# --- Anti-eco: un mensaje cuyo emisor es NUESTRO propio id se ignora ---
+chatmsg 137 9 ecopropio
+wait 300
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text Sin mensajes                # el eco propio NO se guarda
+in 0 finish down
+in 150 finish up
+run 400
+
+# --- Emisor #50: se guarda con su id; abrir el detalle (es el mas reciente) ---
+chatmsg 50 1 desde cincuenta
+wait 300
+expect serial ACK a #50
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+in 0 morse down
+in 150 morse up
+run 600
+expect text De #50
+expect text desde cincuenta
+in 0 finish down
+in 150 finish up
+run 400
+in 0 finish down
+in 150 finish up
+run 400
+
+# --- Emisor #77 con mensaje LARGO: id distinto y texto completo (no truncado) ---
+chatmsg 77 2 mensaje larguisimo para comprobar el ajuste de linea correcto
+wait 300
+expect serial ACK a #77
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+in 0 morse down
+in 150 morse up
+run 600
+expect text De #77
+expect text correcto                    # ultima palabra del mensaje largo
+shot chat_edge_long
+in 0 finish down
+in 150 finish up
+run 400
+in 0 finish down
+in 150 finish up
+run 400
+print Casos borde (migracion, anti-eco, multi-emisor, largo) OK

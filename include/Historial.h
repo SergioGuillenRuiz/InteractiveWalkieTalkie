@@ -3,11 +3,23 @@
 
 #include <Arduino.h>
 
-// Funciones esenciales con timestamps
-void History_load();                      // Llamar en setup()
-void History_addMessage(const String &msg);
-String History_getMessage(int index);     // 0 = más reciente
-unsigned long History_getTimestamp(int index); // Timestamp del mensaje
-int History_count();                      // Total mensajes
+// ============================================================
+//  Historial de mensajes (recibidos y enviados)
+//  indice 0 = mas reciente
+// ============================================================
+void History_load();                          // Llamar en setup()
+
+void History_addIncoming(const String &msg, uint8_t sender);  // recibido (sender 0 = desconocido)
+void History_addOutgoing(const String &msg);                  // enviado por mi
+void History_addMessage(const String &msg);                   // compat -> recibido, sender desconocido
+
+String        History_getMessage(int index);
+unsigned long History_getTimestamp(int index);
+bool          History_isOutgoing(int index);   // true = lo enviaste tu
+uint8_t       History_getSender(int index);    // id del emisor (0 = desconocido / propio)
+bool          History_isFromThisBoot(int index); // true = recibido/enviado en esta sesion (antiguedad fiable)
+
+int  History_count();
 void History_deleteMessage(int index);
+
 #endif
