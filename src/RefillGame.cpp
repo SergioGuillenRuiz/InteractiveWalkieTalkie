@@ -7,11 +7,12 @@
 // ============================================================
 //  REFILL GAME - "La Cerveceria"
 //
-//  Van llegando jarras (cola arriba). En el grifo hay una jarra con su marca
-//  de altura. MANTEN A para servir cerveza; el POTENCIOMETRO regula el caudal.
-//  Suelta A para entregarla. Puntos = cuanto te acercas a la marca + lo rapido.
-//  Desbordar o quedarte muy corto cuesta una vida (3). Cuantas mas jarras
-//  completes, mas rapido llegan. Si la cola se llena -> game over.
+//  Van llegando jarras (cola arriba). La siguiente jarra se coloca SOLA en el
+//  grifo y empieza a llenarse automaticamente: el POTENCIOMETRO regula el caudal.
+//  PULSA A una vez para parar y entregarla. Puntos = cuanto te acercas a la marca
+//  + lo rapido. Desbordar o quedarte muy corto cuesta una vida (3). Tras una breve
+//  pausa entra la siguiente jarra automaticamente. Cuantas mas completes, mas
+//  rapido llegan. Si la cola se llena -> game over.
 //  Sin acentos ni 'n~': la fuente del OLED no los representa.
 // ============================================================
 
@@ -44,13 +45,15 @@
 #define ARRIVAL_START 4500UL
 #define ARRIVAL_STEP  170UL
 #define ARRIVAL_MIN   1500UL
+#define REFILL_PAUSE  650UL          // pausa breve entre jarra y jarra
 
 struct Jug { int target; };
 static Jug   bar[BAR_CAP];
 static int   barCount;
-static bool  grabbed;
+static bool  serving;                 // hay una jarra llenandose en el grifo
 static float level;
 static unsigned long grabTime;
+static unsigned long pauseUntil;      // no se sirve hasta este instante
 static float potFlow;
 static int   lives;
 static long  score;
@@ -237,7 +240,7 @@ static unsigned long computeInterval() {
 static void popFront() {
   for (int i = 1; i < barCount; i++) bar[i - 1] = bar[i];
   barCount--;
-  grabbed = false; level = 0;
+  serving = false; level = 0;
 }
 
 static void say(const String &m, bool good) {
@@ -264,12 +267,13 @@ static void serveJug(unsigned long now) {
 }
 
 static void initGame() {
-  barCount = 0; grabbed = false; level = 0; potFlow = 0;
+  barCount = 0; serving = false; level = 0; potFlow = 0;
   lives = LIVES_START; score = 0; completed = 0;
   feedbackUntil = 0;
   arrivalInterval = ARRIVAL_START;
   bar[barCount++].target = randomTarget();
   nextArrival = millis() + arrivalInterval;
+  pauseUntil = millis() + REFILL_PAUSE;     // breve respiro antes de la 1a jarra
 }
 
 // ============================================================
@@ -279,9 +283,9 @@ static bool startScreen() {
   display.clearDisplay();
   centerPrint("CERVECERIA", 4, 1);
   drawMugShape(44, 18, 40, 50, 0.72f);              // jarra-logo, bien llena
-  centerPrint("Llena hasta la marca", 76, 1);
-  centerPrint("MANTEN A: sirve", 90, 1);
-  centerPrint("POTE: caudal", 100, 1);
+  centerPrint("Llena hasta la marca", 74, 1);
+  centerPrint("POTE: regula caudal", 86, 1);
+  centerPrint("A: para y entrega", 98, 1);
   centerPrint("A: Jugar  B: Salir", 116, 1);
   display.display();
   while (true) {
@@ -322,7 +326,7 @@ void startRefillGame() {
   while (true) {
     initGame();
     while (isMorsePressed()) { backgroundTick(); delay(10); }     // soltar la A de "jugar"
-    bool wasHeld = isMorsePressed(), over = false, barFull = false;
+    bool prevA = isMorsePressed(), over = false, barFull = false;
     unsigned long last = millis();
 
     while (!over) {
@@ -347,22 +351,32 @@ void startRefillGame() {
       float tf = pf * pf;
       potFlow += (tf - potFlow) * 0.25f;
 
-      bool aHeld = isMorsePressed();
-      if (aHeld && !wasHeld && barCount > 0 && !grabbed) { grabbed = true; level = 0; grabTime = now; }
-      if (grabbed && aHeld) {
+      // La siguiente jarra entra sola y empieza a llenarse (sin pulsar nada)
+      if (!serving && barCount > 0 && now >= pauseUntil) {
+        serving = true; level = 0; grabTime = now;
+      }
+
+      // Mientras sirve, el caudal lo regula el potenciometro
+      if (serving) {
         level += potFlow * MAX_FLOW * dt;
-        if (level >= INNER_H) { lives--; say("DESBORDA!", false); popFront(); }
+        if (level >= INNER_H) {                        // desborda -> pierdes vida, siguiente
+          lives--; say("DESBORDA!", false); popFront();
+          pauseUntil = now + REFILL_PAUSE;
+        }
       }
-      if (!aHeld && wasHeld && grabbed) {
-        if (level < 3) { grabbed = false; }
-        else if (bar[0].target - (int)level > SHORT_MARGIN) { lives--; say("MUY POCO!", false); popFront(); }
+
+      // Pulsar A una vez: deja de salir cerveza y se entrega la jarra
+      bool aNow = isMorsePressed();
+      if (serving && aNow && !prevA) {
+        if (bar[0].target - (int)level > SHORT_MARGIN) { lives--; say("MUY POCO!", false); popFront(); }
         else serveJug(now);
+        pauseUntil = now + REFILL_PAUSE;
       }
-      wasHeld = aHeld;
+      prevA = aNow;
 
       if (lives <= 0) { over = true; break; }
 
-      drawGame(grabbed && aHeld, potFlow);
+      drawGame(serving, potFlow);
       delay(15);
     }
 
