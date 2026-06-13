@@ -29,7 +29,7 @@ public:
     int  available();
     int  read();
     int  peek();
-    int  packetRssi() { return -42; }
+    int  packetRssi();             // definido en lora_mock.cpp (RSSI por paquete)
     float packetSnr() { return 9.0f; }
 };
 

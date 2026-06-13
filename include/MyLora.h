@@ -34,4 +34,6 @@ bool Lora_isReady();
 
 String Lora_readMessage();
 
+int Lora_lastRssi();    // RSSI (dBm) del ultimo paquete recibido (para el radar)
+
 #endif

@@ -9,6 +9,7 @@
 // Estado interno del módulo
 bool loraReady = false;
 String lastReceived = "";
+static int lastRssi = -200;   // RSSI del último paquete recibido
 
 // ============================================================
 //  Inicialización del módulo LoRa
@@ -78,6 +79,7 @@ bool Lora_hasMessage() {
 
   int packetSize = LoRa.parsePacket();
   if (packetSize) {
+    lastRssi = LoRa.packetRssi();   // capturar antes de leer/descifrar
     lastReceived = "";
     while (LoRa.available()) {
       lastReceived += (char)LoRa.read();
@@ -104,6 +106,8 @@ String Lora_readMessage() {
   lastReceived = "";
   return msg;
 }
+
+int Lora_lastRssi() { return lastRssi; }
 
 // ============================================================
 //  Actualización periódica (loop auxiliar)

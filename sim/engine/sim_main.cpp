@@ -329,6 +329,12 @@ static void fireScriptedKeys() {
         else if (act == "mup")     { sim::setMorse(false); }
         else if (act == "fdown")   { sim::setFinish(true); }
         else if (act == "fup")     { sim::setFinish(false); }
+        else if (act.rfind("hr", 0) == 0) {                    // ping del companero con RSSI dado
+            int rssi = atoi(trim(act.substr(2)).c_str());
+            String p = String("HR"); p += (char)0xAB;          // id de companero ficticio
+            String e = SimpleCrypto_encrypt(p);
+            simLoraInject(std::string(e.c_str(), e.length()), rssi);
+        }
         else if (!act.empty()) {
             pressKey((unsigned char)act[0]);
         }

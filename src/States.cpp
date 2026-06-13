@@ -9,6 +9,7 @@
 #include "Poker.h"
 #include "RefillGame.h"
 #include "TetrisCoop.h"
+#include "HippoRadar.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -806,7 +807,11 @@ bool handleGamesMenu() {
                     startChoose4Me();
                     return true;
 
-                default: { // Juegos aún no implementados (4: HippoRadar)
+                case 4: // HippoRadar (utilidad): gestiona su propia salida a IDLE
+                    startHippoRadar();
+                    return true;
+
+                default: { // Sin implementar
                     Display_clear();
                     display.setCursor(0, 20);
                     display.setTextSize(1);

@@ -42,7 +42,7 @@ void serialClear();
 } // namespace sim
 
 // --- LoRa (implementado en lora_mock.cpp) ---
-void simLoraInject(const std::string &packet);   // encola un paquete entrante (RX)
+void simLoraInject(const std::string &packet, int rssi = -42);   // encola un paquete entrante (RX) con RSSI
 std::string simLoraLastSent();                    // último paquete transmitido (TX)
 void simLoraSetLoopback(bool on);                 // eco TX -> RX
 
