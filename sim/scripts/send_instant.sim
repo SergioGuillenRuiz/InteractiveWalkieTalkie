@@ -11,8 +11,8 @@ tap morse
 wait 200
 expect text Selecciona
 
-# elegir "Instant" (pot alto -> sel 1)
-pot 1023
+# elegir "Instant" (pot medio -> sel 1 de 0..3)
+pot 500
 wait 200
 tap morse
 wait 250

@@ -35,7 +35,9 @@ extern MainState mainState;
 enum SendSubState {
     SEND_WAIT,
     SEND_MORSE,
-    SEND_INSTANT_MSG
+    SEND_INSTANT_MSG,
+    SEND_DIAL,
+    SEND_PHRASE
 };
 
 extern SendSubState sendSubState;

@@ -1,0 +1,43 @@
+# ============================================================
+#  Rueda de letras: componer "HI" con el potenciometro y enviarlo.
+#  Pote elige la letra, MORSE la anade, FINISH (mantenido) envia.
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+
+# elegir "Rueda" (sel 2 de 0..3)
+pot 850
+wait 200
+tap morse
+wait 300
+expect text Escribe
+
+# letra 'H' (indice 8 de " ABCDEFGHI...") y anadir con MORSE
+pot 335
+wait 350
+tap morse
+wait 150
+
+# letra 'I' (indice 9) y anadir
+pot 375
+wait 350
+tap morse
+wait 150
+expect text HI
+shot dial_menu
+
+# enviar manteniendo FINISH (>=1500 ms); tras la ventana minima salir con otro FINISH
+in 0 finish down
+in 1700 finish up
+in 2700 finish down
+in 2850 finish up
+run 3300
+expect serial Enviando: HI
+expect sent HI
+print Rueda verificado: HI compuesto y enviado por LoRa

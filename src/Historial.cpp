@@ -1,5 +1,6 @@
 #include "Historial.h"
 #include <EEPROM.h>
+#include "EepromMap.h"
 
 // ============================================================
 // CONFIGURACION
@@ -16,6 +17,10 @@ static const uint8_t MAGIC[3] = { 'W', 'M', '2' };   // Walkie Messages v2
 // Cada slot: 4B timestamp + 1B flags + 1B sender + 1B longitud + texto + '\0'
 #define MSG_SLOT_SIZE  (4 + 1 + 1 + 1 + MAX_MSG_LENGTH)
 #define EEPROM_SIZE    (HDR_SIZE + MSG_SLOT_SIZE * MAX_MESSAGES)
+
+// El mapa de EEPROM (EepromMap.h) asume que esta region acaba en EE_HISTORIAL_END.
+// Si se toca MAX_MESSAGES/MAX_MSG_LENGTH y deja de cuadrar, ajusta EE_HISTORIAL_END.
+static_assert(EEPROM_SIZE == EE_HISTORIAL_END, "EE_HISTORIAL_END no coincide con EEPROM_SIZE");
 
 #define FLAG_OUTGOING  0x01                       // bit0: el mensaje lo envie yo
 
@@ -88,7 +93,7 @@ static void writeHeader() {
 
 // Persiste todo el historial en una sola operacion de flash.
 static void saveAll() {
-    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.begin(EE_TOTAL_SIZE);   // tamano total: preservar la region del Frasero
     writeHeader();
     for (int i = 0; i < MAX_MESSAGES; i++) {
         if (i < messageCount) writeSlot(i, messageHistory[i], messageTime[i], messageFlags[i], messageSender[i]);
@@ -104,7 +109,7 @@ static void saveAll() {
 void History_load() {
     messageCount = 0;
 
-    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.begin(EE_TOTAL_SIZE);   // tamano total: preservar la region del Frasero
 
     if (!magicOk()) {
         // Formato antiguo o EEPROM virgen: reformatear vacio.
@@ -154,7 +159,7 @@ static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
         messageThisBoot[i] = true;
         messageCount++;
 
-        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.begin(EE_TOTAL_SIZE);   // tamano total: preservar la region del Frasero
         writeHeader();
         writeSlot(i, shortMsg, ts, flags, sender);
         EEPROM.commit();

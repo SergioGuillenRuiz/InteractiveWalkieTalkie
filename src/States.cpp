@@ -3,6 +3,8 @@
 #include "Display.h"
 #include "MyLora.h"
 #include "Morse.h"
+#include "TextDial.h"
+#include "Frasero.h"
 #include "Inputs.h"
 #include "Historial.h"
 #include "Chat.h"
@@ -341,16 +343,16 @@ case SEND_WAIT:
     static int lastSel = -1;
     static bool firstDrawComplete = false;  // Nueva variable para controlar si ya se dibujó el título
     
-    int sel = getPotValue(1);
+    int sel = getPotValue(3);
     if (sel < 0) sel = 0;
-    if (sel > 1) sel = 1;
+    if (sel > 3) sel = 3;
 
     if (!firstDrawComplete || sel != lastSel) {
         // Si es la primera vez que entramos O cambió la selección
-        
+
         if (firstDrawComplete && lastSel != -1) {
             // No es la primera vez: solo borrar las líneas de opciones
-            display.fillRect(0, 16, 128, 32, SH110X_BLACK);
+            display.fillRect(0, 16, 128, 40, SH110X_BLACK);
         } else {
             // Primera vez o reset: dibujar título completo
             Display_clear();
@@ -361,16 +363,24 @@ case SEND_WAIT:
             display.println();
             firstDrawComplete = true;  // Marcar que ya dibujamos el título
         }
-        
-        // Dibujar las dos opciones
+
+        // Dibujar las tres opciones
         display.setCursor(0, 16);
         display.print((sel==0) ? "> " : "  ");
         display.println("Morse");
-        
+
         display.setCursor(0, 26);
         display.print((sel==1) ? "> " : "  ");
         display.println("Instant");
-        
+
+        display.setCursor(0, 36);
+        display.print((sel==2) ? "> " : "  ");
+        display.println("Rueda");
+
+        display.setCursor(0, 46);
+        display.print((sel==3) ? "> " : "  ");
+        display.println("Frase");
+
         display.display();
         lastSel = sel;
     }
@@ -382,21 +392,21 @@ case SEND_WAIT:
                 dentroMenuEnviar = true;
                 primeraVezMenu = true;
                 sendSubState = SEND_MORSE;
-                Display_clear();
-                menuTransitionDelay();
-                // Resetear para la próxima vez que entremos
-                lastSel = -1;
-                firstDrawComplete = false;
-                return true;
-            } else {
+            } else if (sel == 1) {
                 sendSubState = SEND_INSTANT_MSG;
-                Display_clear();
-                menuTransitionDelay();
-                // Resetear para la próxima vez que entremos
-                lastSel = -1;
-                firstDrawComplete = false;
-                return true;
+            } else if (sel == 2) {
+                dialReset();
+                sendSubState = SEND_DIAL;
+            } else {
+                fraseroReset();
+                sendSubState = SEND_PHRASE;
             }
+            Display_clear();
+            menuTransitionDelay();
+            // Resetear para la próxima vez que entremos
+            lastSel = -1;
+            firstDrawComplete = false;
+            return true;
         }
     }
 
@@ -503,6 +513,79 @@ case SEND_WAIT:
                     menuTransitionDelay();
                     return true;
                 }
+            }
+
+            return true;
+        }
+
+        // ---------------------------------------------------
+        // ---------------------- SEND_DIAL ------------------
+        // ---------------------------------------------------
+        case SEND_DIAL:
+        {
+            DialResult res = dialTick();
+
+            if (res == DIAL_SENT || res == DIAL_CANCELLED) {
+                if (res == DIAL_SENT) {
+                    sendAndShowResult(dialMessage);
+                } else {
+                    Display_clear();
+                    display.setCursor(0, 0);
+                    display.setTextSize(1);
+                    display.setTextColor(SH110X_WHITE);
+                    display.println("Cancelado");
+                    display.display();
+                }
+
+                bool repeat = waitAfterResult();
+                menuTransitionDelay();
+                dialReset();
+
+                if (repeat) {
+                    // MORSE -> componer otro mensaje con la rueda
+                    sendSubState = SEND_DIAL;
+                } else {
+                    // FINISH -> volver al menú principal
+                    sendSubState = SEND_WAIT;
+                    mainState = STATE_IDLE;
+                }
+                Display_clear();
+                return true;
+            }
+
+            return true;
+        }
+
+        // ---------------------------------------------------
+        // ---------------------- SEND_PHRASE ----------------
+        // ---------------------------------------------------
+        case SEND_PHRASE:
+        {
+            FraseroResult res = fraseroTick();
+
+            if (res == FR_SENT || res == FR_EXIT) {
+                if (res == FR_SENT) {
+                    sendAndShowResult(fraseroMessage);
+
+                    bool repeat = waitAfterResult();
+                    menuTransitionDelay();
+                    fraseroReset();
+
+                    if (repeat) {
+                        // MORSE -> componer otra frase
+                        sendSubState = SEND_PHRASE;
+                    } else {
+                        sendSubState = SEND_WAIT;
+                        mainState = STATE_IDLE;
+                    }
+                } else {
+                    // FR_EXIT: salir sin enviar
+                    sendSubState = SEND_WAIT;
+                    mainState = STATE_IDLE;
+                    menuTransitionDelay();
+                }
+                Display_clear();
+                return true;
             }
 
             return true;

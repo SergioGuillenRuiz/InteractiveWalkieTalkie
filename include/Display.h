@@ -57,6 +57,9 @@ void drawMorseSuggestion();
 void drawMorseTable();
 void drawMorse();
 
+// Rueda de letras (composer): mensaje en construccion + dial de caracteres.
+void drawDial(const String &msg, const char *charset, int len, int index, bool force = false);
+
 bool animateHippo();
 bool animateHippoWithZzz();
 void animateHippoAproaching();

@@ -1155,6 +1155,74 @@ void drawMorseTable() {
   display.display();  // Mostrar los cambios
 }
 
+// Rueda de letras: arriba el texto en construccion (con cursor "_"); en el
+// centro la letra seleccionada en grande con marco y sus vecinas a los lados;
+// abajo las pistas de control. Solo vuelca a la pantalla cuando cambia algo
+// (o si force), para no saturar el bus I2C ni parpadear.
+void drawDial(const String &msg, const char *charset, int len, int index, bool force) {
+  static int    lastIndex = -999;
+  static String lastMsg = String((char)1);   // valor imposible -> primer dibujo
+  if (!force && index == lastIndex && msg == lastMsg) return;
+  lastIndex = index;
+  lastMsg = msg;
+
+  display.clearDisplay();
+  display.setTextColor(SH110X_WHITE);
+
+  // --- Cabecera + mensaje en construccion ---
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print("Escribe:");
+
+  // Ajuste simple por ancho (21 chars/linea, hasta 4 lineas). Si se pasa,
+  // mostramos el final (lo ultimo escrito). El "_" marca donde se escribe.
+  const int MAXC = 21;
+  const int MAXLINES = 4;
+  String body = msg + "_";
+  int maxChars = MAXC * MAXLINES;
+  if ((int)body.length() > maxChars) body = body.substring(body.length() - maxChars);
+  int y = 12;
+  for (int i = 0; i < (int)body.length(); i += MAXC) {
+    display.setCursor(0, y);
+    display.print(body.substring(i, min((int)body.length(), i + MAXC)));
+    y += 10;
+  }
+
+  // --- Rueda de caracteres ---
+  // (espacio se dibuja como "_" para que sea visible)
+  const int cy = 74;
+  const int cw = 18;                  // ancho de un caracter a tamano 3 (6*3)
+  const int cx = (128 - cw) / 2;
+
+  // Vecinas (pequenas) a izquierda y derecha de la central.
+  display.setTextSize(1);
+  int neigh[4]      = { index - 2, index - 1, index + 1, index + 2 };
+  int neighX[4]     = { 20, 38, 84, 102 };
+  for (int i = 0; i < 4; i++) {
+    int n = ((neigh[i] % len) + len) % len;
+    char c = charset[n];
+    display.setCursor(neighX[i], cy + 8);
+    display.print(c == ' ' ? '_' : c);
+  }
+
+  // Letra central grande con marco.
+  int ci = ((index % len) + len) % len;
+  char cc = charset[ci];
+  display.setTextSize(3);
+  display.setCursor(cx, cy);
+  display.print(cc == ' ' ? '_' : cc);
+  display.drawRect(cx - 6, cy - 4, cw + 12, 30, SH110X_WHITE);
+
+  // --- Pistas de control ---
+  display.setTextSize(1);
+  display.setCursor(0, 110);
+  display.print("A:poner  B:borrar");
+  display.setCursor(0, 119);
+  display.print("(manten B = enviar)");
+
+  display.display();
+}
+
 void drawMorse() {
 
   // Limpiar solo la zona superior

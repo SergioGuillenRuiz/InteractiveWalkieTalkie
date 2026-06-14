@@ -1,0 +1,41 @@
+# ============================================================
+#  Frasero: componer una frase con piezas por defecto y enviarla.
+#  "YO" + "QUIERO" + "A TI"  (indice 1 de cada categoria)
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+
+# elegir "Frase" (sel 3 -> pote al maximo)
+pot 1023
+wait 200
+tap morse
+wait 300
+expect text quien
+
+# en cada categoria, indice 1 (primera pieza por defecto): pote ~256 con getPotValue(6)
+pot 256
+wait 300
+expect text YO QUIERO A TI    # la vista previa muestra la frase montada
+shot phrase_compose
+
+tap morse        # fija quien=YO -> avanza a hace
+wait 250
+tap morse        # fija hace=QUIERO -> avanza a cosa
+wait 250
+
+# fija cosa (compone y envia) y, tras la ventana minima, sale con FINISH
+in 0 morse down
+in 150 morse up
+in 1100 finish down
+in 1250 finish up
+run 1900
+
+expect serial Enviando: YO QUIERO A TI
+expect sent YO QUIERO A TI
+print Frasero verificado: YO QUIERO A TI compuesto por piezas y enviado

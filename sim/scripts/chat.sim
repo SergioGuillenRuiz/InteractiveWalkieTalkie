@@ -39,7 +39,7 @@ wait 200
 tap morse
 wait 200
 expect text Selecciona
-pot 1023
+pot 500
 wait 200
 tap morse
 wait 250

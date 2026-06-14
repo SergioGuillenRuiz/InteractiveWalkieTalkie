@@ -6,6 +6,7 @@
 #include "States.h"
 #include "Historial.h"
 #include "Identity.h"
+#include "Frasero.h"
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -30,6 +31,7 @@ void setup() {
   Display_begin();
 
   History_load();
+  Frasero_load();
 
   Serial.print("[ID] Equipo #"); Serial.println(Device_id());
 

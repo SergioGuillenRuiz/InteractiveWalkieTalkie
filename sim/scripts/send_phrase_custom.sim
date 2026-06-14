@@ -1,0 +1,92 @@
+# ============================================================
+#  Frasero: crear una pieza propia con la Rueda, guardarla, comprobar
+#  que PERSISTE tras reiniciar y usarla para componer y enviar "HI".
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR -> Frase
+pot 80
+wait 200
+tap morse
+wait 200
+pot 1023
+wait 200
+tap morse
+wait 300
+expect text quien
+
+# Gestionar piezas de "quien": mantener MORSE (>=2000 ms)
+hold morse 2200
+wait 200
+expect text palabras
+
+# Elegir slot 1 (pote bajo -> slot 0)
+pot 0
+wait 300
+
+# Crear: MORSE corto abre la Rueda
+tap morse
+wait 300
+expect text Escribe
+
+# Escribir "HI" (H=indice 8, I=indice 9 del juego " ABC...")
+pot 335
+wait 350
+tap morse
+wait 150
+pot 375
+wait 350
+tap morse
+wait 150
+expect text HI
+
+# Guardar: mantener FINISH (>=1500 ms)
+hold finish 1700
+wait 300
+expect text palabras
+expect text HI
+expect serial Pieza guardada
+
+# --- Persistencia: reiniciar y comprobar que la pieza sigue ---
+reboot
+wait 300
+pot 80
+wait 200
+tap morse
+wait 200
+pot 1023
+wait 200
+tap morse
+wait 300
+hold morse 2200
+wait 200
+expect text HI
+expect serial Piezas propias cargadas
+
+# Volver a componer y usar la pieza propia
+hold finish 1700
+wait 300
+expect text quien
+
+# "quien" ahora tiene 8 opciones: (vacio)+HI+6 default. idx1=HI -> getPotValue(7) ~210
+pot 210
+wait 350
+tap morse        # quien = HI -> hace
+wait 250
+pot 0
+wait 300
+tap morse        # hace = (vacio) -> cosa
+wait 250
+pot 0
+wait 300
+
+# cosa = (vacio): compone y envia "HI", y sale con FINISH tras la ventana minima
+in 0 morse down
+in 150 morse up
+in 1100 finish down
+in 1250 finish up
+run 1900
+
+expect serial Enviando: HI
+expect sent HI
+print Frasero custom verificado: pieza propia HI creada, persistida y enviada
