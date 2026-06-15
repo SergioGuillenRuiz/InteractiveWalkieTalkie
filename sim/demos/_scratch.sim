@@ -1,0 +1,25 @@
+wait 300
+chatmsg 50 1 hola desde el cincuenta
+wait 400
+chatmsg 77 2 nos vemos luego
+wait 400
+pot 512
+wait 300
+tap morse
+wait 350
+expect text Historial
+pot 1023
+wait 400
+text
+# abrir vista
+in 0 morse down
+in 150 morse up
+run 900
+print --- VISTA ---
+text
+# pedir borrado
+in 0 morse down
+in 150 morse up
+run 700
+print --- CONFIRMA ---
+text

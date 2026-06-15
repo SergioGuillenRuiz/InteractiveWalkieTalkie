@@ -1,0 +1,19 @@
+# DEMO G11 - Sleep / Wake (suspension por inactividad + despertar)
+wait 400
+shot g11_sleep_01_idle
+expect text Env
+# Inactividad > SLEEP_TIMEOUT (300000 ms = 5 min). NO mover el pote (resetea el timer).
+ff 305000
+wait 500
+shot g11_sleep_02_dormido
+expect notext Env
+# Despertar: WAKE_PRESS_COUNT (3) pulsaciones distintas dentro de la ventana
+tap morse
+wait 300
+tap morse
+wait 300
+tap morse
+wait 500
+shot g11_sleep_03_despierto
+expect text Env
+print G11 Sleep/Wake: duerme por inactividad y despierta con 3 pulsaciones

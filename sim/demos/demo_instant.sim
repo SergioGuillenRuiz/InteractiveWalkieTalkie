@@ -1,0 +1,100 @@
+# ============================================================
+#  g3 - ENVIO INSTANTANEO (rejilla de 8 iconos)
+#  Flujo completo: IDLE -> Enviar -> Instant -> recorrer la
+#  rejilla -> elegir 'kissy' -> enviar -> Enviado -> Entregado!
+#  Capturas en cada pantalla relevante. Prefijo: g3_instant_
+#
+#  Ejecutar con: walkie_sim.exe --fresh demo_instant.sim
+# ============================================================
+wait 400
+
+# ---- Paso 1: IDLE (menu principal) ----
+print g3 paso 1: menu principal (IDLE)
+pot 80
+wait 350
+shot g3_instant_01_idle
+expect text Env
+
+# ---- Paso 2: entrar a ENVIAR -> "Selecciona modo" ----
+print g3 paso 2: entrar a Enviar (Selecciona modo)
+tap morse
+wait 300
+expect text Selecciona
+shot g3_instant_02_modo
+
+# ---- Paso 3: elegir "Instant" (sel 1 de 0..3, pot medio) ----
+print g3 paso 3: cursor en Instant
+pot 500
+wait 350
+expect text Instant
+shot g3_instant_03_modo_instant
+tap morse
+wait 350
+
+# ---- Paso 4: rejilla Instant - primer icono (cansada, idx 0) ----
+# getPotValue(7): index = (raw*7)/1023. Centros: 0->73, 2->365, 4->657, 7->1023, 3->511.
+print g3 paso 4: rejilla Instant en 'cansada' (idx 0)
+pot 73
+wait 350
+expect text cansada
+shot g3_instant_04_grid_cansada
+
+# ---- Paso 5: recorrer a 'meh' (idx 2) ----
+print g3 paso 5: recorrer a 'meh' (idx 2)
+pot 365
+wait 350
+expect text meh
+shot g3_instant_05_grid_meh
+
+# ---- Paso 6: recorrer a 'happy' (idx 4) ----
+print g3 paso 6: recorrer a 'happy' (idx 4)
+pot 657
+wait 350
+expect text happy
+shot g3_instant_06_grid_happy
+
+# ---- Paso 7: recorrer a 'Nour' (idx 7, ultimo) ----
+print g3 paso 7: recorrer a 'Nour' (idx 7)
+pot 1023
+wait 350
+expect text Nour
+shot g3_instant_07_grid_nour
+
+# ---- Paso 8: elegir 'kissy' (idx 3) ----
+print g3 paso 8: seleccionar 'kissy' (idx 3)
+pot 511
+wait 350
+expect text kissy
+shot g3_instant_08_grid_kissy
+
+# ---- Paso 9: ENVIAR (morse) + salir coreografiado con 'in' ----
+# El firmware BLOQUEA en waitAfterResult tras enviar; coreografiamos
+# el envio Y la espera para capturar la pantalla "Enviado" sin colgar.
+print g3 paso 9: enviar kissy y mostrar 'Enviado'
+in 0 morse down
+in 120 morse up
+run 500
+shot g3_instant_09_enviado
+expect text Enviado
+expect text kissy
+expect serial Enviando: kissy
+expect sent kissy
+
+# ---- Paso 10: confirmacion de entrega (ACK del receptor) ----
+# El primer mensaje enviado lleva msgId=1; Device_id por defecto = 137.
+print g3 paso 10: ACK -> 'Entregado!'
+chatack 137 1
+run 300
+shot g3_instant_10_entregado
+expect text Entregado
+expect serial Confirmado: entregado
+
+# ---- Paso 11: salir de la pantalla de resultado con FINISH ----
+print g3 paso 11: salir con FINISH -> vuelta al menu principal
+in 0 finish down
+in 150 finish up
+run 1200
+shot g3_instant_11_back_idle
+expect text Env
+
+print g3 OK: flujo Instant completo (idle -> grid -> enviado -> entregado -> idle)

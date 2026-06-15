@@ -1,0 +1,109 @@
+# ============================================================
+#  g7 - RECEPCION + CONFIRMACION DE ENTREGA
+#
+#  (a) Recibir un mensaje de un peer (#50, DISTINTO del id propio):
+#      se guarda en historial, se auto-confirma (ACK) y en IDLE
+#      dispara la animacion de "corazon persiguiendo" (aviso de recepcion).
+#  (b) Enviar un mensaje y, al inyectar el ACK del receptor, ver la
+#      pantalla "Entregado!".
+#
+#  Id propio del sim (sin SIM_CHIPID, ver src/Identity.cpp):
+#      raw=0x12345678 -> (raw % 254)+1 = 137. Por eso el ACK va a #137.
+# ============================================================
+
+print g7_chat 00: arranque, comprobar id propio
+wait 300
+expect serial Equipo #137
+shot g7_chat_00_idle
+
+# ---------------------------------------------------------------
+# (a) RECEPCION de un mensaje de un peer DISTINTO (#50) estando en IDLE
+#     backgroundTick(): guarda, manda ACK y triggerAnimation(ANIM_CHASING_HEART)
+# ---------------------------------------------------------------
+print g7_chat 01: inyectar mensaje recibido de #50
+chatmsg 50 7 hola g7
+wait 120
+# justo tras recibir: animacion de recepcion en marcha (corazon persiguiendo)
+shot g7_chat_01_rx_anim
+wait 400
+expect serial Guardado: hola g7
+expect serial ACK a #50
+# la animacion forzada termina y vuelve el hipo normal en IDLE
+wait 600
+shot g7_chat_02_rx_done
+
+# Abrir el historial y el detalle: debe constar el emisor "De #50"
+print g7_chat 03: ver el mensaje recibido en el historial
+pot 512
+wait 350
+tap morse
+wait 300
+expect text Historial
+expect text hola g7
+shot g7_chat_03_hist_list
+in 0 morse down
+in 150 morse up
+run 600
+expect text De #50
+shot g7_chat_04_hist_detalle
+# volver a la lista y salir a IDLE
+in 0 finish down
+in 150 finish up
+run 500
+in 0 finish down
+in 150 finish up
+run 500
+
+# ---------------------------------------------------------------
+# (b) ENVIO + CONFIRMACION DE ENTREGA
+#     Enviamos "happy" (modo Instant). Tras enviar, la pantalla queda en
+#     "Enviado: / esperando confirm...". Al inyectar el ACK del receptor
+#     (destino=137, msgId=1 por ser el primer envio) pasa a "Entregado!".
+# ---------------------------------------------------------------
+print g7_chat 05: entrar en menu Enviar
+pot 80
+wait 350
+tap morse
+wait 300
+expect text Selecciona
+shot g7_chat_05_send_menu
+
+print g7_chat 06: elegir modo Instant
+pot 500
+wait 350
+tap morse
+wait 300
+
+print g7_chat 07: elegir frase 'happy'
+pot 585
+wait 350
+expect text happy
+shot g7_chat_06_instant_happy
+
+# Disparar el envio coreografiado con 'in' para NO bloquear en waitAfterResult.
+# (Tras enviar, el firmware espera un boton; no usamos 'tap morse' aqui.)
+print g7_chat 08: enviar -> pantalla 'Enviado: esperando confirm...'
+in 0 morse down
+in 120 morse up
+run 500
+expect text Enviado
+expect serial Chat] Enviando: happy
+expect serial Guardado: happy
+shot g7_chat_07_enviado_pendiente
+
+# El receptor confirma la entrega: ACK para mi id (137), msgId del 1er envio (1)
+print g7_chat 09: inyectar ACK -> 'Entregado!'
+chatack 137 1
+wait 400
+expect serial Confirmado: entregado
+expect text Entregado
+shot g7_chat_08_entregado
+
+# Salir del resultado a IDLE (ya esta delivered, basta una pulsacion FINISH)
+print g7_chat 10: salir a IDLE
+in 0 finish down
+in 150 finish up
+run 700
+shot g7_chat_09_back_idle
+
+print g7_chat OK: recepcion (auto-ACK + animacion) y entrega confirmada

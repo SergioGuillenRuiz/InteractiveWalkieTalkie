@@ -1,0 +1,65 @@
+# DEMO G6 - Frasero: crear/guardar/persistir/vaciar piezas propias
+wait 400
+pot 80
+wait 300
+tap morse
+wait 300
+pot 1023
+wait 300
+tap morse
+wait 300
+expect text quien
+# abrir gestion de piezas de 'quien' (mantener MORSE)
+hold morse 2200
+wait 300
+expect text palabras
+shot g6_custom_01_slots
+# elegir slot 1 (pote bajo) y crear (MORSE corto abre la Rueda)
+pot 0
+wait 300
+tap morse
+wait 300
+expect text Escribe
+shot g6_custom_02_rueda
+# escribir HI
+pot 335
+wait 350
+tap morse
+wait 200
+pot 375
+wait 350
+tap morse
+wait 200
+expect text HI
+shot g6_custom_03_HI
+# guardar (mantener FINISH)
+hold finish 1700
+wait 300
+expect text palabras
+expect text HI
+shot g6_custom_04_guardada
+expect serial Pieza guardada
+# --- persistencia: reiniciar y comprobar ---
+reboot
+wait 300
+pot 80
+wait 300
+tap morse
+wait 300
+pot 1023
+wait 300
+tap morse
+wait 300
+hold morse 2200
+wait 300
+expect text HI
+shot g6_custom_05_persistida
+expect serial Piezas propias cargadas
+# vaciar el slot (FINISH corto)
+pot 0
+wait 300
+tap finish
+wait 300
+shot g6_custom_06_vaciada
+expect serial Slot vaciado
+print G6 Frasero custom: crear/guardar/persistir/vaciar OK

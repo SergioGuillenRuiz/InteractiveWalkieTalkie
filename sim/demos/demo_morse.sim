@@ -1,0 +1,85 @@
+# ============================================================
+#  g2 - ENVIO MORSE (demo completa, capturas en cada pantalla)
+#  Flujo: IDLE -> Enviar -> Morse -> componer 'A' (.-) -> fijar
+#         -> enviar (FINISH largo) -> "Enviado:" -> ACK -> "Entregado!"
+#  Ejecutar:  walkie_sim.exe --fresh demo_morse.sim
+#  Nota: el id de equipo por defecto del sim es 137 (Identity.cpp,
+#        0x12345678 % 254 + 1) y el primer msgId es 1, por eso el ACK
+#        de confirmacion es 'chatack 137 1'.
+# ============================================================
+wait 300
+print [01] IDLE - menu principal
+shot g2_morse_01_idle
+expect text Enviar
+
+# --- IDLE: cursor a "Enviar" (pot 80) y entrar ---
+pot 80
+wait 350
+print [02] IDLE - cursor en Enviar
+shot g2_morse_02_idle_enviar
+tap morse
+wait 300
+
+# --- Menu "Selecciona modo": elegir Morse (pot 80 -> sel 0) ---
+print [03] Menu Enviar - Selecciona modo
+expect text Selecciona modo
+expect text Morse
+shot g2_morse_03_menu_modo
+pot 80
+wait 350
+tap morse
+wait 350
+
+# --- Pantalla de CREACION DE MENSAJE (tabla Morse visible) ---
+print [04] Creacion - pantalla inicial con tabla
+pot 0
+wait 350
+expect text CREACION
+expect text MENSAJE HASTA AHORA
+shot g2_morse_04_creacion_tabla
+
+# --- Componer 'A' = ".-": punto corto (<250ms) ---
+print [05] Simbolo 1 - punto (.)
+tap morse 120
+wait 300
+expect text Morse: .
+shot g2_morse_05_punto
+
+# --- Raya (>=250ms, < 2000ms para no cancelar) -> codigo ".-" ---
+print [06] Simbolo 2 - raya (-) -> codigo .-
+tap morse 350
+wait 300
+expect text Morse: .-
+shot g2_morse_06_punto_raya
+
+# --- Fijar la letra: FINISH corto -> ".-" se traduce a 'A' ---
+print [07] Fijar letra - FINISH corto traduce .- a A
+tap finish 150
+wait 300
+expect text A
+shot g2_morse_07_letra_fijada
+
+# --- Enviar: FINISH largo (>=1500ms). Coreografiamos envio + salida
+#     con 'in' para no quedar bloqueados en waitAfterResult.
+#     finish down@0 .. up@1700 = pulsacion larga que envia.
+#     A los 2900ms otra pulsacion FINISH corta para salir del resultado.
+print [08] Enviar - FINISH largo dispara el envio
+in 0 finish down
+in 1700 finish up
+in 2900 finish down
+in 3050 finish up
+run 3600
+expect serial [Chat] Enviando: A
+expect sent A
+print [09] Mensaje 'A' enviado y verificado en TX
+shot g2_morse_08_enviado
+
+# --- Confirmacion de entrega: inyectar ACK del receptor -> "Entregado!" ---
+print [10] ACK del receptor -> Entregado!
+chatack 137 1
+run 400
+expect serial [Chat] Confirmado: entregado
+expect text Entregado
+shot g2_morse_09_entregado
+
+print [OK] Flujo Morse completo verificado

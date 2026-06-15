@@ -1,0 +1,143 @@
+# ============================================================
+#  g10 - JUEGOS parte B: Choose4Me y HippoRadar
+#  Recorre cada utilidad desde el menu Juegos: entrada, interaccion
+#  y salida limpia a IDLE. Captura cada pantalla relevante.
+#  Ejecutar:  walkie_sim.exe --fresh demo_juegos_b.sim
+# ============================================================
+wait 300
+expect text Env
+expect text Jueg
+print g10: arranque en IDLE
+
+# ============================================================
+#  CHOOSE4ME  (bola magica 8-ball, indice 3 del menu Juegos)
+# ============================================================
+print --- CHOOSE4ME ---
+
+# Entrar a JUEGOS desde IDLE (cursor alto)
+pot 1000
+wait 350
+tap morse
+wait 300
+
+# En el submenu de iconos, elegir Choose4Me (indice 3 -> pot ~820)
+pot 820
+wait 350
+expect text Choose4Me
+shot g10_c4m_01_menu
+print Choose4Me seleccionado en el menu de juegos
+
+# Entrar al juego (MORSE = A). El bucle bloquea esperando boton,
+# pero backgroundTick corre, asi que basta entrar y avanzar tiempo.
+in 0 morse down
+in 120 morse up
+run 700
+expect text CHOOSE4ME
+expect text Piensa
+expect text Preguntar
+shot g10_c4m_02_inicio
+print Pantalla de inicio: "Piensa tu pregunta / A: Preguntar / B: Salir"
+
+# Preguntar (A = MORSE): arranca la animacion "Pensando..." (2 s)
+in 0 morse down
+in 120 morse up
+run 600
+expect text Pensando
+shot g10_c4m_03_pensando
+print Animacion "Pensando..." en curso
+
+# Dejar terminar la animacion (2 s totales) y ver la respuesta + opciones
+run 1800
+expect text Otra vez
+expect text Salir
+shot g10_c4m_04_respuesta
+print Respuesta mostrada con "A: Otra vez / B: Salir"
+
+# Pedir OTRA respuesta (A = MORSE) para verificar el bucle de repeticion
+in 0 morse down
+in 120 morse up
+run 2700
+expect text Otra vez
+shot g10_c4m_05_otra_respuesta
+print Segunda respuesta (bucle "Otra vez") OK
+
+# Salir del juego (B = FINISH). Vuelve a STATE_IDLE.
+in 0 finish down
+in 150 finish up
+run 1200
+expect text Env
+expect text Jueg
+shot g10_c4m_06_salida_idle
+print Choose4Me sale limpio a IDLE
+
+# ============================================================
+#  HIPPO RADAR  (utilidad de localizacion, indice 4 del menu Juegos)
+# ============================================================
+print --- HIPPO RADAR ---
+
+# Volver a entrar a JUEGOS desde IDLE
+pot 1000
+wait 350
+tap morse
+wait 300
+
+# Elegir HippoRadar (indice 4 -> el ultimo, pot 1023)
+pot 1023
+wait 350
+expect text HippoRadar
+shot g10_hippo_01_menu
+print HippoRadar seleccionado en el menu de juegos
+
+# Entrar a la utilidad (MORSE = A "empezar"). startScreen bloquea pero
+# backgroundTick corre; basta entrar y avanzar tiempo para capturarla.
+in 0 morse down
+in 120 morse up
+run 600
+expect text HIPPO RADAR
+expect text Localiza
+expect text empezar
+shot g10_hippo_02_inicio
+print Pantalla de inicio: "Localiza al otro equipo / A: empezar B: salir"
+
+# Pulsar A para empezar -> fase BUSCANDO (no hay companero todavia)
+in 0 morse down
+in 120 morse up
+run 700
+expect text BUSCANDO
+expect text Acerca
+shot g10_hippo_03_buscando
+print Fase BUSCANDO: esperando oir al otro equipo
+
+# Inyectar un ping del companero ("HR", len 2 -> cuenta como otro equipo
+# sea cual sea ownId). Con haveLink pasa a la fase GIRA DESPACIO.
+lora rx HR
+lora rx HR
+run 500
+expect text GIRA
+shot g10_hippo_04_gira
+print Companero oido (lora rx HR): fase GIRA DESPACIO (frio/tibio/caliente)
+
+# Seguir inyectando pings para mantener el enlace y dejar que se asiente
+# en el punto fuerte (>1.4 s sin mejora) -> bloqueo automatico -> VE HACIA AQUI.
+lora rx HR
+run 400
+lora rx HR
+run 400
+lora rx HR
+run 400
+lora rx HR
+run 800
+expect text AQUI
+shot g10_hippo_05_locked
+print Bloqueo: "VE HACIA AQUI" con flecha + metros (RSSI -> distancia)
+
+# Salir de la utilidad (B = FINISH). radioRestore + vuelta a STATE_IDLE.
+in 0 finish down
+in 150 finish up
+run 1200
+expect text Env
+expect text Jueg
+shot g10_hippo_06_salida_idle
+print HippoRadar sale limpio a IDLE
+
+print g10: flujo COMPLETO (Choose4Me + HippoRadar) recorrido y capturado

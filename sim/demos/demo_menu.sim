@@ -1,0 +1,115 @@
+# ============================================================
+#  g1 - MENU PRINCIPAL / IDLE / navegacion
+#  Recorre el menu del hipo: cursor por Enviar / Historial / Juegos,
+#  entra en cada submenu y vuelve, y muestra el hipo dormido por
+#  inactividad. Capturas en cada pantalla relevante.
+#  Ejecutar: walkie_sim.exe --fresh demo_menu.sim
+# ============================================================
+
+# --- Paso 0: arranque, menu principal con el hipo ---
+# Pote a 80 (zona baja) para fijar el cursor en la 1a opcion (Env) de salida.
+pot 80
+wait 400
+print g1 - paso 0: menu principal (IDLE) con el hipo
+expect text Env
+expect text Hist
+expect text Jueg
+shot g1_menu_01_idle
+
+# --- Paso 1: cursor en ENVIAR (pot bajo < 341 -> sel 0, cursorX=20) ---
+# Ya estamos en pot 80; deja pasar el debounce del pote (~100ms) y el
+# suavizado de moveCursor antes de capturar.
+pot 80
+wait 350
+print g1 - paso 1: cursor en Enviar (Env)
+expect text Env
+shot g1_menu_02_cursor_enviar
+
+# --- Paso 2: cursor en HISTORIAL (341 <= pot < 682 -> sel 1, cursorX=68) ---
+pot 512
+wait 350
+print g1 - paso 2: cursor en Historial (Hist)
+expect text Hist
+shot g1_menu_03_cursor_historial
+
+# --- Paso 3: cursor en JUEGOS (pot >= 682 -> sel 2, cursorX=115) ---
+pot 1000
+wait 350
+print g1 - paso 3: cursor en Juegos (Jueg)
+expect text Jueg
+shot g1_menu_04_cursor_juegos
+
+# --- Paso 4: ENTRAR en Enviar y volver ---
+# Cursor a Enviar y MORSE corto para entrar (handleIdle: cursorPos 0 -> SEND_MENU).
+pot 80
+wait 350
+tap morse
+wait 300
+print g1 - paso 4: entrada al menu Enviar desde IDLE
+expect text Selecciona
+expect text Morse
+shot g1_menu_05_entra_enviar
+# FINISH vuelve a IDLE (en IDLE FINISH no hace nada; aqui es el submenu quien lo gestiona).
+tap finish
+wait 350
+print g1 - paso 4b: vuelta a IDLE desde Enviar
+expect text Env
+shot g1_menu_06_vuelve_idle
+
+# --- Paso 5: ENTRAR en Historial y volver ---
+pot 512
+wait 350
+tap morse
+wait 300
+print g1 - paso 5: entrada al Historial desde IDLE (sin mensajes)
+expect text Historial
+expect text Sin
+shot g1_menu_07_entra_historial
+tap finish
+wait 350
+print g1 - paso 5b: vuelta a IDLE desde Historial
+expect text Env
+shot g1_menu_08_vuelve_idle
+
+# --- Paso 6: ENTRAR en Juegos y volver ---
+# Cursor a Juegos en IDLE (pot alto >= 682). Tras entrar, el submenu de
+# juegos usa getPotValue(4): solo se rotula el icono SELECCIONADO, asi que
+# bajamos el pote a 0 para seleccionar el primero (Tetris) y poder afirmarlo.
+pot 1000
+wait 350
+tap morse
+wait 350
+pot 0
+wait 350
+print g1 - paso 6: entrada al menu Juegos desde IDLE (icono Tetris)
+expect text Tetris
+shot g1_menu_09_entra_juegos
+tap finish
+wait 350
+print g1 - paso 6b: vuelta a IDLE desde Juegos
+expect text Env
+shot g1_menu_10_vuelve_idle
+
+# --- Paso 7: confirmar que FINISH en IDLE NO hace nada (no sale del menu) ---
+# handleIdle solo reacciona a MORSE; FINISH debe quedarse en el menu principal.
+pot 512
+wait 350
+tap finish
+wait 300
+print g1 - paso 7: FINISH en IDLE no cambia de estado (sigue en menu)
+expect text Env
+expect text Hist
+expect text Jueg
+shot g1_menu_11_finish_idle_noop
+
+# --- Paso 8: hipo dormido por inactividad ---
+# Tras >20 s sin tocar el pote ni botones, el hipo entra en modo ANIM_SLEEPY
+# (animateHippoWithZzz). Importante: NO mover el pote (resetea el temporizador).
+# Aun lejos del SLEEP_TIMEOUT (5 min), asi que el menu sigue vivo.
+ff 22000
+wait 500
+print g1 - paso 8: hipo dormido (ZZZ) por inactividad, menu aun activo
+expect text Env
+shot g1_menu_12_hipo_dormido
+
+print g1 - FIN: navegacion del menu principal cubierta (cursor x3, entradas/vueltas, FINISH no-op, sleepy hippo)

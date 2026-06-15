@@ -1,0 +1,120 @@
+# ============================================================
+#  g8 - HISTORIAL: flujo completo
+#  vacio -> recibir/enviar -> lista -> vista completa -> borrar (con confirmacion)
+#  Mi id de equipo en el sim (sin SIM_CHIPID) = 137.
+# ============================================================
+wait 300
+expect serial Equipo #137
+
+# ------------------------------------------------------------
+# PASO 1: HISTORIAL VACIO  ("Sin mensajes")
+# ------------------------------------------------------------
+print Paso 1: historial vacio
+pot 512
+wait 300
+tap morse
+wait 300
+expect text Historial
+expect text Sin mensajes
+shot g8_hist_01_vacio
+# volver a IDLE
+tap finish
+wait 300
+
+# ------------------------------------------------------------
+# PASO 2: poblar el historial (2 recibidos + 1 enviado)
+# ------------------------------------------------------------
+print Paso 2: recibir dos mensajes de peers
+chatmsg 50 1 hola desde el cincuenta
+wait 400
+expect serial Guardado: hola desde el cincuenta
+expect serial ACK a #50
+chatmsg 77 2 nos vemos luego
+wait 400
+expect serial Guardado: nos vemos luego
+
+print Paso 2b: enviar un mensaje (queda como ENVIADO en el historial)
+# IDLE -> Enviar
+pot 80
+wait 300
+tap morse
+wait 300
+expect text Selecciona
+# Enviar -> Instant (pot 500)
+pot 500
+wait 300
+tap morse
+wait 300
+# elegir el primer mensaje instantaneo y enviarlo SIN colgar el sim
+in 0 morse down
+in 150 morse up
+in 1100 finish down
+in 1250 finish up
+run 1900
+expect serial Chat] Enviando:
+# tras salir del resultado volvemos al menu Enviar -> salir a IDLE
+tap finish
+wait 300
+
+# ------------------------------------------------------------
+# PASO 3: LISTA DEL HISTORIAL (mas reciente arriba)
+# ------------------------------------------------------------
+print Paso 3: lista del historial
+pot 512
+wait 300
+tap morse
+wait 350
+expect text Historial
+# el ultimo en entrar (el enviado) sale arriba con prefijo "Tu:"
+expect text Tu:
+shot g8_hist_02_lista
+
+# ------------------------------------------------------------
+# PASO 4: VISTA COMPLETA de un mensaje recibido
+#  selected=0 es el mas reciente (enviado). Bajamos al recibido #50
+#  (el mas antiguo) con el pote: total=3 -> getPotValue(2); idx2 -> pot alto.
+# ------------------------------------------------------------
+print Paso 4: abrir vista completa de un recibido
+pot 1023
+wait 400
+expect text hola desde el
+# abrir el mensaje seleccionado (MORSE corto)
+in 0 morse down
+in 150 morse up
+run 700
+expect text De #50
+expect text hola desde el cincuenta
+expect text Borrar
+shot g8_hist_03_vista
+
+# ------------------------------------------------------------
+# PASO 5: BORRADO CON CONFIRMACION
+#  En la vista: MORSE (A) = Borrar -> pantalla "Borrar mensaje?" (A:SI B:NO)
+# ------------------------------------------------------------
+print Paso 5a: pedir borrado -> pantalla de confirmacion
+in 0 morse down
+in 150 morse up
+run 500
+expect text Borrar mensaje?
+expect text A: SI
+shot g8_hist_04_confirma
+
+print Paso 5b: confirmar (A = MORSE) -> "Mensaje borrado"
+in 0 morse down
+in 150 morse up
+run 1600
+expect text Mensaje borrado
+expect serial Borrado. Total: 2
+shot g8_hist_05_borrado
+wait 400
+
+# ------------------------------------------------------------
+# PASO 6: la lista ya no contiene el mensaje borrado
+# ------------------------------------------------------------
+print Paso 6: la lista vuelve y el mensaje borrado ya no esta
+wait 300
+expect text Historial
+expect notext cincuenta
+expect text nos vemos
+shot g8_hist_06_tras_borrado
+print g8 HISTORIAL: vacio, recibidos, enviado, lista, vista y borrado OK

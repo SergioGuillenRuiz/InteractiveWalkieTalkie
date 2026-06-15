@@ -1,0 +1,100 @@
+# ============================================================
+#  g5 - FRASERO: componer con piezas por defecto y enviar.
+#  Flujo: IDLE > Enviar > Frase, recorrer opciones con el pote,
+#  componer "YO QUIERO A TI" (indice 1 de cada categoria),
+#  demostrar dejar una posicion en (vacio) y enviar.
+# ============================================================
+wait 300
+print g5 frase 01: arranque en IDLE
+shot g5_frase_01_idle
+
+# --- IDLE -> ENVIAR ---
+pot 80
+wait 350
+tap morse
+wait 300
+expect text Selecciona
+print g5 frase 02: menu Enviar (Selecciona modo)
+shot g5_frase_02_menu_enviar
+
+# --- Elegir "Frase" (4a opcion, sel 3 -> pote al maximo) ---
+pot 1023
+wait 350
+tap morse
+wait 300
+expect text quien
+expect text Frase
+print g5 frase 03: Frasero abierto, posicion quien activa
+shot g5_frase_03_compose_inicio
+
+# ============================================================
+#  CATEGORIA 1 (quien): recorrer opciones con el pote.
+# ============================================================
+# Llevar quien a (vacio) (indice 0) para mostrar el recorrido del pote.
+pot 0
+wait 350
+expect text (vacio)
+print g5 frase 04: quien en (vacio) - recorrido del pote
+shot g5_frase_04_quien_vacio
+
+# Volver a indice 1 = primera pieza por defecto "YO" (pote ~256 con getPotValue(6)).
+pot 256
+wait 350
+expect text YO
+print g5 frase 05: quien = YO
+shot g5_frase_05_quien_yo
+
+# Fijar quien=YO y avanzar a "hace".
+tap morse
+wait 300
+print g5 frase 06: avanza a hace
+
+# ============================================================
+#  CATEGORIA 2 (hace): indice 1 -> "QUIERO".
+# ============================================================
+pot 256
+wait 350
+expect text QUIERO
+expect text YO QUIERO
+print g5 frase 07: hace = QUIERO, vista previa "YO QUIERO"
+shot g5_frase_07_hace_quiero
+
+# Fijar hace=QUIERO y avanzar a "cosa".
+tap morse
+wait 300
+print g5 frase 08: avanza a cosa
+
+# ============================================================
+#  CATEGORIA 3 (cosa): primero DEMOSTRAR dejarla en (vacio).
+# ============================================================
+pot 0
+wait 350
+expect text (vacio)
+expect text YO QUIERO
+print g5 frase 09: cosa en (vacio) -> vista previa sigue "YO QUIERO"
+shot g5_frase_09_cosa_vacio
+
+# Ahora elegir indice 1 = "A TI" para completar la frase.
+pot 256
+wait 350
+expect text A TI
+expect text YO QUIERO A TI
+print g5 frase 10: cosa = A TI, vista previa completa
+shot g5_frase_10_preview_completa
+
+# ============================================================
+#  ENVIO: en la 3a categoria, MORSE corto compone y envia.
+#  Coreografiamos el envio (morse) y la salida (finish) con 'in'
+#  para no quedar bloqueados en waitAfterResult.
+# ============================================================
+print g5 frase 11: enviando "YO QUIERO A TI"
+in 0 morse down
+in 150 morse up
+in 1100 finish down
+in 1250 finish up
+run 1900
+
+expect serial Enviando: YO QUIERO A TI
+expect sent YO QUIERO A TI
+shot g5_frase_11_enviado
+print g5 frase OK: "YO QUIERO A TI" compuesto con piezas por defecto y enviado

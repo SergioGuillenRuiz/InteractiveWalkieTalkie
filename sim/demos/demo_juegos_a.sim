@@ -1,0 +1,51 @@
+# DEMO G9 - Juegos A: Tetris Coop, Poker, RefillGame
+wait 400
+# --- Tetris Coop (icono 0) ---
+pot 1000
+wait 300
+tap morse
+wait 300
+pot 0
+wait 350
+expect text Tetris
+shot g9_tetris_01_menu
+in 0 morse down
+in 120 morse up
+run 900
+shot g9_tetris_02_juego
+in 0 finish down
+in 120 finish up
+run 1500
+# --- Poker (icono 1) ---
+pot 1000
+wait 300
+tap morse
+wait 300
+pot 300
+wait 350
+expect text Poker
+shot g9_poker_01_menu
+in 0 morse down
+in 120 morse up
+run 900
+shot g9_poker_02_juego
+in 0 finish down
+in 120 finish up
+run 1500
+# --- RefillGame (icono 2) ---
+pot 1000
+wait 300
+tap morse
+wait 300
+pot 512
+wait 350
+expect text RefillGame
+shot g9_refill_01_menu
+in 0 morse down
+in 120 morse up
+run 900
+shot g9_refill_02_juego
+in 0 finish down
+in 120 finish up
+run 1500
+print G9 Juegos A: Tetris, Poker, Refill (entrada + pantalla inicial)
