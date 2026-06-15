@@ -18,6 +18,10 @@ static const unsigned long SEL_DEBOUNCE_MS = 120;
 
 String dialMessage = "";
 
+// Verbo de la pista "(manten B = ...)". Por defecto "enviar" (componer un
+// mensaje); el Frasero lo pone a "guardar" al editar una pieza propia.
+static const char *s_finishVerb = "enviar";
+
 // --- Estado interno (a nivel de modulo para poder reiniciarlo desde dialReset) ---
 static bool          s_init = false;
 static int           s_selectedIdx = 0;
@@ -34,6 +38,7 @@ static bool          s_finishLongArmed = false;
 void dialReset() {
   dialMessage = "";
   s_init = false;
+  s_finishVerb = "enviar";
 }
 
 void dialResetWith(const String &initial) {
@@ -41,6 +46,11 @@ void dialResetWith(const String &initial) {
   if ((int)dialMessage.length() > DIAL_MAX_LEN)
     dialMessage = dialMessage.substring(0, DIAL_MAX_LEN);
   s_init = false;
+  s_finishVerb = "enviar";
+}
+
+void dialSetFinishLabel(const char *label) {
+  s_finishVerb = (label && label[0]) ? label : "enviar";
 }
 
 DialResult dialTick() {
@@ -67,7 +77,7 @@ DialResult dialTick() {
     s_selectedIdx = s_candidateIdx;
   }
 
-  drawDial(dialMessage, CHARSET, CHARSET_LEN, s_selectedIdx, firstDraw);
+  drawDial(dialMessage, CHARSET, CHARSET_LEN, s_selectedIdx, firstDraw, s_finishVerb);
 
   // --- MORSE: corto = anadir letra, largo = cancelar ---
   bool morseNow = isMorsePressed();

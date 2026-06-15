@@ -58,7 +58,8 @@ void drawMorseTable();
 void drawMorse();
 
 // Rueda de letras (composer): mensaje en construccion + dial de caracteres.
-void drawDial(const String &msg, const char *charset, int len, int index, bool force = false);
+// finishVerb completa la pista "(manten B = <verbo>)": "enviar" o "guardar".
+void drawDial(const String &msg, const char *charset, int len, int index, bool force = false, const char *finishVerb = "enviar");
 
 bool animateHippo();
 bool animateHippoWithZzz();

@@ -12,7 +12,9 @@ namespace sim {
 struct Timeout {};
 
 // Tipos de evento programables en la línea de tiempo virtual.
-enum EvKind { EV_POT = 0, EV_MORSE = 1, EV_FINISH = 2 };
+//   EV_INJECT: inyecta un paquete LoRa diferido; 'value' indexa una tabla de
+//   paquetes del runner (sim_main) via el hook registrado con setInjectHook().
+enum EvKind { EV_POT = 0, EV_MORSE = 1, EV_FINISH = 2, EV_INJECT = 3 };
 
 // --- Reloj virtual ---
 uint32_t now();                 // millis() virtuales
@@ -20,6 +22,7 @@ void advance(uint32_t ms);      // avanza el reloj (lo usa delay()); aplica even
 void setDeadline(uint32_t absMs);
 void clearDeadline();
 void setPumpHook(void (*fn)(uint32_t ms));  // modo interactivo: el motor lo llama desde cada delay()
+void setInjectHook(void (*fn)(int idx));    // fija el handler de los eventos EV_INJECT
 
 // --- Eventos temporizados de entrada ---
 void scheduleAt(uint32_t absMs, EvKind kind, int value);  // value: pot 0..1023, botón 0/1

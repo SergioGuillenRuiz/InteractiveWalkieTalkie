@@ -102,10 +102,16 @@ static void drawSendResult(int phase) {
 
 // Refresca la pantalla de resultado si cambia el estado de entrega. No hace nada
 // si el último resultado no fue un envío (p.ej. "Cancelado").
+// "Entregado!" (fase 1) es terminal; pero un ACK que llega TARDE (LoRa lento,
+// colisiones) debe poder repintar "Entregado!" aunque ya hubiéramos mostrado
+// "(sin confirmar)" (fase 2): no dejamos al usuario con una entrega invisible.
 static void updateSendResultScreen() {
-    if (!g_resIsSend || g_resPhase != 0) return;
-    if (Chat_awaitingAck() && Chat_delivered()) { g_resPhase = 1; drawSendResult(1); }
-    else if (millis() - g_resAt > 3000)         { g_resPhase = 2; drawSendResult(2); }
+    if (!g_resIsSend || g_resPhase == 1) return;
+    if (Chat_awaitingAck() && Chat_delivered()) {
+        g_resPhase = 1; drawSendResult(1);
+    } else if (g_resPhase == 0 && millis() - g_resAt > 3000) {
+        g_resPhase = 2; drawSendResult(2);
+    }
 }
 
 // Espera (sin bloquear la recepción) hasta que se pulse un botón.
@@ -745,111 +751,34 @@ bool handleHistoryMenu() {
                     return true;
                 }
             }
+            // La vista de detalle ("A: Borrar  B: Volver") ya ES la confirmación:
+            // si llegamos aquí el usuario pulsó A (Borrar) viendo el mensaje
+            // completo, así que borramos directamente (sin segunda pantalla).
             delay(120);
-            
+
+            History_deleteMessage(selected);
+
             Display_clear();
             display.setCursor(0, 0);
             display.setTextSize(1);
             display.setTextColor(SH110X_WHITE);
-            display.println("Borrar mensaje?");
-            display.println();
-            
-            String msgToDelete = History_getMessage(selected);
-            if (msgToDelete.length() > 20) {
-                msgToDelete = msgToDelete.substring(0, 17) + "...";
-            }
-            display.println(msgToDelete);
-            display.println();
-            display.println();
-            display.println("A: SI  B: NO");
+            display.println("Mensaje borrado");
             display.display();
-            
-            while (Serial.available()) Serial.read();
-            delay(100);
-            
-            bool confirmed = false;
-            bool cancelled = false;
-            unsigned long confirmStart = millis();
-            
-            static bool morseAlreadyProcessed = false;
-            static bool finishAlreadyProcessed = false;
-            morseAlreadyProcessed = false;
-            finishAlreadyProcessed = false;
-            
-            while (!confirmed && !cancelled && (millis() - confirmStart < 5000)) {
-                if (isMorsePressed() && !morseAlreadyProcessed) {
-                    delay(80);
-                    if (isMorsePressed()) {
-                        while (isMorsePressed()) { delay(10); }
-                        delay(80);
-                        confirmed = true;
-                        morseAlreadyProcessed = true;
-                        break;
-                    }
-                }
-                
-                if (isFinishPressed() && !finishAlreadyProcessed) {
-                    delay(80);
-                    if (isFinishPressed()) {
-                        while (isFinishPressed()) { delay(10); }
-                        delay(80);
-                        cancelled = true;
-                        finishAlreadyProcessed = true;
-                        break;
-                    }
-                }
+            delay(1200);
 
-                backgroundTick();
-                delay(20);
-            }
+            total = History_count();
+            if (selected >= total && total > 0) selected = total - 1;
+            if (selected < 0 && total > 0)     selected = 0;
 
-            if (confirmed) {
-                History_deleteMessage(selected);
-                
-                Display_clear();
-                display.setCursor(0, 0);
-                display.setTextSize(1);
-                display.setTextColor(SH110X_WHITE);
-                display.println("Mensaje borrado");
-                display.display();
-                delay(1200);
-                
-                total = History_count();
-                
-                if (selected >= total && total > 0) {
-                    selected = total - 1;
-                }
-                if (selected < 0 && total > 0) {
-                    selected = 0;
-                }
-                
-                prevTop = -1;
-                prevSelected = -1;
-                forceRedraw = true;
-                firstTime = true;
-                justEntered = true;
-                
-                while (Serial.available()) Serial.read();
-                delay(50);
-                
-                menuTransitionDelay();
-                return true;
-            }
-            
-            if (cancelled) {
-                Display_clear();
-                display.setCursor(0, 0);
-                display.println("Cancelado");
-                display.display();
-                delay(500);
-            }
-            
             prevTop = -1;
             prevSelected = -1;
             forceRedraw = true;
             firstTime = true;
             justEntered = true;
-            
+
+            while (Serial.available()) Serial.read();
+            delay(50);
+
             menuTransitionDelay();
             return true;
         }

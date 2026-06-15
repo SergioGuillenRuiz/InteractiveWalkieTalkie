@@ -19,6 +19,9 @@ expect text quien
 hold morse 2200
 wait 200
 expect text palabras
+# Fix #2: el cursor arranca en el slot 1 aunque el pote venga alto (1023)
+expect text >1
+expect notext >4
 
 # Elegir slot 1 (pote bajo -> slot 0)
 pot 0
@@ -28,6 +31,7 @@ wait 300
 tap morse
 wait 300
 expect text Escribe
+expect text guardar       # Fix #3: editando una pieza la Rueda "guarda", no "envia"
 
 # Escribir "HI" (H=indice 8, I=indice 9 del juego " ABC...")
 pot 335

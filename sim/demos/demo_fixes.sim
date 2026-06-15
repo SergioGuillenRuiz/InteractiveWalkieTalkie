@@ -1,0 +1,33 @@
+# ============================================================
+#  Evidencia visual de los fixes #2 y #3 (gestion de piezas del Frasero).
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR -> Frase
+pot 80
+wait 200
+tap morse
+wait 200
+pot 1023
+wait 200
+tap morse
+wait 300
+expect text quien
+
+# --- Fix #2: la gestion de piezas arranca en el slot 1 (el pote venia en 1023) ---
+hold morse 2200
+wait 200
+expect text palabras
+expect text >1
+expect notext >4
+shot fix2_cursor_slot1
+
+# --- Fix #3: al crear/editar pieza la Rueda dice "guardar", no "enviar" ---
+pot 0
+wait 300
+tap morse
+wait 300
+expect text Escribe
+expect text guardar
+shot fix3_rueda_guardar
+print Fixes #2 y #3: evidencia capturada

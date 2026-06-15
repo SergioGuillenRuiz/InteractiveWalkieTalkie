@@ -1,0 +1,25 @@
+# ============================================================
+#  Evidencia visual del fix #5: la vista de detalle ("A: Borrar  B: Volver")
+#  es la UNICA confirmacion; pulsar A ahi borra directamente (un solo paso).
+#  (El borrado efectivo de un solo paso lo prueba history.sim en la suite.)
+# ============================================================
+wait 200
+lora rx hola mundo mensaje de prueba para borrar
+wait 300
+
+# Entrar al historial y abrir el mensaje (no pulsamos 2 veces: el framebuffer
+# se congela en la vista de detalle para poder capturarla).
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+pot 0
+wait 300
+in 0 morse down
+in 150 morse up
+run 700
+expect text Borrar
+expect text Volver
+shot fix5_vista_unica_confirmacion
+print Fix #5: la vista de detalle es la unica confirmacion (A borra directo)

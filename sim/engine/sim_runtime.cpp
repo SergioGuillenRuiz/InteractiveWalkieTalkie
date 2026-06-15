@@ -33,12 +33,14 @@ std::string g_serial;
 std::vector<Ev> g_events;
 std::mt19937 g_rng(12345u);
 void (*g_pump)(uint32_t) = nullptr;   // hook del modo interactivo (teclado + render + ritmo)
+void (*g_injectHook)(int) = nullptr;  // handler de EV_INJECT (lo fija el runner)
 
 void applyEvent(const Ev &e) {
     switch (e.kind) {
         case sim::EV_POT:    g_pot = e.value; break;
         case sim::EV_MORSE:  g_morse = (e.value != 0); break;
         case sim::EV_FINISH: g_finish = (e.value != 0); break;
+        case sim::EV_INJECT: if (g_injectHook) g_injectHook(e.value); break;
     }
 }
 } // namespace
@@ -49,6 +51,7 @@ uint32_t now() { return g_now; }
 void setDeadline(uint32_t absMs) { g_deadline = absMs; }
 void clearDeadline() { g_deadline = 0xFFFFFFFFu; }
 void setPumpHook(void (*fn)(uint32_t)) { g_pump = fn; }
+void setInjectHook(void (*fn)(int)) { g_injectHook = fn; }
 
 void scheduleAt(uint32_t absMs, EvKind kind, int value) {
     g_events.push_back(Ev{absMs, (int)kind, value});

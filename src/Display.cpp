@@ -1159,12 +1159,14 @@ void drawMorseTable() {
 // centro la letra seleccionada en grande con marco y sus vecinas a los lados;
 // abajo las pistas de control. Solo vuelca a la pantalla cuando cambia algo
 // (o si force), para no saturar el bus I2C ni parpadear.
-void drawDial(const String &msg, const char *charset, int len, int index, bool force) {
-  static int    lastIndex = -999;
-  static String lastMsg = String((char)1);   // valor imposible -> primer dibujo
-  if (!force && index == lastIndex && msg == lastMsg) return;
+void drawDial(const String &msg, const char *charset, int len, int index, bool force, const char *finishVerb) {
+  static int         lastIndex = -999;
+  static String      lastMsg = String((char)1);   // valor imposible -> primer dibujo
+  static const char *lastVerb = nullptr;
+  if (!force && index == lastIndex && msg == lastMsg && finishVerb == lastVerb) return;
   lastIndex = index;
   lastMsg = msg;
+  lastVerb = finishVerb;
 
   display.clearDisplay();
   display.setTextColor(SH110X_WHITE);
@@ -1218,7 +1220,9 @@ void drawDial(const String &msg, const char *charset, int len, int index, bool f
   display.setCursor(0, 110);
   display.print("A:poner  B:borrar");
   display.setCursor(0, 119);
-  display.print("(manten B = enviar)");
+  display.print("(manten B = ");
+  display.print(finishVerb);
+  display.print(")");
 
   display.display();
 }

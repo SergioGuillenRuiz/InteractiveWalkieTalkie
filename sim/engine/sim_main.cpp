@@ -49,6 +49,18 @@ static int g_shotN = 0;
 static const uint32_t TICK = 2;       // ms por iteración de loop() sin delay
 static const uint32_t SLACK = 60000;  // margen antibloqueo (ms virtuales)
 
+// Paquetes LoRa programados con "in <ms> chatack|chatmsg ..." y entregados por
+// el motor (EV_INJECT) en el instante pedido, incluso durante esperas
+// bloqueantes del firmware (p.ej. la pantalla de resultado de envio).
+static std::vector<std::string> g_deferredPackets;
+static void injectDeferred(int idx) {
+    if (idx >= 0 && idx < (int)g_deferredPackets.size()) simLoraInject(g_deferredPackets[idx]);
+}
+static int deferPacket(const std::string &enc) {
+    g_deferredPackets.push_back(enc);
+    return (int)g_deferredPackets.size() - 1;
+}
+
 // ---------------------------------------------------------------------------
 // Motor de ejecución
 // ---------------------------------------------------------------------------
@@ -169,11 +181,24 @@ static void execLine(const std::string &raw) {
     else if (cmd == "wait" || cmd == "run") { uint32_t ms = 0; is >> ms; runFor(ms); }
     else if (cmd == "ff") { uint32_t ms = 0; is >> ms; fastForward(ms); }
     else if (cmd == "in") {
-        uint32_t off = 0; std::string what, val; is >> off >> what >> val;
+        uint32_t off = 0; std::string what; is >> off >> what;
         uint32_t t = sim::now() + off;
-        if (what == "morse")  sim::scheduleAt(t, sim::EV_MORSE, val == "down" ? 1 : 0);
-        else if (what == "finish") sim::scheduleAt(t, sim::EV_FINISH, val == "down" ? 1 : 0);
-        else if (what == "pot") sim::scheduleAt(t, sim::EV_POT, atoi(val.c_str()));
+        if (what == "morse")  { std::string val; is >> val; sim::scheduleAt(t, sim::EV_MORSE, val == "down" ? 1 : 0); }
+        else if (what == "finish") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_FINISH, val == "down" ? 1 : 0); }
+        else if (what == "pot") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_POT, atoi(val.c_str())); }
+        else if (what == "chatack") {   // ACK diferido: in <ms> chatack <destino> <msgId>
+            int target = 0, mid = 0; is >> target >> mid;
+            String p; p += (char)0x06; p += (char)target; p += (char)mid;
+            String enc = SimpleCrypto_encrypt(p);
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
+        }
+        else if (what == "chatmsg") {   // MENSAJE diferido: in <ms> chatmsg <emisor> <msgId> <texto>
+            int sender = 0, mid = 0; is >> sender >> mid;
+            std::string txt = restAfter(line, 5);
+            String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
+            String enc = SimpleCrypto_encrypt(p);
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
+        }
     }
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "lora") {
@@ -557,6 +582,8 @@ int main(int argc, char **argv) {
 
     EEPROM.setBackingFile(eepromPath.c_str());
     if (fresh) { remove(eepromPath.c_str()); }
+
+    sim::setInjectHook(injectDeferred);   // habilita "in <ms> chatack|chatmsg ..."
 
     // Arranque del firmware
     setup();

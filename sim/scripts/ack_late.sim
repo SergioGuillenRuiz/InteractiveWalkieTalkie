@@ -1,0 +1,35 @@
+# ============================================================
+#  Fix #1: un ACK que llega TARDE (>3 s) debe repintar "Entregado!"
+#  en la pantalla de resultado, en vez de quedarse en "(sin confirmar)".
+#  (Device_id del simulador = 137; primer mensaje enviado -> msgId 1.)
+# ============================================================
+wait 300
+
+# IDLE -> ENVIAR -> Instant -> elegir "kissy"
+pot 80
+wait 200
+tap morse
+wait 200
+pot 500
+wait 200
+tap morse
+wait 250
+pot 460
+wait 250
+expect text kissy
+
+# Enviar (mid=1). NO pulsamos finish: la pantalla de resultado sigue viva.
+# A los 3 s pasa a "(sin confirmar)"; el ACK programado llega a los 4 s y debe
+# volver a "Entregado!". El run se queda en la espera bloqueante (sin boton),
+# asi que el framebuffer congela el ultimo dibujo para poder comprobarlo.
+in 0 morse down
+in 120 morse up
+in 4000 chatack 137 1
+run 4600
+
+expect serial Enviando: kissy
+expect serial Confirmado: entregado
+expect text Entregado
+expect notext sin confirmar
+shot fix1_entregado_ack_tardio
+print Fix #1 verificado: ACK tardio (>3s) repinta "Entregado!"

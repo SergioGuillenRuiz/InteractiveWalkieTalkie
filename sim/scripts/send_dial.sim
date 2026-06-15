@@ -17,6 +17,7 @@ wait 200
 tap morse
 wait 300
 expect text Escribe
+expect text enviar        # pista por defecto: "(manten B = enviar)"
 
 # letra 'H' (indice 8 de " ABCDEFGHI...") y anadir con MORSE
 pot 335

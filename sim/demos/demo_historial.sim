@@ -83,38 +83,33 @@ in 0 morse down
 in 150 morse up
 run 700
 expect text De #50
-expect text hola desde el cincuenta
 expect text Borrar
+expect text Volver
 shot g8_hist_03_vista
 
 # ------------------------------------------------------------
-# PASO 5: BORRADO CON CONFIRMACION
-#  En la vista: MORSE (A) = Borrar -> pantalla "Borrar mensaje?" (A:SI B:NO)
+# PASO 5: BORRADO EN UN SOLO PASO  (vista de detalle -> A borra directo;
+#  ya no hay segunda pantalla "Borrar mensaje?"). Mismo patron que history.sim:
+#  reabrir la vista y pulsar A, ambas pulsaciones dentro del mismo run.
 # ------------------------------------------------------------
-print Paso 5a: pedir borrado -> pantalla de confirmacion
+print Paso 5: borrar en un paso (vista -> A)
+pot 1023
+wait 300
 in 0 morse down
 in 150 morse up
-run 500
-expect text Borrar mensaje?
-expect text A: SI
-shot g8_hist_04_confirma
-
-print Paso 5b: confirmar (A = MORSE) -> "Mensaje borrado"
-in 0 morse down
-in 150 morse up
-run 1600
-expect text Mensaje borrado
+in 600 morse down
+in 750 morse up
+run 3200
 expect serial Borrado. Total: 2
-shot g8_hist_05_borrado
-wait 400
 
 # ------------------------------------------------------------
-# PASO 6: la lista ya no contiene el mensaje borrado
+# PASO 6: la lista vuelve y el mensaje borrado ya no esta
 # ------------------------------------------------------------
 print Paso 6: la lista vuelve y el mensaje borrado ya no esta
+pot 512
 wait 300
 expect text Historial
 expect notext cincuenta
 expect text nos vemos
-shot g8_hist_06_tras_borrado
-print g8 HISTORIAL: vacio, recibidos, enviado, lista, vista y borrado OK
+shot g8_hist_05_tras_borrado
+print g8 HISTORIAL: vacio, recibidos, enviado, lista, vista y borrado (un paso) OK

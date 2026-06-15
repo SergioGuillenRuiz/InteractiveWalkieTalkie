@@ -149,6 +149,8 @@ static bool          s_drawForce = true;
 static int           s_pos = 0;                  // categoria activa (compose)
 static int           s_sel[FR_CATEGORIES];       // opcion elegida por categoria
 static int           s_manageSlot = 0;           // slot resaltado en gestion
+static bool          s_manageLock = false;       // ignora el pote hasta que el usuario lo gire
+static int           s_manageLockVal = 0;        // valor del pote al entrar a gestion
 
 // Seleccion estable con el pote (compose y manage comparten el candidato).
 static int           s_cand = -1;
@@ -292,7 +294,7 @@ FraseroResult fraseroTick() {
     s_pos = 0;
     for (int c = 0; c < FR_CATEGORIES; c++) s_sel[c] = (optionCount(c) > 1) ? 1 : 0;
     s_cand = -1; s_candSince = now; s_lastInput = now;
-    s_manageSlot = 0;
+    s_manageSlot = 0; s_manageLock = false;
     s_mWas = s_fWas = false; s_mLong = s_fLong = false;
     s_drawForce = true;
   }
@@ -333,7 +335,10 @@ FraseroResult fraseroTick() {
     drawCompose();
 
     if (mLongFire) {   // gestionar piezas de la categoria activa
+      // Arrancar siempre en el primer slot; el pote (que viene de la posicion de
+      // compose) no debe mover el cursor hasta que el usuario lo gire a proposito.
       s_mode = FRM_MANAGE; s_manageSlot = 0; s_cand = -1; s_lastInput = now; s_drawForce = true;
+      s_manageLock = true; s_manageLockVal = getPotValue(FR_SLOTS_PER_CAT - 1);
       return FR_NONE;
     }
     if (mShort) {      // fija y avanza
@@ -364,9 +369,15 @@ FraseroResult fraseroTick() {
   // FRM_MANAGE
   {
     int mapped = getPotValue(FR_SLOTS_PER_CAT - 1);
-    if (mapped != s_cand) { s_cand = mapped; s_candSince = now; }
-    else if (now - s_candSince >= SEL_DEBOUNCE_MS && s_manageSlot != s_cand) {
-      s_manageSlot = s_cand; s_lastInput = now; s_drawForce = true;
+    if (s_manageLock) {
+      // Mantener el cursor en el primer slot hasta detectar un giro real del pote.
+      if (mapped != s_manageLockVal) { s_manageLock = false; s_cand = -1; }
+    }
+    if (!s_manageLock) {
+      if (mapped != s_cand) { s_cand = mapped; s_candSince = now; }
+      else if (now - s_candSince >= SEL_DEBOUNCE_MS && s_manageSlot != s_cand) {
+        s_manageSlot = s_cand; s_lastInput = now; s_drawForce = true;
+      }
     }
 
     drawManage();
@@ -375,6 +386,7 @@ FraseroResult fraseroTick() {
       s_mode = FRM_EDIT;
       if (g_custom[s_pos][s_manageSlot].length() > 0) dialResetWith(g_custom[s_pos][s_manageSlot]);
       else dialReset();
+      dialSetFinishLabel("guardar");   // aqui la Rueda guarda la pieza, no envia
       s_lastInput = now;
       return FR_NONE;
     }

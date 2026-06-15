@@ -28,6 +28,10 @@ void dialReset();
 // Como dialReset() pero arrancando con un texto inicial (para editarlo).
 void dialResetWith(const String &initial);
 
+// Cambia el verbo de la pista "(manten B = ...)". Por defecto "enviar"; usar
+// "guardar" al editar piezas. dialReset()/dialResetWith() lo devuelven a "enviar".
+void dialSetFinishLabel(const char *label);
+
 // Atiende un ciclo de composicion (lee pote/botones y dibuja). Devuelve
 // DIAL_SENT o DIAL_CANCELLED cuando termina; DIAL_NONE mientras se compone.
 DialResult dialTick();
