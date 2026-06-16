@@ -3,6 +3,20 @@
 #  Recorre cada utilidad desde el menu Juegos: entrada, interaccion
 #  y salida limpia a IDLE. Captura cada pantalla relevante.
 #  Ejecutar:  walkie_sim.exe --fresh demo_juegos_b.sim
+#
+#  NOTA sobre la tecnica de captura (ver tambien sim/scripts/history.sim y
+#  sim/scripts/ack_late.sim):
+#  Choose4Me y HippoRadar son bucles BLOQUEANTES: una vez dentro, loop() no
+#  vuelve hasta que el juego sale a IDLE. Por eso NO se pueden capturar pantallas
+#  intermedias con `run` separados (cada `run` agota el deadline y, en el
+#  siguiente comando, el firmware reentra desde el menu de juegos). En su lugar
+#  cada segmento coreografia TODAS las pulsaciones (y los pings "HR" del radar)
+#  con `in <ms> ...` DENTRO de un MISMO `run`, y usa la forma `run <ms> <slack>`
+#  con un slack PEQUENO para CONGELAR el framebuffer en un instante elegido y
+#  asi capturar pantallas TRANSITORIAS (animacion "Pensando...", fases del radar
+#  que dependen de pings periodicos). Tras cada congelado el estado del juego
+#  queda abandonado y mainState sigue en STATE_GAMES_MENU, asi que el siguiente
+#  segmento REENTRA el juego desde el menu (o sale a IDLE con FINISH).
 # ============================================================
 wait 300
 expect text Env
@@ -14,56 +28,75 @@ print g10: arranque en IDLE
 # ============================================================
 print --- CHOOSE4ME ---
 
-# Entrar a JUEGOS desde IDLE (cursor alto)
+# Entrar a JUEGOS desde IDLE (cursor alto) y elegir Choose4Me (idx3 de 0..4).
+# Con bandas iguales (Inputs.cpp) idx3 = raw [615..819); pot 720 cae dentro.
 pot 1000
 wait 350
 tap morse
 wait 300
-
-# En el submenu de iconos, elegir Choose4Me (indice 3 de 0..4). Con bandas
-# iguales (Inputs.cpp) idx3 = raw [615..819); pot 720 cae dentro. (pot 820 ya
-# era idx4 = HippoRadar.)
 pot 720
 wait 350
 expect text Choose4Me
 shot g10_c4m_01_menu
 print Choose4Me seleccionado en el menu de juegos
 
-# Entrar al juego (MORSE = A). El bucle bloquea esperando boton,
-# pero backgroundTick corre, asi que basta entrar y avanzar tiempo.
+# --- Pantalla de inicio ---
+# Entrar al juego (MORSE = A) y congelar la pantalla de inicio (no pulsamos A:
+# el bucle de espera repinta el ultimo dibujo = la pantalla de inicio).
 in 0 morse down
-in 120 morse up
-run 700
+in 150 morse up
+run 900 150
 expect text CHOOSE4ME
 expect text Piensa
 expect text Preguntar
+expect text Salir
 shot g10_c4m_02_inicio
 print Pantalla de inicio: "Piensa tu pregunta / A: Preguntar / B: Salir"
 
-# Preguntar (A = MORSE): arranca la animacion "Pensando..." (2 s)
+# --- Animacion "Pensando..." (transitoria, 2 s) ---
+# Reentrar, pulsar A (~600 ms, ya dentro del bucle de espera) para arrancar la
+# animacion y CONGELAR a mitad (~1.7 s) para capturar "Pensando...".
 in 0 morse down
-in 120 morse up
-run 600
+in 150 morse up
+in 600 morse down
+in 750 morse up
+run 1600 150
 expect text Pensando
 shot g10_c4m_03_pensando
-print Animacion "Pensando..." en curso
+print Animacion "Pensando..." capturada a mitad
 
-# Dejar terminar la animacion (2 s totales) y ver la respuesta + opciones
-run 1800
+# --- Pantalla de respuesta ---
+# Reentrar, pulsar A, dejar terminar la animacion (2 s) y congelar en la
+# pantalla de respuesta (bucle de espera con "A: Otra vez / B: Salir").
+in 0 morse down
+in 150 morse up
+in 600 morse down
+in 750 morse up
+run 3100 150
 expect text Otra vez
 expect text Salir
 shot g10_c4m_04_respuesta
 print Respuesta mostrada con "A: Otra vez / B: Salir"
 
-# Pedir OTRA respuesta (A = MORSE) para verificar el bucle de repeticion
+# --- Bucle "Otra vez" -> segunda respuesta ---
+# Reentrar, preguntar (A), pulsar A en la respuesta (Otra vez -> vuelve a la
+# pantalla de inicio), preguntar otra vez (A) y congelar en la 2a respuesta.
 in 0 morse down
-in 120 morse up
-run 2700
+in 150 morse up
+in 600 morse down
+in 750 morse up
+in 3000 morse down
+in 3150 morse up
+in 3500 morse down
+in 3650 morse up
+run 6000 150
 expect text Otra vez
+expect text Salir
 shot g10_c4m_05_otra_respuesta
 print Segunda respuesta (bucle "Otra vez") OK
 
-# Salir del juego (B = FINISH). Vuelve a STATE_IDLE.
+# --- Salida limpia a IDLE ---
+# Tras el congelado seguimos en STATE_GAMES_MENU: FINISH (B) vuelve a IDLE.
 in 0 finish down
 in 150 finish up
 run 1200
@@ -77,63 +110,80 @@ print Choose4Me sale limpio a IDLE
 # ============================================================
 print --- HIPPO RADAR ---
 
-# Volver a entrar a JUEGOS desde IDLE
-pot 1000
+# Volver a entrar a JUEGOS desde IDLE y elegir HippoRadar (idx4 -> el ultimo,
+# pot 1023). pot 1023 sirve a la vez para el cursor de IDLE (Juegos) y para idx4.
+pot 1023
 wait 350
 tap morse
-wait 300
-
-# Elegir HippoRadar (indice 4 -> el ultimo, pot 1023)
-pot 1023
 wait 350
 expect text HippoRadar
 shot g10_hippo_01_menu
 print HippoRadar seleccionado en el menu de juegos
 
-# Entrar a la utilidad (MORSE = A "empezar"). startScreen bloquea pero
-# backgroundTick corre; basta entrar y avanzar tiempo para capturarla.
+# --- Pantalla de inicio ---
+# Entrar (MORSE) y congelar la pantalla de inicio (no pulsamos A: startScreen
+# bloquea repintando su ultimo dibujo).
 in 0 morse down
-in 120 morse up
-run 600
+in 150 morse up
+run 900 150
 expect text HIPPO RADAR
 expect text Localiza
 expect text empezar
 shot g10_hippo_02_inicio
 print Pantalla de inicio: "Localiza al otro equipo / A: empezar B: salir"
 
-# Pulsar A para empezar -> fase BUSCANDO (no hay companero todavia)
+# --- Fase BUSCANDO ---
+# Reentrar, pulsar A (empezar) y, SIN pings, congelar la fase BUSCANDO (no hay
+# companero todavia -> se queda en PH_SEARCH dibujando "BUSCANDO").
 in 0 morse down
-in 120 morse up
-run 700
+in 150 morse up
+in 600 morse down
+in 750 morse up
+run 1300 150
 expect text BUSCANDO
 expect text Acerca
 shot g10_hippo_03_buscando
 print Fase BUSCANDO: esperando oir al otro equipo
 
-# Inyectar un ping del companero ("HR", len 2 -> cuenta como otro equipo
-# sea cual sea ownId). Con haveLink pasa a la fase GIRA DESPACIO.
-lora rx HR
-lora rx HR
-run 500
+# --- Fase GIRA DESPACIO ---
+# Reentrar, pulsar A y, con dos pings "HR" diferidos (in <ms> lora HR) DENTRO
+# del run, alcanzar la fase GIRA; congelar poco despues del ultimo ping (con el
+# enlace aun vivo, <3.5 s) para capturar "GIRA DESPACIO".
+in 0 morse down
+in 150 morse up
+in 600 morse down
+in 750 morse up
+in 900 lora HR
+in 1100 lora HR
+run 1500 150
 expect text GIRA
 shot g10_hippo_04_gira
-print Companero oido (lora rx HR): fase GIRA DESPACIO (frio/tibio/caliente)
+print Companero oido (in <ms> lora HR): fase GIRA DESPACIO (frio/tibio/caliente)
 
-# Seguir inyectando pings para mantener el enlace y dejar que se asiente
-# en el punto fuerte (>1.4 s sin mejora) -> bloqueo automatico -> VE HACIA AQUI.
-lora rx HR
-run 400
-lora rx HR
-run 400
-lora rx HR
-run 400
-lora rx HR
-run 800
+# --- Bloqueo: VE HACIA AQUI ---
+# Reentrar, pulsar A y mantener el enlace vivo con pings cada 2.5 s (<3.5 s).
+# Con RSSI constante el firmware relaja el criterio tras 18 s sin mejora y se
+# bloquea solo (PH_LOCKED). Congelar poco despues del ultimo ping para capturar
+# "VE HACIA AQUI" con flecha + metros.
+in 0 morse down
+in 150 morse up
+in 600 morse down
+in 750 morse up
+in 900 lora HR
+in 3400 lora HR
+in 5900 lora HR
+in 8400 lora HR
+in 10900 lora HR
+in 13400 lora HR
+in 15900 lora HR
+in 18400 lora HR
+in 20900 lora HR
+run 21100 200
 expect text AQUI
 shot g10_hippo_05_locked
 print Bloqueo: "VE HACIA AQUI" con flecha + metros (RSSI -> distancia)
 
-# Salir de la utilidad (B = FINISH). radioRestore + vuelta a STATE_IDLE.
+# --- Salida limpia a IDLE ---
 in 0 finish down
 in 150 finish up
 run 1200

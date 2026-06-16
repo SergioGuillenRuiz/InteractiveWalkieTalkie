@@ -64,9 +64,15 @@ static int deferPacket(const std::string &enc) {
 // ---------------------------------------------------------------------------
 // Motor de ejecución
 // ---------------------------------------------------------------------------
-static void runFor(uint32_t ms) {
+// 'slack' es el margen antibloqueo: cuanto deja correr el reloj MAS ALLA de
+// 'target' antes de abortar por "espera bloqueante". Con el valor por defecto
+// (SLACK=60 s) un run sobre un bucle bloqueante congela el ULTIMO frame estable.
+// Con un slack PEQUENO el run congela el framebuffer en ~target+slack, lo que
+// permite capturar pantallas TRANSITORIAS (animaciones, fases de radar que
+// dependen de pings periodicos) en un instante elegido. Ver demo_juegos_b.sim.
+static void runFor(uint32_t ms, uint32_t slack = SLACK) {
     uint32_t target = sim::now() + ms;
-    sim::setDeadline(target + SLACK);
+    sim::setDeadline(target + slack);
     bool timeout = false;
     try {
         sim::applyDue();
@@ -178,7 +184,12 @@ static void execLine(const std::string &raw) {
     else if (cmd == "finish") { std::string s; is >> s; sim::setFinish(s == "down"); }
     else if (cmd == "tap") { std::string b; uint32_t ms = 150; is >> b; if (!(is >> ms)) ms = 150; tap(btnKind(b), ms); }
     else if (cmd == "hold") { std::string b; uint32_t ms = 1000; is >> b >> ms; holdRelease(btnKind(b), ms); }
-    else if (cmd == "wait" || cmd == "run") { uint32_t ms = 0; is >> ms; runFor(ms); }
+    else if (cmd == "wait" || cmd == "run") {
+        uint32_t ms = 0; is >> ms;
+        uint32_t slack = SLACK;            // por defecto, margen antibloqueo largo (60 s)
+        uint32_t s; if (is >> s) slack = s; // opcional: "run <ms> <slack>" congela el frame en ~now+ms+slack
+        runFor(ms, slack);
+    }
     else if (cmd == "ff") { uint32_t ms = 0; is >> ms; fastForward(ms); }
     else if (cmd == "in") {
         uint32_t off = 0; std::string what; is >> off >> what;
@@ -186,6 +197,14 @@ static void execLine(const std::string &raw) {
         if (what == "morse")  { std::string val; is >> val; sim::scheduleAt(t, sim::EV_MORSE, val == "down" ? 1 : 0); }
         else if (what == "finish") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_FINISH, val == "down" ? 1 : 0); }
         else if (what == "pot") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_POT, atoi(val.c_str())); }
+        else if (what == "lora") {   // paquete LoRa crudo diferido: in <ms> lora <texto>
+            // Como "lora rx" pero entregado en el instante pedido, incluso mientras el
+            // firmware esta dentro de un bucle de juego (p.ej. los pings "HR" de HippoRadar,
+            // que su rxTick lee pero backgroundTick descartaria si llegaran fuera del juego).
+            std::string txt = restAfter(line, 3);
+            String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
+        }
         else if (what == "chatack") {   // ACK diferido: in <ms> chatack <destino> <msgId>
             int target = 0, mid = 0; is >> target >> mid;
             String p; p += (char)0x06; p += (char)target; p += (char)mid;
