@@ -359,7 +359,7 @@ static String encodeState(bool over) {
   for (int i = 0; i < 23; i++) putB(s, by[i]);
   putB(s, P1.type); putB(s, P1.rot); putB(s, P1.x + 2); putB(s, P1.y + 2); putB(s, P1.alive ? 1 : 0);
   putB(s, P2.type); putB(s, P2.rot); putB(s, P2.x + 2); putB(s, P2.y + 2); putB(s, P2.alive ? 1 : 0);
-  putB(s, (score >> 8) & 0xFF); putB(s, score & 0xFF); putB(s, lines & 0xFF); putB(s, over ? 1 : 0);
+  putB(s, (score >> 16) & 0xFF); putB(s, (score >> 8) & 0xFF); putB(s, score & 0xFF); putB(s, lines & 0xFF); putB(s, over ? 1 : 0);
   return s;
 }
 static void decodeState(const String &s, bool &over) {
@@ -370,7 +370,7 @@ static void decodeState(const String &s, bool &over) {
   for (int y = 0; y < BH; y++) for (int x = 0; x < BW; x++) { board[y][x] = (by[bit >> 3] >> (bit & 7)) & 1; bit++; }
   P1.type = getB(s, i); P1.rot = getB(s, i); P1.x = getB(s, i) - 2; P1.y = getB(s, i) - 2; P1.alive = getB(s, i);
   P2.type = getB(s, i); P2.rot = getB(s, i); P2.x = getB(s, i) - 2; P2.y = getB(s, i) - 2; P2.alive = getB(s, i);
-  score = (getB(s, i) << 8); score |= getB(s, i); lines = getB(s, i); over = getB(s, i);
+  score = ((long)getB(s, i) << 16); score |= ((long)getB(s, i) << 8); score |= getB(s, i); lines = getB(s, i); over = getB(s, i);
 }
 
 // Input cliente->host: columna objetivo + contadores de rotacion/caida

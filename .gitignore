@@ -6,3 +6,4 @@
 
 # Artefactos de compilacion del simulador nativo
 sim/out/
+sim/build_log.txt

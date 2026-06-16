@@ -5,7 +5,9 @@ wait 300
 tap morse
 wait 300
 expect text Selecciona
-pot 850
+# "Rueda" es el modo idx2 de 0..3 (Morse/Instant/Rueda/Frase). Con bandas iguales
+# idx2 = raw [512..767); pot 640 cae dentro. (pot 850 caia en idx3 = Frase.)
+pot 640
 wait 350
 expect text Rueda
 shot g4_rueda_01_modo

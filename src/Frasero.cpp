@@ -386,7 +386,8 @@ FraseroResult fraseroTick() {
       s_mode = FRM_EDIT;
       if (g_custom[s_pos][s_manageSlot].length() > 0) dialResetWith(g_custom[s_pos][s_manageSlot]);
       else dialReset();
-      dialSetFinishLabel("guardar");   // aqui la Rueda guarda la pieza, no envia
+      dialSetFinishLabel("guardar");      // aqui la Rueda guarda la pieza, no envia
+      dialSetMaxLen(FR_PIECE_MAXLEN);     // no permitir escribir mas de lo que cabe
       s_lastInput = now;
       return FR_NONE;
     }

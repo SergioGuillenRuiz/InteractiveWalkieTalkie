@@ -49,6 +49,16 @@
 #define ENABLE_CPU_LIGHT_SLEEP  1
 
 // ------------------------------------------------------------
+// Mensajería
+// ------------------------------------------------------------
+
+// Longitud máxima del texto de un mensaje enviable. El sobre de chat añade 3
+// bytes y el cifrado limita el texto plano a 95 (ver SimpleCrypto.cpp): 95-3 = 92.
+// Quien componga mensajes (Morse, Rueda, Frasero) debe respetar este tope para
+// que el envío no falle silenciosamente al cifrar.
+#define MSG_MAX_TEXT_LEN   92
+
+// ------------------------------------------------------------
 // Función de configuración de pines
 // ------------------------------------------------------------
 inline void setupPins() {

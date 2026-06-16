@@ -22,6 +22,9 @@ String dialMessage = "";
 // mensaje); el Frasero lo pone a "guardar" al editar una pieza propia.
 static const char *s_finishVerb = "enviar";
 
+// Longitud maxima del texto compuesto (configurable; por defecto DIAL_MAX_LEN).
+static int s_maxLen = DIAL_MAX_LEN;
+
 // --- Estado interno (a nivel de modulo para poder reiniciarlo desde dialReset) ---
 static bool          s_init = false;
 static int           s_selectedIdx = 0;
@@ -39,6 +42,7 @@ void dialReset() {
   dialMessage = "";
   s_init = false;
   s_finishVerb = "enviar";
+  s_maxLen = DIAL_MAX_LEN;
 }
 
 void dialResetWith(const String &initial) {
@@ -47,10 +51,19 @@ void dialResetWith(const String &initial) {
     dialMessage = dialMessage.substring(0, DIAL_MAX_LEN);
   s_init = false;
   s_finishVerb = "enviar";
+  s_maxLen = DIAL_MAX_LEN;
 }
 
 void dialSetFinishLabel(const char *label) {
   s_finishVerb = (label && label[0]) ? label : "enviar";
+}
+
+void dialSetMaxLen(int maxLen) {
+  if (maxLen < 1)            maxLen = 1;
+  if (maxLen > DIAL_MAX_LEN) maxLen = DIAL_MAX_LEN;
+  s_maxLen = maxLen;
+  if ((int)dialMessage.length() > s_maxLen)
+    dialMessage = dialMessage.substring(0, s_maxLen);
 }
 
 DialResult dialTick() {
@@ -92,7 +105,7 @@ DialResult dialTick() {
       dialMessage = "";
       return DIAL_CANCELLED;
     }
-    if ((int)dialMessage.length() < DIAL_MAX_LEN) {
+    if ((int)dialMessage.length() < s_maxLen) {
       dialMessage += CHARSET[s_selectedIdx];
     }
     s_lastInputTime = now;

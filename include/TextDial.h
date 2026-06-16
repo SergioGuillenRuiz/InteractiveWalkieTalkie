@@ -32,6 +32,11 @@ void dialResetWith(const String &initial);
 // "guardar" al editar piezas. dialReset()/dialResetWith() lo devuelven a "enviar".
 void dialSetFinishLabel(const char *label);
 
+// Limita la longitud del texto compuesto (por defecto DIAL_MAX_LEN). El Frasero
+// lo usa para que una pieza no exceda su capacidad y "lo que escribes es lo que
+// se guarda". dialReset()/dialResetWith() lo restauran al valor por defecto.
+void dialSetMaxLen(int maxLen);
+
 // Atiende un ciclo de composicion (lee pote/botones y dibuja). Devuelve
 // DIAL_SENT o DIAL_CANCELLED cuando termina; DIAL_NONE mientras se compone.
 DialResult dialTick();

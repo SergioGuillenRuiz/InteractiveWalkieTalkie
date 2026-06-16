@@ -129,7 +129,8 @@ MorseResult createMorseMessage() {
     finishWasPressed = false;
     if (finishLongArmed) {
       if (!morseCode.isEmpty()) {
-        mensajeAEnviar += morseToChar(morseCode);
+        if ((int)mensajeAEnviar.length() < MSG_MAX_TEXT_LEN)
+          mensajeAEnviar += morseToChar(morseCode);
         morseCode = "";
       }
       mensajeEnviado = true;
@@ -145,7 +146,8 @@ MorseResult createMorseMessage() {
     } else {
       if (!morseCode.isEmpty()) {
         char letra = morseToChar(morseCode);
-        mensajeAEnviar += letra;
+        if ((int)mensajeAEnviar.length() < MSG_MAX_TEXT_LEN)
+          mensajeAEnviar += letra;
         morseCode = "";
         morsePrefix = "";
         lastMorsePrefix = "";

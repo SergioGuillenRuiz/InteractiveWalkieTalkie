@@ -80,21 +80,19 @@ wait 350
 expect text happy
 shot g7_chat_06_instant_happy
 
-# Disparar el envio coreografiado con 'in' para NO bloquear en waitAfterResult.
-# (Tras enviar, el firmware espera un boton; no usamos 'tap morse' aqui.)
-print g7_chat 08: enviar -> pantalla 'Enviado: esperando confirm...'
+# Enviar "happy". El firmware bloquea en waitAfterResult con la pantalla de
+# resultado viva; inyectamos el ACK del receptor DENTRO del mismo 'run' (patron de
+# ack_late.sim) para que esa pantalla repinte "Entregado!". Si se inyectara tras un
+# 'run' aparte, la espera ya estaria abandonada y solo cambiaria el serie, no la
+# pantalla. (ACK destino = mi id 137, msgId del 1er envio = 1.)
+print g7_chat 08: enviar 'happy' (msgId 1) con ACK dentro de la misma espera
 in 0 morse down
 in 120 morse up
-run 500
-expect text Enviado
+in 2500 chatack 137 1
+run 3200
 expect serial Chat] Enviando: happy
 expect serial Guardado: happy
-shot g7_chat_07_enviado_pendiente
-
-# El receptor confirma la entrega: ACK para mi id (137), msgId del 1er envio (1)
-print g7_chat 09: inyectar ACK -> 'Entregado!'
-chatack 137 1
-wait 400
+print g7_chat 09: ACK del receptor -> 'Entregado!'
 expect serial Confirmado: entregado
 expect text Entregado
 shot g7_chat_08_entregado

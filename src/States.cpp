@@ -64,10 +64,21 @@ void backgroundTick() {
                 if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
             }
         } else {
-            // Mensaje plano/legado (sin sobre): comportamiento anterior.
-            History_addIncoming(raw, 0);
-            lastTimeReceived = millis();
-            if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+            // Mensaje plano/legado (sin sobre). Los paquetes de los protocolos de
+            // juego (Tetris "TS/TI/TH/TJ/TQ", HippoRadar "HR") podrian colarse aqui
+            // si un tercer equipo los oyera fuera de su pantalla: NO son mensajes de
+            // chat y no deben ensuciar el historial. Los mensajes de usuario siempre
+            // viajan con sobre (CHAT_MSG), asi que nunca caen en esta rama.
+            bool gamePkt =
+                (raw.length() >= 2 && raw[0] == 'T' &&
+                 (raw[1] == 'S' || raw[1] == 'I' || raw[1] == 'H' ||
+                  raw[1] == 'J' || raw[1] == 'Q')) ||
+                (raw.length() >= 2 && raw[0] == 'H' && raw[1] == 'R');
+            if (!gamePkt) {
+                History_addIncoming(raw, 0);
+                lastTimeReceived = millis();
+                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+            }
         }
     }
 

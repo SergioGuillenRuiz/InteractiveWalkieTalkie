@@ -32,7 +32,8 @@ tap morse
 wait 350
 
 # ---- Paso 4: rejilla Instant - primer icono (cansada, idx 0) ----
-# getPotValue(7): index = (raw*7)/1023. Centros: 0->73, 2->365, 4->657, 7->1023, 3->511.
+# getPotValue(7) con bandas iguales: index = (raw*8)/1024. Centros aprox (banda
+# de 128 cuentas): 0->64, 2->320, 4->576, 7->960(o 1023), 3->448(usamos 511).
 print g3 paso 4: rejilla Instant en 'cansada' (idx 0)
 pot 73
 wait 350
@@ -48,7 +49,7 @@ shot g3_instant_05_grid_meh
 
 # ---- Paso 6: recorrer a 'happy' (idx 4) ----
 print g3 paso 6: recorrer a 'happy' (idx 4)
-pot 657
+pot 576
 wait 350
 expect text happy
 shot g3_instant_06_grid_happy
@@ -67,27 +68,23 @@ wait 350
 expect text kissy
 shot g3_instant_08_grid_kissy
 
-# ---- Paso 9: ENVIAR (morse) + salir coreografiado con 'in' ----
-# El firmware BLOQUEA en waitAfterResult tras enviar; coreografiamos
-# el envio Y la espera para capturar la pantalla "Enviado" sin colgar.
-print g3 paso 9: enviar kissy y mostrar 'Enviado'
+# ---- Paso 9+10: ENVIAR 'kissy' y CONFIRMAR ENTREGA en una sola espera ----
+# Tras enviar, el firmware BLOQUEA en waitAfterResult con la pantalla de
+# resultado viva. Inyectamos el ACK DENTRO del mismo 'run' (patron de
+# ack_late.sim) para que esa pantalla repinte "Entregado!". Si el ACK se
+# inyectara tras un 'run' aparte, la espera ya estaria abandonada y solo
+# cambiaria el log serie, no la pantalla. (Primer envio -> msgId 1; id propio 137.)
+print g3 paso 9: enviar kissy (msgId 1)
 in 0 morse down
 in 120 morse up
-run 500
-shot g3_instant_09_enviado
-expect text Enviado
-expect text kissy
+in 2500 chatack 137 1
+run 3200
 expect serial Enviando: kissy
 expect sent kissy
-
-# ---- Paso 10: confirmacion de entrega (ACK del receptor) ----
-# El primer mensaje enviado lleva msgId=1; Device_id por defecto = 137.
-print g3 paso 10: ACK -> 'Entregado!'
-chatack 137 1
-run 300
-shot g3_instant_10_entregado
-expect text Entregado
+print g3 paso 10: ACK del receptor -> 'Entregado!'
 expect serial Confirmado: entregado
+expect text Entregado
+shot g3_instant_10_entregado
 
 # ---- Paso 11: salir de la pantalla de resultado con FINISH ----
 print g3 paso 11: salir con FINISH -> vuelta al menu principal

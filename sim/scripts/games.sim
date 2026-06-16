@@ -26,7 +26,7 @@ print Poker entra y sale sin "Proximamente" fantasma
 pot 1000
 wait 200
 tap morse
-pot 820
+pot 720
 wait 250
 expect text Choose4Me
 in 0 morse down
@@ -39,7 +39,7 @@ run 1200
 expect text Env
 print Choose4Me entra y sale correctamente
 
-# --- TETRIS (no implementado) -> Proximamente -> finish -> IDLE ---
+# --- TETRIS (implementado): entrar a la seleccion de modo y salir con B ---
 pot 1000
 wait 200
 tap morse
@@ -52,4 +52,4 @@ in 500 finish down
 in 620 finish up
 run 1000
 expect text Env
-print Juego no implementado: flujo Proximamente -> IDLE OK
+print Tetris: entra a seleccion de modo y vuelve a IDLE con B

@@ -6,6 +6,7 @@
 #include "States.h"
 #include "MyLora.h"
 #include "Historial.h"
+#include "Identity.h"
 #include "HippoRadar.h"
 
 // ============================================================
@@ -218,7 +219,8 @@ static bool startScreen() {
 // ============================================================
 void startHippoRadar() {
   randomSeed(analogRead(A0) ^ micros());
-  ownId = (uint8_t)random(1, 255);
+  ownId = Device_id();   // id estable y unico por equipo (no aleatorio): evita que
+                         // dos equipos saquen el mismo id y se ignoren mutuamente.
 
   if (!startScreen()) { mainState = STATE_IDLE; Display_clear(); return; }
   while (isMorsePressed()) { backgroundTick(); delay(10); }   // soltar la A de "empezar"

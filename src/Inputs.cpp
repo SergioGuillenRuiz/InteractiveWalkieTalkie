@@ -81,6 +81,11 @@ int getPotValue(int maxIndex) {
     }
   }
 
-  int mapped = map(stableRaw, 0, 1023, 0, maxIndex);
+  // Reparto en bandas IGUALES sobre 0..1023: cada opcion ocupa 1024/(maxIndex+1)
+  // cuentas de ADC, asi la ULTIMA opcion ocupa una banda ancha [N*1024/(N+1)..1023]
+  // y se alcanza mucho antes del tope. (Un map(...,0,1023,0,N) clasico solo daba N
+  // con raw==1023 EXACTO, dejando la ultima opcion practicamente inalcanzable:
+  // muchos ADC no llegan a 1023 y el filtro de ruido impide asentarse justo ahi.)
+  int mapped = (int)(((long)stableRaw * (maxIndex + 1)) / 1024L);
   return constrain(mapped, 0, maxIndex);
 }

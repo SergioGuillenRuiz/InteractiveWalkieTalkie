@@ -11,8 +11,8 @@ tap morse
 wait 200
 expect text Selecciona
 
-# elegir "Rueda" (sel 2 de 0..3)
-pot 850
+# elegir "Rueda" (sel 2 de 0..3; bandas iguales: idx2 = raw 512..767)
+pot 640
 wait 200
 tap morse
 wait 300

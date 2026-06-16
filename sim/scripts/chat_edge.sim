@@ -9,7 +9,10 @@ expect serial EEPROM inicializada       # arranque fresco -> reformatea (guard d
 # --- Anti-eco: un mensaje cuyo emisor es NUESTRO propio id se ignora ---
 chatmsg 137 9 ecopropio
 wait 300
-pot 512
+# pot 400: en el menu IDLE (3 opciones, bandas iguales) cae en "Historial" (idx1)
+# y, al entrar a la lista, ese mismo 400 mapea a idx0 (el mas reciente). Con un
+# valor mayor (p.ej. 512) la lista de 2 msgs caeria en idx1 y abriria el otro.
+pot 400
 wait 200
 tap morse
 wait 300
@@ -23,7 +26,7 @@ run 400
 chatmsg 50 1 desde cincuenta
 wait 300
 expect serial ACK a #50
-pot 512
+pot 400                     # "Historial" en IDLE y, dentro, el mas reciente (#50)
 wait 200
 tap morse
 wait 300
@@ -44,7 +47,7 @@ run 400
 chatmsg 77 2 mensaje larguisimo para comprobar el ajuste de linea correcto
 wait 300
 expect serial ACK a #77
-pot 512
+pot 400                     # "Historial" en IDLE y, dentro, el mas reciente (#77, el largo)
 wait 200
 tap morse
 wait 300

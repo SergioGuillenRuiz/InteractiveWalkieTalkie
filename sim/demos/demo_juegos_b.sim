@@ -20,8 +20,10 @@ wait 350
 tap morse
 wait 300
 
-# En el submenu de iconos, elegir Choose4Me (indice 3 -> pot ~820)
-pot 820
+# En el submenu de iconos, elegir Choose4Me (indice 3 de 0..4). Con bandas
+# iguales (Inputs.cpp) idx3 = raw [615..819); pot 720 cae dentro. (pot 820 ya
+# era idx4 = HippoRadar.)
+pot 720
 wait 350
 expect text Choose4Me
 shot g10_c4m_01_menu

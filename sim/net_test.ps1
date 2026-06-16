@@ -43,12 +43,17 @@ function Check($desc, $cond) {
 }
 
 # Guion: navegar IDLE -> Enviar -> Instant -> mensaje <potIdx> -> enviar; seguir vivo.
+# pot 80   -> "Enviar"  (idx0 de 3 en IDLE).
+# pot 384  -> modo "Instant" (idx1 de 4: Morse/Instant/Rueda/Frase). OJO: antes
+#             ponia pot 1023, que cae en "Frase" (idx3) -> no enviaba nada y el
+#             test fallaba. 384 selecciona Instant con el reparto en bandas iguales.
+# potIdx   -> mensaje del grid Instant (8 opciones): 585->"happy", 460->"kissy".
 function SenderKeys($potIdx, $life) {
 @"
 0 pot 80
 3000 mdown
 3120 mup
-3600 pot 1023
+3600 pot 384
 4000 mdown
 4120 mup
 4600 pot $potIdx

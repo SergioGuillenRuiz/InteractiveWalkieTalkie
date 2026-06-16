@@ -1,0 +1,77 @@
+# ============================================================
+#  Regresion del fallo del potenciometro: la ULTIMA opcion de cada
+#  menu del pote debe poder seleccionarse SIN llegar a raw==1023 exacto
+#  (muchos ADC reales no llegan al tope, y el filtro de ruido impedia
+#  asentarse justo en 1023). Con bandas iguales la ultima opcion ocupa
+#  una franja ancha y se alcanza mucho antes del maximo.
+# ============================================================
+wait 300
+
+# --- JUEGOS: HippoRadar (idx4 de 0..4) alcanzable con pot 900, no 1023 ---
+pot 1000
+wait 200
+tap morse
+wait 250
+pot 900
+wait 300
+expect text HippoRadar
+print Juegos: HippoRadar (ultima) alcanzable con pot 900
+tap finish
+wait 300
+
+# --- ENVIAR: "Frase" (idx3 de 0..3) con pot 880; entrar confirma la seleccion ---
+pot 80
+wait 200
+tap morse
+wait 200
+expect text Selecciona
+pot 880
+wait 250
+tap morse
+wait 300
+expect text quien          # entro al Frasero => "Frase" estaba seleccionada
+print Enviar: "Frase" (ultima) alcanzable con pot 880
+tap finish                  # FINISH en la 1a categoria -> sale a IDLE
+wait 400
+expect text Env
+
+# --- INSTANT: "Nour" (idx7 de 0..7) alcanzable con pot 950 ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 500
+wait 200
+tap morse
+wait 250
+pot 950
+wait 300
+expect text Nour
+print Instant: "Nour" (ultima) alcanzable con pot 950
+tap finish
+wait 200
+tap finish
+wait 300
+expect text Env
+
+# --- RUEDA: la ultima letra 'Z' (idx26) alcanzable con pot 990, no 1023 ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 640
+wait 250
+tap morse
+wait 300
+expect text Escribe
+pot 990
+wait 350
+tap morse                   # anade 'Z'
+wait 150
+# enviar manteniendo FINISH (>=1500 ms)
+in 0 finish down
+in 1700 finish up
+run 1900
+expect serial Enviando: Z
+expect sent Z
+print Rueda: ultima letra 'Z' seleccionable y enviada con pot 990

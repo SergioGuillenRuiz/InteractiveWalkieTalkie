@@ -10,7 +10,7 @@
 wait 300
 print [01] IDLE - menu principal
 shot g2_morse_01_idle
-expect text Enviar
+expect text Env
 
 # --- IDLE: cursor a "Enviar" (pot 80) y entrar ---
 pot 80
@@ -59,25 +59,22 @@ wait 300
 expect text A
 shot g2_morse_07_letra_fijada
 
-# --- Enviar: FINISH largo (>=1500ms). Coreografiamos envio + salida
-#     con 'in' para no quedar bloqueados en waitAfterResult.
-#     finish down@0 .. up@1700 = pulsacion larga que envia.
-#     A los 2900ms otra pulsacion FINISH corta para salir del resultado.
+# --- Enviar: FINISH largo (>=1500ms) dispara el envio. NO salimos del resultado:
+#     inyectamos el ACK del receptor DENTRO del mismo 'run' (patron de ack_late.sim)
+#     para que la pantalla de resultado siga viva y repinte "Entregado!". El ACK a
+#     ~1.8 s del envio llega antes del timeout de 3 s ("(sin confirmar)").
+#     finish down@0 .. up@1700 = pulsacion larga que envia; ACK@3500 -> entregado.
 print [08] Enviar - FINISH largo dispara el envio
 in 0 finish down
 in 1700 finish up
-in 2900 finish down
-in 3050 finish up
-run 3600
+in 3500 chatack 137 1
+run 4200
 expect serial [Chat] Enviando: A
 expect sent A
 print [09] Mensaje 'A' enviado y verificado en TX
-shot g2_morse_08_enviado
 
-# --- Confirmacion de entrega: inyectar ACK del receptor -> "Entregado!" ---
+# --- Confirmacion de entrega: el ACK del receptor repinta "Entregado!" ---
 print [10] ACK del receptor -> Entregado!
-chatack 137 1
-run 400
 expect serial [Chat] Confirmado: entregado
 expect text Entregado
 shot g2_morse_09_entregado
