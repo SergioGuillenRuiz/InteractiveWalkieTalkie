@@ -7,15 +7,15 @@
 # ============================================================
 wait 300
 
-# --- JUEGOS: "Dibujar" (idx5 de 0..5, la ultima) alcanzable con pot 900, no 1023 ---
+# --- JUEGOS: "3 en raya" (idx6 de 0..6, la ultima) alcanzable con pot 900, no 1023 ---
 pot 1000
 wait 200
 tap morse
 wait 250
 pot 900
 wait 300
-expect text Dibujar
-print Juegos: Dibujar (ultima) alcanzable con pot 900
+expect text 3 en raya
+print Juegos: "3 en raya" (ultima) alcanzable con pot 900
 tap finish
 wait 300
 

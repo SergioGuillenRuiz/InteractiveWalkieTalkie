@@ -5,7 +5,7 @@ wait 300
 pot 1000
 wait 200
 tap morse
-pot 600
+pot 512
 wait 250
 expect text Choose4Me
 lora rx alfa

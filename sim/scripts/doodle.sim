@@ -5,12 +5,12 @@
 # ============================================================
 wait 300
 
-# --- IDLE -> Juegos -> Dibujar (idx5, pot 900) ---
+# --- IDLE -> Juegos -> Dibujar (idx5 de 7, pot 800) ---
 pot 1000
 wait 200
 tap morse
 wait 200
-pot 900
+pot 800
 wait 250
 expect text Dibujar
 

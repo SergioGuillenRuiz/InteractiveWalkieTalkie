@@ -8,7 +8,7 @@ wait 300
 pot 1000
 wait 200
 tap morse
-pot 300
+pot 220
 wait 250
 expect text Poker
 in 0 morse down
@@ -26,7 +26,7 @@ print Poker entra y sale sin "Proximamente" fantasma
 pot 1000
 wait 200
 tap morse
-pot 600
+pot 512
 wait 250
 expect text Choose4Me
 in 0 morse down

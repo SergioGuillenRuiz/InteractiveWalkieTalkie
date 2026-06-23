@@ -7,7 +7,7 @@ wait 300
 pot 1000
 wait 200
 tap morse
-pot 300
+pot 220
 wait 250
 expect text Poker
 lora rx alfa

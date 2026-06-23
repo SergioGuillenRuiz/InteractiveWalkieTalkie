@@ -38,10 +38,10 @@ wait 250
 pot 0
 wait 250
 expect text Tetris
-# y el ultimo (Dibujar, idx5 de 6)
+# y el ultimo ("3 en raya", idx6 de 7)
 pot 1023
 wait 250
-expect text Dibujar
+expect text 3 en raya
 tap finish
 wait 300
 expect text Env

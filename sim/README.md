@@ -123,6 +123,9 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `presence.sim`     | Presencia del compañero por baliza: online tras oírla, offline tras el timeout |
 | `clock.sim`        | Reloj compartido: hora fijada/sincronizada, antigüedad real y persistencia tras reboot |
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
+| `nudge.sim`        | Nudge "pensando en ti": recibir (historial + despertar) y enviar por gesto |
+| `doodle.sim`       | Lienzo 16×16: dibujar y enviar; recibir y mostrar |
+| `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
 
 Ejecutar uno con salida detallada:
 
@@ -164,6 +167,11 @@ chatmsg <emisor> <msgId> <texto>   inyecta un MENSAJE de chat de un peer (con so
 chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de entrega)
 presence <peerId> [epoch] [batt]   inyecta una BALIZA de presencia de un peer
 in <ms> presence <peerId> [epoch] [batt]   baliza diferida (durante esperas bloqueantes)
+nudge <peerId>                     inyecta un NUDGE ("pensando en ti") de un peer
+doodle <peerId>                    inyecta un DIBUJO de ejemplo de un peer (marco + diagonal)
+ttt hello <peerId>                 Tres en raya: inyecta el HELLO de emparejamiento de un peer
+ttt state <peerId> <9digitos> <fin>   Tres en raya: inyecta un ESTADO del tablero (0/1/2 por casilla)
+in <ms> nudge|doodle|ttt ...       variantes diferidas (durante el bucle bloqueante de un juego)
 ```
 
 **Batería / hora / reinicio** (para las features de batería, presencia y reloj)

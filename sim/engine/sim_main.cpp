@@ -77,6 +77,15 @@ static std::string buildBeacon(int peer, long epoch, int batt, int flags) {
     return std::string(enc.c_str(), enc.length());
 }
 
+// Construye un paquete de Tres en raya cifrado: 0x07 'H'|'S' | peer [ tablero(9) fin ].
+static std::string buildTtt(const std::string &sub, int peer, const std::string &cells, int over) {
+    String p; p += (char)0x07;
+    if (sub == "hello") { p += 'H'; p += (char)peer; }
+    else { p += 'S'; p += (char)peer; for (int i = 0; i < 9; i++) p += (char)((i < (int)cells.size()) ? cells[i] - '0' : 0); p += (char)over; }
+    String enc = SimpleCrypto_encrypt(p);
+    return std::string(enc.c_str(), enc.length());
+}
+
 // ---------------------------------------------------------------------------
 // Motor de ejecución
 // ---------------------------------------------------------------------------
@@ -248,6 +257,12 @@ static void execLine(const std::string &raw) {
             String enc = SimpleCrypto_encrypt(p);
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
+        else if (what == "ttt") {        // tres en raya diferido: in <ms> ttt hello|state ...
+            std::string sub; is >> sub;
+            int peer = 0, ov = 0; std::string cells = "000000000";
+            if (sub == "hello") is >> peer; else is >> peer >> cells >> ov;
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildTtt(sub, peer, cells, ov)));
+        }
     }
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
@@ -278,6 +293,13 @@ static void execLine(const std::string &raw) {
         String e = SimpleCrypto_encrypt(p);
         simLoraInject(std::string(e.c_str(), e.length()));
         printf("  dibujo de #%d inyectado\n", peer);
+    }
+    else if (cmd == "ttt") {         // tres en raya: ttt hello <peer> | ttt state <peer> <9digitos> <fin>
+        std::string sub; is >> sub;
+        int peer = 0, ov = 0; std::string cells = "000000000";
+        if (sub == "hello") is >> peer; else is >> peer >> cells >> ov;
+        simLoraInject(buildTtt(sub, peer, cells, ov));
+        printf("  ttt %s de #%d\n", sub.c_str(), peer);
     }
     else if (cmd == "lora") {
         std::string sub; is >> sub;

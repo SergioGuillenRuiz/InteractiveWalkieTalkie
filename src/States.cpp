@@ -17,6 +17,7 @@
 #include "TetrisCoop.h"
 #include "HippoRadar.h"
 #include "Doodle.h"
+#include "TresEnRaya.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -112,6 +113,7 @@ void backgroundTick() {
             // chat y no deben ensuciar el historial. Los mensajes de usuario siempre
             // viajan con sobre (CHAT_MSG), asi que nunca caen en esta rama.
             bool gamePkt =
+                (raw.length() >= 1 && raw[0] == 0x07) ||   // Tres en raya
                 (raw.length() >= 2 && raw[0] == 'T' &&
                  (raw[1] == 'S' || raw[1] == 'I' || raw[1] == 'H' ||
                   raw[1] == 'J' || raw[1] == 'Q')) ||
@@ -952,8 +954,8 @@ bool handleHistoryMenu() {
 bool handleGamesMenu() {
     static bool needRedraw = true;
 
-    // Submenú de iconos; selección con el potenciómetro (6 juegos: 0..5).
-    int seleccion = getPotValue(5);
+    // Submenú de iconos; selección con el potenciómetro (7 juegos: 0..6).
+    int seleccion = getPotValue(6);
     drawGamesMenu(seleccion, needRedraw);
     needRedraw = false;
 
@@ -987,6 +989,10 @@ bool handleGamesMenu() {
 
                 case 5: // Dibujar (lienzo 16x16): gestiona su propia salida a IDLE
                     startDoodle();
+                    return true;
+
+                case 6: // Tres en raya (2 jugadores por LoRa): gestiona su salida a IDLE
+                    startTresEnRaya();
                     return true;
 
                 default: { // Sin implementar

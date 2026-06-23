@@ -1,0 +1,50 @@
+# ============================================================
+#  Tier 2 - Tres en raya por LoRa (2 jugadores).
+#  Emparejamiento automatico por id (id menor = X, mueve primero); sincronizacion
+#  por ESTADO (cada jugada difunde el tablero entero). El juego es bloqueante, asi
+#  que los paquetes del rival se inyectan con "in <ms> ttt ..." dentro de un run.
+#  (Device_id del sim = 137.)
+# ============================================================
+wait 300
+
+# --- Emparejar como O (rival #50 < 137 => el rival es X) y recibir una derrota:
+#     el rival #50 difunde un ESTADO con X en la fila superior (111000000, fin=1). ---
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 600 ttt hello 50
+in 1200 ttt state 50 111000000 1
+run 2000
+expect serial emparejado con #50
+expect serial soy O
+expect text Pierdes
+shot ttt_pierde
+print 3 en raya: emparejado como O y detecta la derrota
+
+# --- Emparejar como X (rival #200 > 137 => yo soy X y muevo) y hacer una jugada:
+#     coloco en la casilla 0 -> se difunde el ESTADO. ---
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 600 ttt hello 200
+in 1200 pot 0
+in 1500 morse down
+in 1620 morse up
+run 2400
+expect serial emparejado con #200
+expect serial soy X
+expect serial juego casilla
+print 3 en raya: emparejado como X y juega su turno
