@@ -8,6 +8,8 @@
 #include "Inputs.h"
 #include "Historial.h"
 #include "Chat.h"
+#include "Clock.h"
+#include "Battery.h"
 #include "Identity.h"
 #include "playChoose4Me.h"
 #include "Poker.h"
@@ -54,14 +56,25 @@ void backgroundTick() {
 
         if (kind == CHAT_ACK) {
             // Confirmacion de entrega de un mensaje que enviamos: no es un mensaje
-            // nuevo, solo actualiza el estado de "Entregado".
+            // nuevo, solo actualiza el estado de "Entregado" y la presencia.
+            Chat_noteHeard(sender);
             Chat_noteAck(sender, msgId);
+        } else if (kind == CHAT_BEACON) {
+            // Baliza de presencia del companero: actualiza presencia, su bateria y
+            // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
+            Chat_handleBeacon();
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
-                History_addIncoming(text, sender);
-                Chat_sendAck(sender, msgId);    // confirmar recepcion al emisor
-                lastTimeReceived = millis();
-                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+                Chat_noteHeard(sender);
+                Chat_sendAck(sender, msgId);    // confirmar recepcion SIEMPRE (aunque sea repetido)
+                if (!Chat_seenBefore(sender, msgId)) {   // dedup: solo guardar la 1a vez
+                    History_addIncoming(text, sender);
+                    lastTimeReceived = millis();
+                    if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+                } else {
+                    Serial.print("[Chat] Duplicado descartado de #"); Serial.print(sender);
+                    Serial.print(" msg "); Serial.println(msgId);
+                }
             }
         } else {
             // Mensaje plano/legado (sin sobre). Los paquetes de los protocolos de
@@ -80,6 +93,16 @@ void backgroundTick() {
                 if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
             }
         }
+    }
+
+    Chat_tick();        // balizas de presencia + reintentos de la outbox
+
+    // Aviso de bateria baja (una vez por transicion, con la histeresis de Battery).
+    {
+        static bool warned = false;
+        bool low = Battery_isLow();
+        if (low && !warned) { Serial.println("[Batt] Bateria baja"); warned = true; }
+        else if (!low)        warned = false;
     }
 
     Display_update();
@@ -211,22 +234,28 @@ static void drawWrappedMessage(const String &msg, int startY) {
     }
 }
 
-// Antigüedad legible de un mensaje del historial. Si viene de una sesión anterior
-// (millis() se reinició al apagar), no es fiable -> "--".
+// Antigüedad legible de un mensaje del historial. El timestamp es epoch del reloj
+// compartido (Clock, en segundos). Si el reloj está SINCRONIZADO (hora real fijada
+// o adoptada de un peer), la antigüedad es fiable y sobrevive a reinicios. Si NO
+// hay reloj real, sólo es fiable para mensajes de esta sesión; para los antiguos
+// se muestra "--" (no se inventa una antigüedad), igual que antes.
+static bool histAgeKnown(int idx) {
+    return Clock_isSynced() || History_isFromThisBoot(idx);
+}
 static String histAgeStr(int idx) {
-    if (!History_isFromThisBoot(idx)) return "--";
-    unsigned long ts = History_getTimestamp(idx);
-    unsigned long now = millis();
-    unsigned long ageMin = (now >= ts) ? ((now - ts) / 60000UL) : 0;
+    if (!histAgeKnown(idx)) return "--";
+    unsigned long ts  = History_getTimestamp(idx);   // epoch (segundos)
+    unsigned long now = Clock_now();
+    unsigned long ageMin = (now >= ts) ? ((now - ts) / 60UL) : 0;
     return String(ageMin) + "m";
 }
 
 // Edad en minutos para el cacheo de refresco (-2 = fija, no cambia: msg antiguo).
 static int histAgeMinForCache(int idx) {
-    if (!History_isFromThisBoot(idx)) return -2;
-    unsigned long ts = History_getTimestamp(idx);
-    unsigned long now = millis();
-    return (int)((now >= ts) ? ((now - ts) / 60000UL) : 0);
+    if (!histAgeKnown(idx)) return -2;
+    unsigned long ts  = History_getTimestamp(idx);
+    unsigned long now = Clock_now();
+    return (int)((now >= ts) ? ((now - ts) / 60UL) : 0);
 }
 
 // Una línea de la lista del historial: cursor + antigüedad + (Tu: si es enviado) + texto.
@@ -251,6 +280,7 @@ bool handleIdle() {
     // pinten las animaciones), pero el volcado a pantalla está limitado por
     // Display_update()/moveCursor(), no se hace en cada vuelta.
     drawMenu();
+    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
@@ -675,7 +705,9 @@ bool handleHistoryMenu() {
         display.setCursor(0,0);
         display.setTextSize(1);
         display.setTextColor(SH110X_WHITE);
-        display.println("Historial");
+        display.print("Historial");
+        display.setCursor(98, 0); display.print(Clock_hhmm());   // reloj compartido
+        display.println();
 
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
@@ -736,7 +768,7 @@ bool handleHistoryMenu() {
                     if (s) { display.print("#"); display.print(s); }
                     else   { display.print("?"); }
                 }
-                if (History_isFromThisBoot(selected)) {
+                if (histAgeKnown(selected)) {
                     display.print("  hace ");
                     display.print(histAgeStr(selected));
                 }
@@ -828,8 +860,10 @@ bool handleHistoryMenu() {
         display.setCursor(0,0);
         display.setTextSize(1);
         display.setTextColor(SH110X_WHITE);
-        display.println("Historial");
-        
+        display.print("Historial");
+        display.setCursor(98, 0); display.print(Clock_hhmm());   // reloj compartido
+        display.println();
+
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
             if (idx >= total) {

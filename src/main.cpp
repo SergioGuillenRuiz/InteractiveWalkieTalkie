@@ -7,6 +7,8 @@
 #include "Historial.h"
 #include "Identity.h"
 #include "Frasero.h"
+#include "Clock.h"
+#include "Chat.h"
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -28,10 +30,25 @@ void setup() {
 
   setupPins();
 
+  // En hardware real las globales arrancan en su valor inicial; en el simulador
+  // un "reboot" re-llama setup() sin reinicializarlas, así que las fijamos aquí
+  // explícitamente para que un reinicio sea fiel: arranca en IDLE y sin temporizadores
+  // colgados (si no, tras un reinicio en frío millis()-lastInteraction se desbordaría
+  // y entraría en suspensión de inmediato).
+  mainState        = STATE_IDLE;
+  sendSubState     = SEND_WAIT;
+  lastInteraction  = millis();
+  lastTimeReceived = 0;
+  cursorPos        = 0;
+  buttonPressCount = 0;
+  firstPressTime   = 0;
+
   Display_begin();
 
   History_load();
   Frasero_load();
+  Clock_load();          // restaura el epoch persistido (hora compartida)
+  Chat_load();           // restaura la outbox (mensajes sin confirmar)
 
   Serial.print("[ID] Equipo #"); Serial.println(Device_id());
 

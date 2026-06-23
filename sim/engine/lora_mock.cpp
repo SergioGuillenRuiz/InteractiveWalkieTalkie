@@ -16,6 +16,7 @@ size_t      g_curPos = 0;
 int         g_curRssi = -42;    // RSSI del paquete en recepción
 std::string g_txAccum;          // paquete en transmisión (entre begin/endPacket)
 std::string g_lastSent;         // último paquete transmitido
+std::deque<std::string> g_sentRing;   // últimos N TX (para 'expect sent' robusto)
 bool        g_loopback = false;
 }
 
@@ -27,6 +28,8 @@ size_t LoRaClass::write(uint8_t b) { g_txAccum += (char)b; return 1; }
 
 int LoRaClass::endPacket(bool /*async*/) {
     g_lastSent = g_txAccum;
+    g_sentRing.push_back(g_txAccum);                    // anillo de TX recientes
+    if (g_sentRing.size() > 16) g_sentRing.pop_front();
     if (air_enabled())   air_publish(g_txAccum);        // difusion al resto de dispositivos
     else if (g_loopback) g_rx.push_back({g_txAccum, -42});   // eco: lo enviado vuelve como recibido
     g_txAccum.clear();
@@ -66,4 +69,5 @@ LoRaClass LoRa;
 // --- API hacia el driver del simulador ---
 void simLoraInject(const std::string &packet, int rssi) { g_rx.push_back({packet, rssi}); }
 std::string simLoraLastSent() { return g_lastSent; }
+std::vector<std::string> simLoraSentRing() { return std::vector<std::string>(g_sentRing.begin(), g_sentRing.end()); }
 void simLoraSetLoopback(bool on) { g_loopback = on; }

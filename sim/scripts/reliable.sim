@@ -1,0 +1,60 @@
+# ============================================================
+#  Feature 1: entrega fiable = dedup (RX) + reintentos + outbox persistente (TX).
+#  (Device_id del sim = 137; el primer mensaje enviado -> msgId 1.)
+# ============================================================
+wait 300
+expect serial Equipo #137
+
+# --- DEDUP: el mismo (emisor 50, msgId 7) dos veces -> se guarda UNA sola vez,
+#     pero se ACKea las DOS (el peer repite porque perdio nuestro ACK). ---
+chatmsg 50 7 hola
+run 300
+expect serial Guardado: hola
+chatmsg 50 7 hola
+run 300
+expect serial Duplicado descartado
+print Dedup: el mensaje repetido no se duplica en el historial
+
+# --- REINTENTO: enviar "kissy" (Instant) y, sin ACK, retransmitir tras 5 s ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 500
+wait 200
+tap morse
+wait 250
+pot 460
+wait 250
+expect text kissy
+in 0 morse down
+in 120 morse up
+in 1100 finish down
+in 1220 finish up
+run 1700
+expect serial Enviando: kissy
+run 5200
+expect serial Reintento msg 1
+print Reintento: el mensaje sin confirmar se retransmite
+
+# --- OUTBOX PERSISTENTE: el pendiente sobrevive a un reinicio en frio ---
+reboot-cold
+wait 300
+expect serial Outbox cargada, pendientes: 1
+run 2600
+expect serial Reintento msg 1
+print Outbox: el mensaje pendiente persiste y se reintenta tras reiniciar
+
+# --- ENTREGA: al llegar el ACK, sale de la outbox. Tras un reinicio, la pantalla
+#     de resultado ya no existe (su estado es volatil), pero la salida de la outbox
+#     SI es fiable -> comprobamos "Entregado msg 1" (no "Confirmado", que depende de
+#     ese estado volatil de la sesion del envio). ---
+chatack 137 1
+run 300
+expect serial Entregado msg 1
+reboot-cold
+wait 300
+expect serial Outbox cargada, pendientes: 0
+print Entrega: tras el ACK la outbox queda vacia
+
+print Entrega fiable: dedup + reintento + outbox persistente + ACK OK

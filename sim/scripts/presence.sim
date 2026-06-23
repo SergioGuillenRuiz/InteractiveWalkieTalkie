@@ -1,0 +1,32 @@
+# ============================================================
+#  Feature 2: presencia del companero (baliza "estoy aqui").
+#  El comando "presence <peerId> [epoch] [batt]" inyecta una baliza cifrada del
+#  peer. El equipo pasa a "en alcance" al oirla y a "fuera de alcance" si no la
+#  vuelve a oir en PRESENCE_TIMEOUT_MS (90 s). El indicador es un corazon
+#  lleno/hueco en la barra de estado; aqui lo verificamos por el log serie.
+# ============================================================
+wait 300
+expect serial Equipo #137
+
+# Sin haber oido nada: el companero esta fuera de alcance (no hay aviso aun).
+run 400
+
+# Baliza del companero #50 -> "en alcance"
+presence 50 0 80
+run 500
+expect serial companero en alcance
+shot presencia_online
+print Presencia: companero en alcance tras la baliza
+
+# Sin mas balizas, pasado el timeout (90 s) -> "fuera de alcance"
+ff 95000
+expect serial fuera de alcance
+print Presencia: fuera de alcance tras el timeout
+
+# Vuelve a oirse -> de nuevo en alcance
+presence 50 0 80
+run 500
+expect serial companero en alcance
+print Presencia: vuelve a alcance al reaparecer la baliza
+
+print Presencia: online/offline por baliza y timeout OK

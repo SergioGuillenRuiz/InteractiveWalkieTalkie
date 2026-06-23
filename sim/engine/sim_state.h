@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace sim {
 
@@ -14,7 +15,7 @@ struct Timeout {};
 // Tipos de evento programables en la línea de tiempo virtual.
 //   EV_INJECT: inyecta un paquete LoRa diferido; 'value' indexa una tabla de
 //   paquetes del runner (sim_main) via el hook registrado con setInjectHook().
-enum EvKind { EV_POT = 0, EV_MORSE = 1, EV_FINISH = 2, EV_INJECT = 3 };
+enum EvKind { EV_POT = 0, EV_MORSE = 1, EV_FINISH = 2, EV_INJECT = 3, EV_BATTERY = 4 };
 
 // --- Reloj virtual ---
 uint32_t now();                 // millis() virtuales
@@ -37,6 +38,14 @@ int  getPot();
 bool morseDown();
 bool finishDown();
 
+// --- Batería simulada (canal ADC PIN_VBAT; valor crudo 0..1023) ---
+void setBatteryRaw(int raw);
+int  getBatteryRaw();
+
+// --- Reinicio "en frío": reinicia el reloj virtual a 0 (millis() vuelve a 0),
+//     para testear que algo persiste de verdad entre arranques. ---
+void resetClock();
+
 // --- Serial capturado ---
 void serialPut(char c);
 std::string serialLog();
@@ -47,6 +56,7 @@ void serialClear();
 // --- LoRa (implementado en lora_mock.cpp) ---
 void simLoraInject(const std::string &packet, int rssi = -42);   // encola un paquete entrante (RX) con RSSI
 std::string simLoraLastSent();                    // último paquete transmitido (TX)
+std::vector<std::string> simLoraSentRing();       // últimos N TX (para 'expect sent' robusto frente a balizas)
 void simLoraSetLoopback(bool on);                 // eco TX -> RX
 
 #endif // SIM_STATE_H

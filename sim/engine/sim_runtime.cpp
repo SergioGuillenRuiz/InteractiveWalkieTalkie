@@ -27,6 +27,7 @@ struct Ev { uint32_t t; int kind; int value; };
 uint32_t g_now = 0;
 uint32_t g_deadline = 0xFFFFFFFFu;
 int  g_pot = 512;
+int  g_battRaw = 1023;     // batería "llena" por defecto (canal PIN_VBAT)
 bool g_morse = false;
 bool g_finish = false;
 std::string g_serial;
@@ -41,6 +42,7 @@ void applyEvent(const Ev &e) {
         case sim::EV_MORSE:  g_morse = (e.value != 0); break;
         case sim::EV_FINISH: g_finish = (e.value != 0); break;
         case sim::EV_INJECT: if (g_injectHook) g_injectHook(e.value); break;
+        case sim::EV_BATTERY: g_battRaw = e.value; break;
     }
 }
 } // namespace
@@ -100,6 +102,9 @@ void setFinish(bool down) { g_finish = down; }
 int  getPot() { return g_pot; }
 bool morseDown() { return g_morse; }
 bool finishDown() { return g_finish; }
+void setBatteryRaw(int raw) { g_battRaw = raw < 0 ? 0 : (raw > 1023 ? 1023 : raw); }
+int  getBatteryRaw() { return g_battRaw; }
+void resetClock() { g_now = 0; g_events.clear(); g_deadline = 0xFFFFFFFFu; }
 
 void serialPut(char c) { g_serial += c; }
 std::string serialLog() { return g_serial; }
@@ -130,7 +135,8 @@ int digitalRead(uint8_t pin) {
 }
 
 int analogRead(uint8_t pin) {
-    if (pin == POT_PIN) return g_pot;
+    if (pin == POT_PIN)  return g_pot;
+    if (pin == PIN_VBAT) return g_battRaw;   // canal de batería simulado
     return 0;
 }
 

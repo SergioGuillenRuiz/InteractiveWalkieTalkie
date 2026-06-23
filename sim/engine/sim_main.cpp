@@ -21,6 +21,7 @@
 #include "air_channel.h"
 #include "EEPROM.h"
 #include "SimpleCrypto.h"      // String SimpleCrypto_encrypt/decrypt
+#include "Clock.h"             // Clock_set/Clock_now (comando settime)
 #include <Adafruit_SH110X.h>   // tipo del display
 
 #undef min
@@ -59,6 +60,21 @@ static void injectDeferred(int idx) {
 static int deferPacket(const std::string &enc) {
     g_deferredPackets.push_back(enc);
     return (int)g_deferredPackets.size() - 1;
+}
+
+// Construye una baliza de presencia cifrada: 0x02 | peer | flags | epoch(4) | batt.
+static std::string buildBeacon(int peer, long epoch, int batt, int flags) {
+    String p;
+    p += (char)0x02;
+    p += (char)peer;
+    p += (char)flags;
+    p += (char)((epoch >> 24) & 0xFF);
+    p += (char)((epoch >> 16) & 0xFF);
+    p += (char)((epoch >> 8) & 0xFF);
+    p += (char)(epoch & 0xFF);
+    p += (char)batt;
+    String enc = SimpleCrypto_encrypt(p);
+    return std::string(enc.c_str(), enc.length());
 }
 
 // ---------------------------------------------------------------------------
@@ -218,8 +234,25 @@ static void execLine(const std::string &raw) {
             String enc = SimpleCrypto_encrypt(p);
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
+        else if (what == "battery") {   // bateria diferida: in <ms> battery <pct>
+            int pct = 100; is >> pct; sim::scheduleAt(t, sim::EV_BATTERY, pct * 1023 / 100);
+        }
+        else if (what == "presence") {  // baliza diferida: in <ms> presence <peer> [epoch] [batt]
+            int peer = 0, batt = 100; long ep = 0; is >> peer >> ep >> batt;
+            int flags = (batt <= 15) ? 1 : 0;
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags)));
+        }
     }
     else if (cmd == "reboot") { setup(); }
+    else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
+    else if (cmd == "battery") { int pct; is >> pct; sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
+    else if (cmd == "settime") { long ep = 0; is >> ep; Clock_set((uint32_t)ep); printf("  reloj fijado a %ld\n", ep); }
+    else if (cmd == "presence") {   // baliza de un peer: presence <peerId> [epoch] [batt]
+        int peer = 0, batt = 100; long ep = 0; is >> peer >> ep >> batt;
+        int flags = (batt <= 15) ? 1 : 0;   // BEACON_FLAG_LOWBATT
+        simLoraInject(buildBeacon(peer, ep, batt, flags));
+        printf("  baliza de #%d inyectada (epoch %ld, bat %d%%)\n", peer, ep, batt);
+    }
     else if (cmd == "lora") {
         std::string sub; is >> sub;
         if (sub == "rx") {
@@ -263,7 +296,18 @@ static void execLine(const std::string &raw) {
         if (sub == "text") { std::string n = restAfter(line, 2); check(contains(display.simText(), n), "pantalla contiene \"" + n + "\""); }
         else if (sub == "notext") { std::string n = restAfter(line, 2); check(!contains(display.simText(), n), "pantalla NO contiene \"" + n + "\""); }
         else if (sub == "serial") { std::string n = restAfter(line, 2); check(contains(sim::serialLog(), n), "serial contiene \"" + n + "\""); }
-        else if (sub == "sent") { std::string n = restAfter(line, 2); String dec = SimpleCrypto_decrypt(String(simLoraLastSent().c_str())); check(contains(std::string(dec.c_str()), n), "ultimo TX descifra y contiene \"" + n + "\""); }
+        else if (sub == "sent") {
+            // Busca el texto en CUALQUIERA de los ultimos TX (no solo el ultimo): asi
+            // una baliza de presencia transmitida despues no oculta el mensaje enviado.
+            std::string n = restAfter(line, 2);
+            auto ring = simLoraSentRing();
+            bool found = false;
+            for (auto it = ring.rbegin(); it != ring.rend() && !found; ++it) {
+                String dec = SimpleCrypto_decrypt(String(it->c_str()));
+                if (contains(std::string(dec.c_str(), dec.length()), n)) found = true;
+            }
+            check(found, "ultimo TX descifra y contiene \"" + n + "\"");
+        }
         else if (sub == "pixel") { int x, y; std::string st; is >> x >> y >> st; bool on = display.simPixel(x, y); check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st); }
     }
     else { fprintf(stderr, "[sim] comando desconocido: %s\n", cmd.c_str()); }

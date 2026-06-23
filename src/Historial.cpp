@@ -1,6 +1,7 @@
 #include "Historial.h"
 #include <EEPROM.h>
 #include "EepromMap.h"
+#include "Clock.h"
 
 // ============================================================
 // CONFIGURACION
@@ -147,7 +148,11 @@ static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
     if (shortMsg.length() > MAX_MSG_LENGTH - 1)
         shortMsg = shortMsg.substring(0, MAX_MSG_LENGTH - 1);
 
-    unsigned long ts = millis();
+    // Marca de tiempo en SEGUNDOS epoch del reloj compartido (Clock), no millis():
+    // asi la antiguedad sobrevive a reinicios y coincide entre los dos equipos.
+    // 0xFFFFFFFF es el centinela de "slot vacio" en EEPROM, asi que se evita.
+    unsigned long ts = Clock_now();
+    if (ts == 0xFFFFFFFFUL) ts = 0xFFFFFFFEUL;
 
     if (messageCount < MAX_MESSAGES) {
         // Hay hueco: anadir al final y guardar solo ese slot

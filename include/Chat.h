@@ -4,34 +4,66 @@
 #include <Arduino.h>
 
 // ============================================================
-//  Capa de chat sobre LoRa: sobre con emisor + id de mensaje y ACK de entrega.
+//  Capa de chat sobre LoRa: sobre con emisor + id de mensaje, ACK de entrega,
+//  entrega fiable (reintentos + outbox persistente + dedup) y baliza de
+//  presencia (con hora y bateria para sincronizar reloj y mostrar al companero).
 //
 //  Formato (texto plano antes de cifrar):
 //    MENSAJE:  0x01 | emisor(1) | msgId(1) | texto...
-//    ACK:      0x06 | destino(1) | msgId(1)        (destino = emisor original)
+//    ACK:      0x06 | destino(1) | msgId(1)            (destino = emisor original)
+//    BALIZA:   0x02 | emisor(1) | flags(1) | epoch(4, BE) | bateria%(1)
 //
-//  Los bytes 0x01/0x06 no colisionan con los protocolos de los juegos ('T' de
-//  Tetris, "HR" de HippoRadar). Un paquete sin sobre se trata como CHAT_OTHER
-//  (mensaje plano/legado).
+//  Los marcadores 0x01/0x02/0x06 no colisionan con los protocolos de los juegos
+//  ('T' de Tetris, "HR" de HippoRadar). Un paquete sin sobre = CHAT_OTHER.
 // ============================================================
 
-enum ChatKind { CHAT_OTHER = 0, CHAT_MSG = 1, CHAT_ACK = 2 };
+enum ChatKind { CHAT_OTHER = 0, CHAT_MSG = 1, CHAT_ACK = 2, CHAT_BEACON = 3 };
 
-// Clasifica un paquete crudo ya descifrado. Si es CHAT_MSG rellena text/sender/
-// msgId; si es CHAT_ACK rellena sender(=destino) y msgId.
+// Flags de la baliza
+#define BEACON_FLAG_LOWBATT  0x01
+
+// Clasifica un paquete crudo ya descifrado. CHAT_MSG -> text/sender/msgId;
+// CHAT_ACK -> sender(=destino)/msgId; CHAT_BEACON -> sender y los campos de
+// baliza accesibles via Chat_beacon*().
 ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &msgId);
 
-// Envia un mensaje de chat (lo cifra/transmite, lo guarda como ENVIADO en el
-// historial y arma la espera de ACK). Devuelve false si fallo la transmision.
+// Campos de la ULTIMA baliza parseada (validos tras Chat_parse()==CHAT_BEACON).
+uint32_t Chat_beaconEpoch();
+uint8_t  Chat_beaconBatt();
+uint8_t  Chat_beaconFlags();
+
+// Procesa la ultima baliza recibida: presencia + bateria del peer + sync de reloj.
+void Chat_handleBeacon();
+
+void Chat_load();                              // setup(): carga la outbox de EEPROM
+
+// Envia un mensaje de chat (cifra/transmite, lo guarda como ENVIADO, lo encola en
+// la outbox y arma la espera de ACK). false si fallo la transmision.
 bool Chat_send(const String &text);
 
 // Envia un ACK por un mensaje recibido (destino = emisor original).
 void Chat_sendAck(uint8_t targetId, uint8_t msgId);
 
-// --- Confirmacion de entrega del ULTIMO mensaje enviado ---
-bool Chat_awaitingAck();                       // hay un envio pendiente de confirmar
-bool Chat_delivered();                         // el ultimo envio fue confirmado (ACK)
-void Chat_noteAck(uint8_t targetId, uint8_t msgId);  // marcar entregado si coincide
-void Chat_resetPending();                      // limpiar estado de espera
+// Tareas periodicas: emite la baliza de presencia y reintenta los mensajes de la
+// outbox sin confirmar. Llamar a menudo (desde backgroundTick()).
+void Chat_tick();
+
+// --- Confirmacion de entrega del ULTIMO mensaje enviado (pantalla de resultado) ---
+bool Chat_awaitingAck();
+bool Chat_delivered();
+void Chat_noteAck(uint8_t targetId, uint8_t msgId);  // marcar entregado + sacar de la outbox
+void Chat_resetPending();
+
+// --- Dedup de recepcion: true si (sender,msgId) ya se vio (y lo registra) ---
+bool Chat_seenBefore(uint8_t sender, uint8_t msgId);
+
+// --- Presencia del companero ---
+void    Chat_noteHeard(uint8_t peerId);  // llamar al oir CUALQUIER paquete del peer
+bool    Chat_peerOnline();               // se ha oido al peer hace < PRESENCE_TIMEOUT
+uint8_t Chat_peerId();                   // id del ultimo peer oido (0 = ninguno)
+uint8_t Chat_peerBatt();                 // % bateria del peer (0xFF = desconocido)
+
+// --- Outbox ---
+int  Chat_pendingCount();                // mensajes en la outbox sin confirmar
 
 #endif

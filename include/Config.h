@@ -58,6 +58,35 @@
 // que el envío no falle silenciosamente al cifrar.
 #define MSG_MAX_TEXT_LEN   92
 
+// --- Entrega fiable (reintentos) ---
+// Tras enviar, si no llega el ACK se reintenta hasta MSG_RETRY_MAX veces cada
+// MSG_RETRY_MS. Agotados los reintentos activos, el mensaje queda en la outbox
+// y se reenvia cuando se detecta de nuevo al companero (presencia). MSG_RETRY_MS
+// es mayor que el timeout de "(sin confirmar)" (3 s) para no solapar de mas.
+#define MSG_RETRY_MS       5000UL
+#define MSG_RETRY_MAX      3
+
+// --- Presencia (baliza "estoy aqui") ---
+// Cada equipo emite una baliza periodica; si no se oye al companero en
+// PRESENCE_TIMEOUT_MS se considera "fuera de alcance".
+#define BEACON_INTERVAL_MS   30000UL
+#define PRESENCE_TIMEOUT_MS  90000UL
+
+// ------------------------------------------------------------
+// Batería
+// ------------------------------------------------------------
+
+// Canal ADC de la batería. OJO: el ESP8266 tiene UN solo ADC y A0 ya lo usa el
+// potenciómetro, así que en la placa real medir la batería requiere hardware
+// dedicado (divisor en otro ADC / multiplexor) o ESP.getVcc() (sacrificando el
+// pote). PIN_VBAT es un canal lógico que el simulador mockea; en hardware real,
+// ver Battery.cpp (batteryReadRaw) para cablear la fuente real.
+#define PIN_VBAT             0xA0    // canal lógico (no es A0=17); lo mockea el sim
+
+// Umbrales de aviso de batería baja, con histéresis para no parpadear.
+#define BATT_LOW_PCT         15      // por debajo -> "Batería baja"
+#define BATT_OK_PCT          20      // por encima -> se borra el aviso
+
 // ------------------------------------------------------------
 // Función de configuración de pines
 // ------------------------------------------------------------

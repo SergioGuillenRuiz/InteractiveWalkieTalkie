@@ -119,6 +119,10 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `chat.sim`         | Chat: id de emisor, auto-ACK, enviados en historial, entrega y fechas tras reinicio |
 | `sleep_wake.sim`   | Suspensión por inactividad y despertar con 3 pulsaciones |
 | `games.sim`        | Poker, Choose4Me y juego "Próximamente" (incluye regresiones) |
+| `reliable.sim`     | Entrega fiable: dedup de RX + reintentos + outbox persistente (sobrevive a reboot) |
+| `presence.sim`     | Presencia del compañero por baliza: online tras oírla, offline tras el timeout |
+| `clock.sim`        | Reloj compartido: hora fijada/sincronizada, antigüedad real y persistencia tras reboot |
+| `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
 
 Ejecutar uno con salida detallada:
 
@@ -158,7 +162,21 @@ lora loopback on|off  reenvía lo transmitido como recibido
 lora sent           muestra el último paquete transmitido (y su descifrado)
 chatmsg <emisor> <msgId> <texto>   inyecta un MENSAJE de chat de un peer (con sobre)
 chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de entrega)
+presence <peerId> [epoch] [batt]   inyecta una BALIZA de presencia de un peer
+in <ms> presence <peerId> [epoch] [batt]   baliza diferida (durante esperas bloqueantes)
 ```
+
+**Batería / hora / reinicio** (para las features de batería, presencia y reloj)
+```
+battery <0-100>        fija el nivel de batería simulado (canal ADC mockeado)
+in <ms> battery <pct>  cambio de batería diferido (durante una espera bloqueante)
+settime <epoch>        fija el reloj de pared (segundos epoch) y lo persiste
+reboot-cold            reinicio EN FRÍO: re-ejecuta setup() Y pone millis()=0
+```
+`reboot-cold` conserva la EEPROM (es justo lo que se quiere probar: que algo
+persista) y la batería mockeada, pero descarta los eventos diferidos pendientes
+(`in <ms> ...` que aún no hayan vencido), igual que un reinicio real perdería
+entradas en vuelo.
 
 **Inspección y aserciones**
 ```

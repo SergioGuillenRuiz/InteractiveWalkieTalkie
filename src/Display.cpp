@@ -821,6 +821,51 @@ void drawHeart(int x, int y, int color) {
   }
 }
 
+// Corazón HUECO (solo contorno): estado "companero fuera de alcance".
+void drawHeartOutline(int x, int y, int color) {
+  static const uint8_t outline[9][10] = {
+    {0,1,1,0,0,0,0,1,1,0},
+    {1,0,0,1,0,0,1,0,0,1},
+    {1,0,0,0,1,1,0,0,0,1},
+    {1,0,0,0,0,0,0,0,0,1},
+    {0,1,0,0,0,0,0,0,1,0},
+    {0,0,1,0,0,0,0,1,0,0},
+    {0,0,0,1,0,0,1,0,0,0},
+    {0,0,0,0,1,0,1,0,0,0},
+    {0,0,0,0,0,1,0,0,0,0},
+  };
+  for (int i = 0; i < 9; i++)
+    for (int j = 0; j < 10; j++)
+      if (outline[i][j]) display.drawPixel(x + j - 5, y + i - 5, color);
+}
+
+// Barra de estado del IDLE (banda de etiquetas, Y<50, fuera del area de
+// animaciones): presencia del companero (corazon lleno/hueco) a la izquierda y
+// un medidor de bateria en el hueco entre "Hist" y "Jueg". Solo dibuja en el
+// buffer; el volcado lo hace Display_update()/moveCursor() como con drawMenu().
+void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow) {
+  // Presencia (X=0..9, Y=38..46), a la izquierda de "Env".
+  display.fillRect(0, 37, 12, 11, SH110X_BLACK);
+  if (peerOnline) drawHeart(5, 43, SH110X_WHITE);
+  else            drawHeartOutline(5, 43, SH110X_WHITE);
+
+  // Bateria (X=82..95, Y=41..47), entre "Hist" y "Jueg".
+  display.fillRect(80, 39, 17, 10, SH110X_BLACK);
+  const int bx = 82, by = 41;
+  display.drawRect(bx, by, 12, 7, SH110X_WHITE);
+  display.fillRect(bx + 12, by + 2, 2, 3, SH110X_WHITE);   // polo +
+  int fill = ((int)battPct * 10) / 100;                    // 0..10 px interiores
+  if (fill > 0) display.fillRect(bx + 1, by + 1, fill, 5, SH110X_WHITE);
+
+  // Aviso de bateria baja: "!" en el hueco entre "Env" y "Hist". Se limpia SIEMPRE
+  // (asi desaparece al recuperarse la bateria, no solo cuando esta baja).
+  display.fillRect(46, 39, 10, 10, SH110X_BLACK);
+  if (battLow) {
+    display.setTextSize(1); display.setTextColor(SH110X_WHITE);
+    display.setCursor(48, 40); display.print("!");
+  }
+}
+
 bool animateHippoGivingHeart() {
   static enum {
     STATE_INIT,

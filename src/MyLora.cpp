@@ -11,6 +11,18 @@ bool loraReady = false;
 String lastReceived = "";
 static int lastRssi = -200;   // RSSI del último paquete recibido
 
+// Versión "imprimible" de un paquete para el log: los sobres binarios (chat,
+// balizas) llevan bytes no imprimibles (incluido 0x00) que corromperían un log
+// volcado a fichero. Se sustituyen por '.'; el texto normal queda intacto.
+static String logSafe(const String &s) {
+  String out = "";
+  for (uint16_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    out += (c >= 0x20 && c <= 0x7E) ? c : '.';
+  }
+  return out;
+}
+
 // ============================================================
 //  Inicialización del módulo LoRa
 // ============================================================
@@ -53,8 +65,8 @@ bool Lora_send(const String &message) {
   }
 
   Serial.print("[LoRa] Enviando: ");
-  Serial.println(message);
-  
+  Serial.println(logSafe(message));
+
   String encrypted = SimpleCrypto_encrypt(message);
   if (encrypted.length() == 0) {
     Serial.println("[LoRa] Error al encriptar mensaje");
@@ -93,9 +105,9 @@ bool Lora_hasMessage() {
       return false;
     }
     lastReceived = decrypted;
-    
+
     Serial.print("[LoRa] Desencriptado: ");
-    Serial.println(lastReceived);
+    Serial.println(logSafe(lastReceived));
     return true;
   }
   return false;

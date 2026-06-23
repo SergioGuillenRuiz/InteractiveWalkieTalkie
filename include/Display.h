@@ -69,6 +69,8 @@ bool animateHippoBonked();
 bool animateHippoChasingHeart();
 bool animateHippoGivingHeart();
 void drawHeart(int x, int y, int color);
+void drawHeartOutline(int x, int y, int color);
+void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow);  // presencia + bateria en el IDLE
 
 void updateHippoAnimation();
 void triggerAnimation(HippoAnimation anim);

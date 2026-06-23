@@ -1,0 +1,55 @@
+# ============================================================
+#  Feature 4: hora real compartida y persistente.
+#  "settime <epoch>" fija el reloj; tambien se sincroniza adoptando el epoch de
+#  las balizas del peer. El reloj se persiste en EEPROM y sobrevive a un reinicio
+#  EN FRIO ("reboot-cold" pone millis()=0). Con reloj sincronizado, la antiguedad
+#  del historial es real (ya no "--") y coincide entre equipos.
+#  epoch 1700000000 -> 1700000000 % 86400 = 80000 s = 22:13.
+# ============================================================
+wait 300
+
+# Fijar la hora y recibir un mensaje para tener historial.
+settime 1700000000
+chatmsg 50 1 hola
+run 400
+expect serial Guardado: hola
+
+# Abrir el historial: el header muestra el reloj y la antiguedad es real (0m).
+pot 400
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text 22:13
+expect text 0m
+expect notext --
+shot clock_synced
+print Reloj: hora mostrada y antiguedad real (0m, no --)
+
+# Volver a IDLE
+in 0 finish down
+in 150 finish up
+run 400
+
+# Reinicio EN FRIO (millis()=0): el reloj persiste desde EEPROM.
+reboot-cold
+wait 300
+pot 400
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text 22:13            # el reloj sobrevivio al reinicio
+expect notext --            # antiguedad sigue siendo real (reloj sincronizado)
+print Reloj: sobrevive a reboot-cold
+
+# --- Sincronizacion por baliza: adoptar la hora de un peer ADELANTADO ---
+in 0 finish down
+in 150 finish up
+run 400
+presence 50 1700086400 80    # +1 dia (mismo HH:MM 22:13 pero epoch mayor)
+run 500
+expect serial sincronizado con peer
+print Reloj: sincronizado desde la baliza del peer
+
+print Reloj: hora fijada, mostrada, persistente y sincronizable OK
