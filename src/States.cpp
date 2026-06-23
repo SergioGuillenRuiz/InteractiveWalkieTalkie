@@ -16,6 +16,7 @@
 #include "RefillGame.h"
 #include "TetrisCoop.h"
 #include "HippoRadar.h"
+#include "Doodle.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -74,6 +75,22 @@ void backgroundTick() {
                 History_addIncoming("Pensando en ti", sender);
                 triggerAnimation(ANIM_CHASING_HEART);
                 Serial.print("[Nudge] de #"); Serial.print(sender); Serial.println(" (bzzt)");
+            }
+        } else if (kind == CHAT_DOODLE) {
+            // Dibujo entrante: se guarda como "pendiente" (se muestra al volver al
+            // IDLE), se deja constancia en el historial y despierta la pantalla.
+            if (sender != Device_id()) {
+                Chat_noteHeard(sender);
+                uint8_t buf[DOODLE_BYTES];
+                for (int i = 0; i < DOODLE_BYTES; i++)
+                    buf[i] = (i + 2 < (int)raw.length()) ? (uint8_t)raw[i + 2] : 0;
+                Doodle_onReceived(sender, buf);
+                if (mainState == STATE_SLEEP) { Display_setPower(true); mainState = STATE_IDLE; }
+                lastInteraction  = millis();
+                lastTimeReceived = millis();
+                History_addIncoming("[dibujo]", sender);
+                triggerAnimation(ANIM_CHASING_HEART);
+                Serial.print("[Dibujo] de #"); Serial.println(sender);
             }
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
@@ -285,6 +302,9 @@ static String histListLine(int idx, bool selected) {
 // ==================== STATE_IDLE ====================
 bool handleIdle() {
     static bool justEnteredIdle = true;
+
+    // Dibujo recibido pendiente: mostrarlo a pantalla completa antes que el menu.
+    if (Doodle_pending()) { Doodle_showPending(); justEnteredIdle = true; return true; }
 
     LoRa.idle();
 
@@ -932,8 +952,8 @@ bool handleHistoryMenu() {
 bool handleGamesMenu() {
     static bool needRedraw = true;
 
-    // Submenú de iconos; selección con el potenciómetro (5 juegos: 0..4).
-    int seleccion = getPotValue(4);
+    // Submenú de iconos; selección con el potenciómetro (6 juegos: 0..5).
+    int seleccion = getPotValue(5);
     drawGamesMenu(seleccion, needRedraw);
     needRedraw = false;
 
@@ -963,6 +983,10 @@ bool handleGamesMenu() {
 
                 case 4: // HippoRadar (utilidad): gestiona su propia salida a IDLE
                     startHippoRadar();
+                    return true;
+
+                case 5: // Dibujar (lienzo 16x16): gestiona su propia salida a IDLE
+                    startDoodle();
                     return true;
 
                 default: { // Sin implementar

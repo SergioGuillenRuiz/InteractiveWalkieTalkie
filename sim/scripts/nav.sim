@@ -38,10 +38,10 @@ wait 250
 pot 0
 wait 250
 expect text Tetris
-# y el ultimo (HippoRadar)
+# y el ultimo (Dibujar, idx5 de 6)
 pot 1023
 wait 250
-expect text HippoRadar
+expect text Dibujar
 tap finish
 wait 300
 expect text Env

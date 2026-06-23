@@ -1,0 +1,39 @@
+# ============================================================
+#  Tier 2 - Lienzo (doodle 16x16): dibujar y enviar un dibujito; recibir y verlo.
+#  Editor (Juegos > Dibujar): pote=columna, MORSE pinta, FINISH largo envia.
+#  El dibujo viaja como 32 bytes (marcador 0x04). (Device_id del sim = 137.)
+# ============================================================
+wait 300
+
+# --- IDLE -> Juegos -> Dibujar (idx5, pot 900) ---
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text Dibujar
+
+# --- Entrar al editor, pintar el pixel (0,0) y ENVIAR (finish largo), todo en un
+#     mismo run porque el editor es bloqueante. ---
+pot 0
+in 0 morse down        # selecciona "Dibujar" y entra al editor
+in 120 morse up
+in 700 morse down      # MORSE corto: pinta el pixel (0,0)
+in 820 morse up
+in 1400 finish down    # FINISH largo (>=1500 ms): envia
+in 3100 finish up
+run 3600
+expect serial Dibujo] enviado
+print Dibujo: editor, pinta y envia OK
+
+# --- RX: recibir un dibujo de #50 -> queda en historial y se muestra al volver ---
+wait 400
+doodle 50
+run 400
+expect serial Dibujo] de #50
+# de vuelta al IDLE, se muestra a pantalla completa "Dibujo de #50"
+wait 400
+expect text Dibujo de #50
+shot doodle_recibido
+print Dibujo: recibido y mostrado OK

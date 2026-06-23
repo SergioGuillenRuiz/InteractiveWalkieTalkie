@@ -266,6 +266,19 @@ static void execLine(const std::string &raw) {
         simLoraInject(std::string(e.c_str(), e.length()));
         printf("  nudge de #%d inyectado\n", peer);
     }
+    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (patron de ejemplo)
+        int peer = 0; is >> peer;
+        String p; p += (char)0x04; p += (char)peer;
+        for (int y = 0; y < 16; y++) {     // marco + diagonal
+            int row = 0;
+            for (int x = 0; x < 16; x++)
+                if (x == 0 || x == 15 || y == 0 || y == 15 || x == y) row |= (1 << (15 - x));
+            p += (char)((row >> 8) & 0xFF); p += (char)(row & 0xFF);
+        }
+        String e = SimpleCrypto_encrypt(p);
+        simLoraInject(std::string(e.c_str(), e.length()));
+        printf("  dibujo de #%d inyectado\n", peer);
+    }
     else if (cmd == "lora") {
         std::string sub; is >> sub;
         if (sub == "rx") {

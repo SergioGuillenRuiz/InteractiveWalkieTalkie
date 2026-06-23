@@ -13,6 +13,7 @@
 static const char CHAT_MARK_MSG    = 0x01;
 static const char CHAT_MARK_BEACON = 0x02;
 static const char CHAT_MARK_NUDGE  = 0x03;
+static const char CHAT_MARK_DOODLE = 0x04;
 static const char CHAT_MARK_ACK    = 0x06;
 
 // Contador de id de mensaje propio (1..255, evita 0).
@@ -211,6 +212,10 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
     sender = (uint8_t)raw[1];
     return CHAT_NUDGE;
   }
+  if (raw.length() >= 34 && raw[0] == CHAT_MARK_DOODLE) {   // 2 + 32 bytes de lienzo
+    sender = (uint8_t)raw[1];
+    return CHAT_DOODLE;
+  }
   if (raw.length() >= 7 && raw[0] == CHAT_MARK_BEACON) {
     sender         = (uint8_t)raw[1];
     s_beaconSender = (uint8_t)raw[1];
@@ -265,6 +270,15 @@ void Chat_sendNudge() {
   packet += (char)Device_id();
   Lora_send(packet);
   Serial.println("[Nudge] enviado");
+}
+
+void Chat_sendDoodle(const uint8_t *buf32) {
+  String packet;
+  packet += CHAT_MARK_DOODLE;
+  packet += (char)Device_id();
+  for (int i = 0; i < 32; i++) packet += (char)buf32[i];
+  Lora_send(packet);
+  Serial.println("[Dibujo] enviado");
 }
 
 bool Chat_awaitingAck() { return g_awaiting; }
