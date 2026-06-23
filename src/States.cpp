@@ -63,6 +63,18 @@ void backgroundTick() {
             // Baliza de presencia del companero: actualiza presencia, su bateria y
             // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
             Chat_handleBeacon();
+        } else if (kind == CHAT_NUDGE) {
+            // "Pensando en ti": despierta la pantalla, anima un corazon, deja
+            // constancia en el historial y (en placa) haria sonar el zumbador.
+            if (sender != Device_id()) {
+                Chat_noteHeard(sender);
+                if (mainState == STATE_SLEEP) { Display_setPower(true); mainState = STATE_IDLE; }
+                lastInteraction  = millis();
+                lastTimeReceived = millis();
+                History_addIncoming("Pensando en ti", sender);
+                triggerAnimation(ANIM_CHASING_HEART);
+                Serial.print("[Nudge] de #"); Serial.print(sender); Serial.println(" (bzzt)");
+            }
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
                 Chat_noteHeard(sender);
@@ -301,6 +313,22 @@ bool handleIdle() {
             menuTransitionDelay();
             return true;
         }
+    }
+
+    // Nudge "pensando en ti": mantener FINISH (>=600 ms) en IDLE envia un toque al
+    // companero (sin texto). Da feedback con la animacion de "dar corazon".
+    static unsigned long finishHoldStart = 0;
+    if (isFinishPressed()) {
+        if (finishHoldStart == 0) finishHoldStart = millis();
+        else if (millis() - finishHoldStart >= 600) {
+            Chat_sendNudge();
+            triggerAnimation(ANIM_GIVING_HEART);
+            lastInteraction = millis();
+            while (isFinishPressed()) { backgroundTick(); delay(10); }   // esperar a soltar
+            finishHoldStart = 0;
+        }
+    } else {
+        finishHoldStart = 0;
     }
 
     if (millis() - lastInteraction > SLEEP_TIMEOUT) {

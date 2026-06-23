@@ -242,6 +242,12 @@ static void execLine(const std::string &raw) {
             int flags = (batt <= 15) ? 1 : 0;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags)));
         }
+        else if (what == "nudge") {      // nudge diferido: in <ms> nudge <peer>
+            int peer = 0; is >> peer;
+            String p; p += (char)0x03; p += (char)peer;
+            String enc = SimpleCrypto_encrypt(p);
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
+        }
     }
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
@@ -252,6 +258,13 @@ static void execLine(const std::string &raw) {
         int flags = (batt <= 15) ? 1 : 0;   // BEACON_FLAG_LOWBATT
         simLoraInject(buildBeacon(peer, ep, batt, flags));
         printf("  baliza de #%d inyectada (epoch %ld, bat %d%%)\n", peer, ep, batt);
+    }
+    else if (cmd == "nudge") {      // "pensando en ti" de un peer: nudge <peerId>
+        int peer = 0; is >> peer;
+        String p; p += (char)0x03; p += (char)peer;
+        String e = SimpleCrypto_encrypt(p);
+        simLoraInject(std::string(e.c_str(), e.length()));
+        printf("  nudge de #%d inyectado\n", peer);
     }
     else if (cmd == "lora") {
         std::string sub; is >> sub;

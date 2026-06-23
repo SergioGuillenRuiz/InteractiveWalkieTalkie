@@ -12,6 +12,7 @@
 // Marcadores de protocolo (1er byte del texto plano, antes de cifrar).
 static const char CHAT_MARK_MSG    = 0x01;
 static const char CHAT_MARK_BEACON = 0x02;
+static const char CHAT_MARK_NUDGE  = 0x03;
 static const char CHAT_MARK_ACK    = 0x06;
 
 // Contador de id de mensaje propio (1..255, evita 0).
@@ -206,6 +207,10 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
     msgId  = (uint8_t)raw[2];
     return CHAT_ACK;
   }
+  if (raw.length() >= 2 && raw[0] == CHAT_MARK_NUDGE) {
+    sender = (uint8_t)raw[1];
+    return CHAT_NUDGE;
+  }
   if (raw.length() >= 7 && raw[0] == CHAT_MARK_BEACON) {
     sender         = (uint8_t)raw[1];
     s_beaconSender = (uint8_t)raw[1];
@@ -252,6 +257,14 @@ void Chat_sendAck(uint8_t targetId, uint8_t msgId) {
   Lora_send(packet);
   Serial.print("[Chat] ACK a #"); Serial.print(targetId);
   Serial.print(" msg "); Serial.println(msgId);
+}
+
+void Chat_sendNudge() {
+  String packet;
+  packet += CHAT_MARK_NUDGE;
+  packet += (char)Device_id();
+  Lora_send(packet);
+  Serial.println("[Nudge] enviado");
 }
 
 bool Chat_awaitingAck() { return g_awaiting; }

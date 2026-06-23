@@ -12,12 +12,13 @@
 //    MENSAJE:  0x01 | emisor(1) | msgId(1) | texto...
 //    ACK:      0x06 | destino(1) | msgId(1)            (destino = emisor original)
 //    BALIZA:   0x02 | emisor(1) | flags(1) | epoch(4, BE) | bateria%(1)
+//    NUDGE:    0x03 | emisor(1)                        ("pensando en ti")
 //
-//  Los marcadores 0x01/0x02/0x06 no colisionan con los protocolos de los juegos
-//  ('T' de Tetris, "HR" de HippoRadar). Un paquete sin sobre = CHAT_OTHER.
+//  Los marcadores 0x01/0x02/0x03/0x06 no colisionan con los protocolos de los
+//  juegos ('T' de Tetris, "HR" de HippoRadar). Un paquete sin sobre = CHAT_OTHER.
 // ============================================================
 
-enum ChatKind { CHAT_OTHER = 0, CHAT_MSG = 1, CHAT_ACK = 2, CHAT_BEACON = 3 };
+enum ChatKind { CHAT_OTHER = 0, CHAT_MSG = 1, CHAT_ACK = 2, CHAT_BEACON = 3, CHAT_NUDGE = 4 };
 
 // Flags de la baliza
 #define BEACON_FLAG_LOWBATT  0x01
@@ -43,6 +44,9 @@ bool Chat_send(const String &text);
 
 // Envia un ACK por un mensaje recibido (destino = emisor original).
 void Chat_sendAck(uint8_t targetId, uint8_t msgId);
+
+// Envia un "nudge" (pensando en ti): un toque sin texto, fire-and-forget.
+void Chat_sendNudge();
 
 // Tareas periodicas: emite la baliza de presencia y reintenta los mensajes de la
 // outbox sin confirmar. Llamar a menudo (desde backgroundTick()).
