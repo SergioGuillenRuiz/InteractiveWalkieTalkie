@@ -1,0 +1,20 @@
+# Demo (cambio 7): un dibujo recibido se puede REABRIR desde el Historial.
+# Llega el dibujo, lo descartamos de la pantalla completa, y luego abrimos su
+# registro "[dibujo]" en el Historial: muestra el dibujo REAL, no el texto.
+wait 300
+settime 79380
+doodle 50
+# auto-mostrado a pantalla completa; lo descartamos con A
+in 100 morse down
+in 250 morse up
+run 700
+# IDLE -> Historial
+pot 640
+wait 200
+tap morse
+wait 400
+# abrir el registro "[dibujo]" (idx 0) con A -> dibujo a pantalla completa
+in 0 morse down
+in 200 morse up
+run 800
+shot demo_doodle_history

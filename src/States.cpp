@@ -66,18 +66,20 @@ void backgroundTick() {
             // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
             Chat_handleBeacon();
         } else if (kind == CHAT_DOODLE) {
-            // Dibujo entrante: se guarda como "pendiente" (se muestra al volver al
-            // IDLE), se deja constancia en el historial y despierta la pantalla.
+            // Dibujo entrante: se muestra a pantalla completa al volver al IDLE y se
+            // registra en el historial como "[dibujo]". El dibujo queda guardado con
+            // el MISMO sello de tiempo que su registro, para poder reabrirlo desde el
+            // Historial. Tambien despierta la pantalla si estabamos dormidos.
             if (sender != Device_id()) {
                 Chat_noteHeard(sender);
                 uint8_t buf[DOODLE_BYTES];
                 for (int i = 0; i < DOODLE_BYTES; i++)
                     buf[i] = (i + 2 < (int)raw.length()) ? (uint8_t)raw[i + 2] : 0;
-                Doodle_onReceived(sender, buf);
                 if (mainState == STATE_SLEEP) { Display_setPower(true); mainState = STATE_IDLE; }
                 lastInteraction  = millis();
                 lastTimeReceived = millis();
                 History_addIncoming("[dibujo]", sender);
+                Doodle_onReceived(sender, buf, History_getTimestamp(0));   // idx 0 = el recien anadido
                 triggerAnimation(ANIM_CHASING_HEART);
                 Serial.print("[Dibujo] de #"); Serial.println(sender);
             }
@@ -816,7 +818,17 @@ bool handleHistoryMenu() {
                     display.print(histAgeStr(selected));
                 }
                 display.println();
-                drawWrappedMessage(full, 16);
+                if (full == "[dibujo]") {
+                    // Registro de un dibujo: mostrar el dibujo REAL (si sigue guardado).
+                    if (Doodle_isStored(History_getSender(selected), History_getTimestamp(selected))) {
+                        Doodle_drawStored(16, 16);                      // lienzo 24x24
+                    } else {
+                        display.setCursor(0, 28); display.print("Dibujo recibido");
+                        display.setCursor(0, 40); display.print("(ya no guardado)");
+                    }
+                } else {
+                    drawWrappedMessage(full, 16);
+                }
                 display.setCursor(0, 118);
                 display.print("A: Borrar  B: Volver");
                 display.display();
@@ -980,7 +992,7 @@ bool handleGamesMenu() {
                     startHippoRadar();
                     return true;
 
-                case 5: // Dibujar (lienzo 16x16): gestiona su propia salida a IDLE
+                case 5: // Dibujar (lienzo 24x24): gestiona su propia salida a IDLE
                     startDoodle();
                     return true;
 

@@ -1,0 +1,8 @@
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 300
+pot 0
+wait 250
+shot demo_games_menu

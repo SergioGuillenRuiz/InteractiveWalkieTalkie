@@ -1,0 +1,16 @@
+# Demo: Historial con reloj real y mensajes LIMPIOS (recibidos via protocolo de
+# chat, no texto crudo). Inyectamos dos mensajes de #50 separados en el tiempo
+# para que se vean antiguedades distintas (10m y 0m). Device_id del sim = 137.
+wait 300
+settime 79380                  # 22:03
+in 0 chatmsg 50 1 te quiero
+run 600
+settime 79980                  # +10 min -> el primero pasa a "10m"
+in 0 chatmsg 50 2 hola amor
+run 600
+# IDLE -> Historial
+pot 640
+wait 200
+tap morse
+wait 400
+shot demo_history

@@ -1,0 +1,6 @@
+wait 300
+presence 50 0 90
+battery 90
+pot 80
+run 600
+shot demo_idle_online

@@ -1,0 +1,26 @@
+# Demo: editor del lienzo con los controles NUEVOS (pote = fila/Y; pulsar A =
+# pinta; mantener A + pote = columna/X; pulsar B = borra; mantener B = envia).
+# Pintamos unos puntos en la columna 0 variando la fila con el pote.
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 800
+wait 250
+# entrar al editor
+in 0 morse down
+in 120 morse up
+# pintar (0,0), (0,3), (0,6) y dejar el cursor en (0,9)
+in 400 pot 0
+in 500 morse down
+in 600 morse up
+in 800 pot 130
+in 900 morse down
+in 1000 morse up
+in 1200 pot 260
+in 1300 morse down
+in 1400 morse up
+in 1700 pot 390
+run 2200 120
+shot demo_doodle_editor

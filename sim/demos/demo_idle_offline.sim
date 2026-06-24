@@ -1,0 +1,5 @@
+wait 300
+battery 70
+pot 80
+run 600
+shot demo_idle_offline

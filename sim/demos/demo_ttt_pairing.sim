@@ -1,0 +1,11 @@
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+in 0 morse down
+in 120 morse up
+run 2000 150
+shot demo_ttt_pairing
