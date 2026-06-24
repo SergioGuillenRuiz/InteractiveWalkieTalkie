@@ -268,13 +268,16 @@ static void execLine(const std::string &raw) {
         simLoraInject(buildBeacon(peer, ep, batt, flags));
         printf("  baliza de #%d inyectada (epoch %ld, bat %d%%)\n", peer, ep, batt);
     }
-    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (24x24, marco + diagonal)
+    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (24x24, un corazon)
         int peer = 0; is >> peer;
         String p; p += (char)0x04; p += (char)peer;
-        for (int y = 0; y < 24; y++) {
+        for (int cy = 0; cy < 24; cy++) {
             unsigned char b[3] = {0, 0, 0};
-            for (int x = 0; x < 24; x++)
-                if (x == 0 || x == 23 || y == 0 || y == 23 || x == y) b[x / 8] |= (1 << (7 - (x % 8)));
+            for (int cx = 0; cx < 24; cx++) {
+                double x = (cx - 11.5) / 10.0, y = (9.5 - cy) / 10.0;   // curva del corazon
+                double t = x * x + y * y - 1.0;
+                if (t * t * t - x * x * y * y * y < 0.0) b[cx / 8] |= (1 << (7 - (cx % 8)));
+            }
             p += (char)b[0]; p += (char)b[1]; p += (char)b[2];
         }
         String e = SimpleCrypto_encrypt(p);

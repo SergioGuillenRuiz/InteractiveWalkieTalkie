@@ -842,10 +842,10 @@ void drawHeartOutline(int x, int y, int color) {
       if (outline[i][j]) display.drawPixel(x + j - 5, y + i - 5, color);
 }
 
-// Barra de estado del IDLE. Se dibuja DESPUES de las animaciones (ver handleIdle)
-// para que el corazon de presencia, justo debajo de "Env", no lo borre el hipo.
-// Bateria + aviso de bateria baja: esquina superior izquierda (sobre los iconos,
-// que arrancan en Y=8). Presencia: corazon lleno/hueco centrado bajo "Env".
+// Barra de estado del IDLE, toda en la franja superior (Y<8, sobre los iconos del
+// menu que arrancan en Y=8 y fuera del area de animaciones): bateria + aviso de
+// bateria baja en la esquina IZQUIERDA, presencia (corazon lleno/hueco) en la
+// esquina DERECHA (asi no estorba al cursor del menu).
 void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow) {
   // --- Bateria + "!" en la esquina superior IZQUIERDA ---
   display.fillRect(0, 0, 26, 8, SH110X_BLACK);
@@ -859,10 +859,10 @@ void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow) {
     display.setCursor(17, 0); display.print("!");
   }
 
-  // --- Presencia: corazon centrado DEBAJO de "Env" (centro X=24) ---
-  display.fillRect(18, 47, 13, 11, SH110X_BLACK);
-  if (peerOnline) drawHeart(24, 52, SH110X_WHITE);
-  else            drawHeartOutline(24, 52, SH110X_WHITE);
+  // --- Presencia: corazon en la esquina superior DERECHA ---
+  display.fillRect(114, 0, 14, 8, SH110X_BLACK);
+  if (peerOnline) drawHeart(121, 5, SH110X_WHITE);
+  else            drawHeartOutline(121, 5, SH110X_WHITE);
 }
 
 bool animateHippoGivingHeart() {

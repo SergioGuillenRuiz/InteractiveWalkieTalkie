@@ -323,15 +323,13 @@ bool handleIdle() {
     // pinten las animaciones), pero el volcado a pantalla está limitado por
     // Display_update()/moveCursor(), no se hace en cada vuelta.
     drawMenu();
+    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
     }
     moveCursor();
     updateHippoAnimation();
-    // La barra de estado (bateria arriba-izq + corazon bajo "Env") se dibuja al
-    // final, encima de la animacion, para que el hipo no borre el corazon.
-    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
     // La recepción de mensajes la gestiona backgroundTick() (bucle principal).
 
     if (isMorsePressed()) {
