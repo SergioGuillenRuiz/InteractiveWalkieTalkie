@@ -14,12 +14,12 @@ static const unsigned long SEND_HOLD_MS = 1500;   // FINISH largo -> enviar
 static const unsigned long ROW_HOLD_MS  = 600;    // MORSE largo -> bajar fila
 static const unsigned long CANCEL_MS    = 25000;  // inactividad -> descartar
 
-// --- Acceso a bits del lienzo (fila = 2 bytes, MSB primero) ---
+// --- Acceso a bits del lienzo (fila = DOODLE_ROWBYTES bytes, MSB primero) ---
 static inline bool getPx(const uint8_t *b, int x, int y) {
-  return (b[y * 2 + (x >> 3)] >> (7 - (x & 7))) & 1;
+  return (b[y * DOODLE_ROWBYTES + (x >> 3)] >> (7 - (x & 7))) & 1;
 }
 static inline void togglePx(uint8_t *b, int x, int y) {
-  b[y * 2 + (x >> 3)] ^= (uint8_t)(1 << (7 - (x & 7)));
+  b[y * DOODLE_ROWBYTES + (x >> 3)] ^= (uint8_t)(1 << (7 - (x & 7)));
 }
 
 // --- Dibujado del lienzo (escala 'pitch'; celda 'cell') ---
@@ -34,7 +34,7 @@ static void drawEditor(const uint8_t *c, int cx, int cy) {
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0); display.print("Dibujo");
-  const int ox = 16, oy = 10, pitch = 6, cell = 5;
+  const int ox = 16, oy = 12, pitch = 4, cell = 4;   // 24x4 = 96 px
   blitCanvas(c, ox, oy, pitch, cell);
   display.fillRect(ox + cx * pitch, oy + cy * pitch, cell, cell, SH110X_INVERSE);   // cursor
   display.setCursor(0, 110); display.print("A pinta  manten:baja");
@@ -116,7 +116,7 @@ void Doodle_showPending() {
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0); display.print("Dibujo de #"); display.print(g_rxFrom);
-  blitCanvas(g_rx, 8, 12, 7, 6);   // mas grande
+  blitCanvas(g_rx, 16, 12, 4, 4);   // 24x4 = 96 px
   display.setCursor(0, 119); display.print("A/B: ok");
   display.display();
 

@@ -4,6 +4,7 @@
 #include "Identity.h"
 #include "Clock.h"
 #include "Battery.h"
+#include "Doodle.h"
 #include "Config.h"
 #include "EepromMap.h"
 #include "States.h"        // mainState / STATE_IDLE / STATE_SLEEP (gating de baliza)
@@ -12,7 +13,6 @@
 // Marcadores de protocolo (1er byte del texto plano, antes de cifrar).
 static const char CHAT_MARK_MSG    = 0x01;
 static const char CHAT_MARK_BEACON = 0x02;
-static const char CHAT_MARK_NUDGE  = 0x03;
 static const char CHAT_MARK_DOODLE = 0x04;
 static const char CHAT_MARK_ACK    = 0x06;
 
@@ -208,11 +208,7 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
     msgId  = (uint8_t)raw[2];
     return CHAT_ACK;
   }
-  if (raw.length() >= 2 && raw[0] == CHAT_MARK_NUDGE) {
-    sender = (uint8_t)raw[1];
-    return CHAT_NUDGE;
-  }
-  if (raw.length() >= 34 && raw[0] == CHAT_MARK_DOODLE) {   // 2 + 32 bytes de lienzo
+  if (raw.length() >= 2 + DOODLE_BYTES && raw[0] == CHAT_MARK_DOODLE) {
     sender = (uint8_t)raw[1];
     return CHAT_DOODLE;
   }
@@ -264,19 +260,11 @@ void Chat_sendAck(uint8_t targetId, uint8_t msgId) {
   Serial.print(" msg "); Serial.println(msgId);
 }
 
-void Chat_sendNudge() {
-  String packet;
-  packet += CHAT_MARK_NUDGE;
-  packet += (char)Device_id();
-  Lora_send(packet);
-  Serial.println("[Nudge] enviado");
-}
-
 void Chat_sendDoodle(const uint8_t *buf32) {
   String packet;
   packet += CHAT_MARK_DOODLE;
   packet += (char)Device_id();
-  for (int i = 0; i < 32; i++) packet += (char)buf32[i];
+  for (int i = 0; i < DOODLE_BYTES; i++) packet += (char)buf32[i];
   Lora_send(packet);
   Serial.println("[Dibujo] enviado");
 }

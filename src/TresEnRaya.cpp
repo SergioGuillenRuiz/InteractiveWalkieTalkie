@@ -75,27 +75,40 @@ static char recvPkt(uint8_t &sender) {
 }
 
 // --- Dibujo ---
+static void tttCenter(const String &s, int y) {
+  display.setTextSize(1);
+  int16_t bx, by; uint16_t bw, bh;
+  display.getTextBounds(s.c_str(), 0, 0, &bx, &by, &bw, &bh);
+  int x = (128 - (int)bw) / 2; if (x < 0) x = 0;
+  display.setCursor(x, y); display.print(s);
+}
+
 static void drawCell(int idx, int ox, int oy, int cs) {
   int cx = ox + (idx % 3) * cs, cy = oy + (idx / 3) * cs;
   uint8_t v = board[idx];
-  if (v == 1) {                                   // X
-    display.drawLine(cx + 6, cy + 6, cx + cs - 6, cy + cs - 6, SH110X_WHITE);
-    display.drawLine(cx + cs - 6, cy + 6, cx + 6, cy + cs - 6, SH110X_WHITE);
-  } else if (v == 2) {                            // O
-    display.drawCircle(cx + cs / 2, cy + cs / 2, cs / 2 - 6, SH110X_WHITE);
+  const int pad = 7;
+  if (v == 1) {                                   // X (grosor 2, centrada en la casilla)
+    for (int t = 0; t < 2; t++) {
+      display.drawLine(cx + pad, cy + pad + t, cx + cs - pad, cy + cs - pad + t, SH110X_WHITE);
+      display.drawLine(cx + cs - pad, cy + pad + t, cx + pad, cy + cs - pad + t, SH110X_WHITE);
+    }
+  } else if (v == 2) {                            // O (grosor 2)
+    int r = cs / 2 - pad;
+    display.drawCircle(cx + cs / 2, cy + cs / 2, r, SH110X_WHITE);
+    display.drawCircle(cx + cs / 2, cy + cs / 2, r - 1, SH110X_WHITE);
   }
 }
+
 static void drawBoard(bool myTurn) {
   display.clearDisplay();
   display.setTextSize(1); display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0); display.print("3 en raya");
-  display.setCursor(96, 0); display.print(myRole == 1 ? "Tu:X" : "Tu:O");
+  tttCenter("3 en raya", 2);
 
-  const int ox = 7, oy = 14, cs = 38;             // rejilla 3x38 = 114
-  for (int i = 1; i < 3; i++) {
-    display.drawLine(ox + i * cs, oy, ox + i * cs, oy + 3 * cs, SH110X_WHITE);
-    display.drawLine(ox, oy + i * cs, ox + 3 * cs, oy + i * cs, SH110X_WHITE);
-  }
+  const int cs = 32, ox = 16, oy = 13;            // rejilla 3x32 = 96, centrada (margen 16)
+  display.drawLine(ox + cs,     oy, ox + cs,     oy + 3 * cs, SH110X_WHITE);
+  display.drawLine(ox + 2 * cs, oy, ox + 2 * cs, oy + 3 * cs, SH110X_WHITE);
+  display.drawLine(ox, oy + cs,     ox + 3 * cs, oy + cs,     SH110X_WHITE);
+  display.drawLine(ox, oy + 2 * cs, ox + 3 * cs, oy + 2 * cs, SH110X_WHITE);
   for (int i = 0; i < 9; i++) drawCell(i, ox, oy, cs);
 
   if (myTurn && !over) {                           // cursor en la casilla activa
@@ -103,14 +116,13 @@ static void drawBoard(bool myTurn) {
     display.drawRect(cx + 2, cy + 2, cs - 4, cs - 4, SH110X_WHITE);
   }
 
-  display.setCursor(0, 119);
+  String s;
   if (over) {
     uint8_t w = winnerOf(board);
-    if (w == myRole)      display.print("GANAS!  B: salir");
-    else if (w)           display.print("Pierdes B: salir");
-    else                  display.print("Empate  B: salir");
-  } else if (myTurn) display.print("Tu turno: A coloca");
-  else               display.print("Turno del rival...");
+    s = (w == myRole) ? "GANAS!" : (w ? "Pierdes" : "Empate");
+    s += "   B: salir";
+  } else s = myTurn ? (myRole == 1 ? "Tu turno (X)" : "Tu turno (O)") : "Turno del rival...";
+  tttCenter(s, 117);
   display.display();
 }
 
@@ -146,9 +158,12 @@ void startTresEnRaya() {
       if (now - lastHello >= HELLO_EVERY) { sendHello(); lastHello = now; }
       display.clearDisplay();
       display.setTextSize(1); display.setTextColor(SH110X_WHITE);
-      display.setCursor(0, 0); display.print("3 en raya");
-      display.setCursor(8, 56); display.print("Buscando rival...");
-      display.setCursor(0, 119); display.print("manten B: salir");
+      tttCenter("3 en raya", 2);
+      // dos circulos buscandose (icono simple y simetrico)
+      display.drawCircle(50, 56, 9, SH110X_WHITE);
+      display.drawCircle(78, 56, 9, SH110X_WHITE);
+      tttCenter("Buscando rival...", 80);
+      tttCenter("manten B para salir", 117);
       display.display();
       delay(20);
       continue;

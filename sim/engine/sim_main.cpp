@@ -251,12 +251,6 @@ static void execLine(const std::string &raw) {
             int flags = (batt <= 15) ? 1 : 0;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags)));
         }
-        else if (what == "nudge") {      // nudge diferido: in <ms> nudge <peer>
-            int peer = 0; is >> peer;
-            String p; p += (char)0x03; p += (char)peer;
-            String enc = SimpleCrypto_encrypt(p);
-            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
-        }
         else if (what == "ttt") {        // tres en raya diferido: in <ms> ttt hello|state ...
             std::string sub; is >> sub;
             int peer = 0, ov = 0; std::string cells = "000000000";
@@ -274,21 +268,14 @@ static void execLine(const std::string &raw) {
         simLoraInject(buildBeacon(peer, ep, batt, flags));
         printf("  baliza de #%d inyectada (epoch %ld, bat %d%%)\n", peer, ep, batt);
     }
-    else if (cmd == "nudge") {      // "pensando en ti" de un peer: nudge <peerId>
-        int peer = 0; is >> peer;
-        String p; p += (char)0x03; p += (char)peer;
-        String e = SimpleCrypto_encrypt(p);
-        simLoraInject(std::string(e.c_str(), e.length()));
-        printf("  nudge de #%d inyectado\n", peer);
-    }
-    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (patron de ejemplo)
+    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (24x24, marco + diagonal)
         int peer = 0; is >> peer;
         String p; p += (char)0x04; p += (char)peer;
-        for (int y = 0; y < 16; y++) {     // marco + diagonal
-            int row = 0;
-            for (int x = 0; x < 16; x++)
-                if (x == 0 || x == 15 || y == 0 || y == 15 || x == y) row |= (1 << (15 - x));
-            p += (char)((row >> 8) & 0xFF); p += (char)(row & 0xFF);
+        for (int y = 0; y < 24; y++) {
+            unsigned char b[3] = {0, 0, 0};
+            for (int x = 0; x < 24; x++)
+                if (x == 0 || x == 23 || y == 0 || y == 23 || x == y) b[x / 8] |= (1 << (7 - (x % 8)));
+            p += (char)b[0]; p += (char)b[1]; p += (char)b[2];
         }
         String e = SimpleCrypto_encrypt(p);
         simLoraInject(std::string(e.c_str(), e.length()));

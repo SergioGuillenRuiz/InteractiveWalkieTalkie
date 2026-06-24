@@ -2,39 +2,40 @@
 #  Feature 5: aviso de batería baja (con histéresis).
 #  En el simulador la batería es un canal ADC mockeado (comando "battery <pct>").
 #  El aviso aparece por debajo de BATT_LOW_PCT (15) y se borra por encima de
-#  BATT_OK_PCT (20): "!" en la barra de estado del IDLE + log serie. Se comprueba
-#  por PÍXELES (el framebuffer es determinista; el texto del IDLE es acumulativo).
-#    - medidor: relleno proporcional; píxel (86,44) ON si pct>=~40%.
-#    - aviso "!": columna del glifo en (50,42).
+#  BATT_OK_PCT (20): "!" en la barra de estado (esquina superior IZQUIERDA) + log
+#  serie. Se comprueba por PÍXELES (el framebuffer es determinista; el texto del
+#  IDLE es acumulativo).
+#    - medidor (arriba-izq): relleno proporcional; píxel (6,3) ON si pct alto.
+#    - aviso "!": columna del glifo en (19,2).
 # ============================================================
 wait 300
 
 # Batería al 90%: medidor lleno, sin aviso
 battery 90
 run 400
-expect pixel 86 44 on
-expect pixel 50 42 off
+expect pixel 6 3 on
+expect pixel 19 2 off
 print Bateria 90%: medidor lleno, sin aviso
 
 # Cae al 8%: aviso de batería baja (serie + "!") y medidor casi vacío
 battery 8
 run 400
 expect serial Bateria baja
-expect pixel 86 44 off
-expect pixel 50 42 on
+expect pixel 6 3 off
+expect pixel 19 2 on
 shot bateria_baja
 print Bateria 8%: aviso activo y medidor vacio
 
 # Histéresis: sube al 18% (entre 15 y 20) -> el aviso SIGUE
 battery 18
 run 400
-expect pixel 50 42 on
+expect pixel 19 2 on
 print Bateria 18%: el aviso persiste (histeresis)
 
 # Sube al 30% -> el aviso desaparece
 battery 30
 run 600
-expect pixel 50 42 off
+expect pixel 19 2 off
 print Bateria 30%: aviso borrado
 
 print Bateria: medidor + aviso con histeresis OK

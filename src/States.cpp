@@ -65,18 +65,6 @@ void backgroundTick() {
             // Baliza de presencia del companero: actualiza presencia, su bateria y
             // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
             Chat_handleBeacon();
-        } else if (kind == CHAT_NUDGE) {
-            // "Pensando en ti": despierta la pantalla, anima un corazon, deja
-            // constancia en el historial y (en placa) haria sonar el zumbador.
-            if (sender != Device_id()) {
-                Chat_noteHeard(sender);
-                if (mainState == STATE_SLEEP) { Display_setPower(true); mainState = STATE_IDLE; }
-                lastInteraction  = millis();
-                lastTimeReceived = millis();
-                History_addIncoming("Pensando en ti", sender);
-                triggerAnimation(ANIM_CHASING_HEART);
-                Serial.print("[Nudge] de #"); Serial.print(sender); Serial.println(" (bzzt)");
-            }
         } else if (kind == CHAT_DOODLE) {
             // Dibujo entrante: se guarda como "pendiente" (se muestra al volver al
             // IDLE), se deja constancia en el historial y despierta la pantalla.
@@ -151,17 +139,38 @@ static bool          g_resIsSend = false;   // el último resultado fue un enví
 static unsigned long g_resAt = 0;
 static int           g_resPhase = 0;        // 0=esperando ACK, 1=entregado, 2=sin confirmar
 
+// Texto centrado horizontalmente en una Y dada y un tamaño dado.
+static void srCenter(const String &s, int y, int sz) {
+    display.setTextSize(sz);
+    int16_t bx, by; uint16_t bw, bh;
+    display.getTextBounds(s.c_str(), 0, 0, &bx, &by, &bw, &bh);
+    int x = (128 - (int)bw) / 2; if (x < 0) x = 0;
+    display.setCursor(x, y);
+    display.print(s);
+}
+
 static void drawSendResult(int phase) {
     Display_clear();
-    display.setCursor(0, 0);
-    display.setTextSize(1);
     display.setTextColor(SH110X_WHITE);
-    display.println(phase == 1 ? "Entregado!" : "Enviado:");
-    display.println(g_resMsg);
-    display.println();
-    if (phase == 0)      display.println("esperando confirm...");
-    else if (phase == 2) display.println("(sin confirmar)");
-    else                 display.println("visto por el otro");
+    const int cx = 64;
+    String msg = g_resMsg;
+    if ((int)msg.length() > 21) msg = msg.substring(0, 19) + "..";
+
+    if (phase == 1) {                                  // ENTREGADO: tick grande
+        for (int t = 0; t < 3; t++) {
+            display.drawLine(cx - 13, 30 + t, cx - 4, 39 + t, SH110X_WHITE);
+            display.drawLine(cx - 4, 39 + t, cx + 15, 20 + t, SH110X_WHITE);
+        }
+        srCenter("Entregado!", 50, 2);
+        srCenter(msg, 78, 1);
+        srCenter("visto por el otro", 108, 1);
+    } else {                                           // ENVIADO: flecha hacia arriba
+        display.fillTriangle(cx - 11, 36, cx + 11, 36, cx, 18, SH110X_WHITE);
+        display.fillRect(cx - 3, 36, 6, 10, SH110X_WHITE);
+        srCenter("Enviado", 50, 2);
+        srCenter(msg, 78, 1);
+        srCenter(phase == 0 ? "esperando confirm..." : "(sin confirmar)", 108, 1);
+    }
     display.display();
 }
 
@@ -314,13 +323,15 @@ bool handleIdle() {
     // pinten las animaciones), pero el volcado a pantalla está limitado por
     // Display_update()/moveCursor(), no se hace en cada vuelta.
     drawMenu();
-    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
     }
     moveCursor();
     updateHippoAnimation();
+    // La barra de estado (bateria arriba-izq + corazon bajo "Env") se dibuja al
+    // final, encima de la animacion, para que el hipo no borre el corazon.
+    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
     // La recepción de mensajes la gestiona backgroundTick() (bucle principal).
 
     if (isMorsePressed()) {
@@ -335,22 +346,6 @@ bool handleIdle() {
             menuTransitionDelay();
             return true;
         }
-    }
-
-    // Nudge "pensando en ti": mantener FINISH (>=600 ms) en IDLE envia un toque al
-    // companero (sin texto). Da feedback con la animacion de "dar corazon".
-    static unsigned long finishHoldStart = 0;
-    if (isFinishPressed()) {
-        if (finishHoldStart == 0) finishHoldStart = millis();
-        else if (millis() - finishHoldStart >= 600) {
-            Chat_sendNudge();
-            triggerAnimation(ANIM_GIVING_HEART);
-            lastInteraction = millis();
-            while (isFinishPressed()) { backgroundTick(); delay(10); }   // esperar a soltar
-            finishHoldStart = 0;
-        }
-    } else {
-        finishHoldStart = 0;
     }
 
     if (millis() - lastInteraction > SLEEP_TIMEOUT) {
