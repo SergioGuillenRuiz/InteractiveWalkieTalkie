@@ -37,12 +37,12 @@ static void drawEditor(const uint8_t *c, int cx, int cy) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0); display.print("Dibujo  Pot sube/baja");
+  display.setCursor(0, 0); display.print("Dibujo");
   const int ox = 16, oy = 12, pitch = 4, cell = 4;   // 24x4 = 96 px
   blitCanvas(c, ox, oy, pitch, cell);
   display.fillRect(ox + cx * pitch, oy + cy * pitch, cell, cell, SH110X_INVERSE);   // cursor
-  display.setCursor(0, 110); display.print("A pinta   B borra");
-  display.setCursor(0, 119); display.print("manB envia  manA+pot");
+  display.setCursor(0, 110); display.print("A pinta B borra Pot:Y");
+  display.setCursor(0, 119); display.print("A+Pot:X B largo:envia");
   display.display();
 }
 
