@@ -18,13 +18,15 @@ wait 300
 expect text Historial
 expect text corto
 
-# --- BORRAR "corto" (indice 1, el mas antiguo): abrir -> A borra directamente ---
+# --- BORRAR "corto" (idx 1, el mas antiguo): abrir (A) -> Borrar (A) -> confirmar (A) ---
 pot 1023
 wait 300
 in 0 morse down
 in 150 morse up
 in 600 morse down
 in 750 morse up
+in 1200 morse down
+in 1350 morse up
 run 3200
 expect serial Borrado
 wait 300

@@ -7,7 +7,7 @@
 # ============================================================
 wait 300
 
-# --- JUEGOS: "3 en raya" (idx6 de 0..6, la ultima) alcanzable con pot 900, no 1023 ---
+# --- JUEGOS: "3 en raya" (idx5 de 0..5, la ultima) alcanzable con pot 900, no 1023 ---
 pot 1000
 wait 200
 tap morse
@@ -19,7 +19,7 @@ print Juegos: "3 en raya" (ultima) alcanzable con pot 900
 tap finish
 wait 300
 
-# --- ENVIAR: "Frase" (idx3 de 0..3) con pot 880; entrar confirma la seleccion ---
+# --- ENVIAR: "Dibujar" (idx4 de 0..4, la ultima) seleccionable con pot 880 ---
 pot 80
 wait 200
 tap morse
@@ -27,11 +27,9 @@ wait 200
 expect text Selecciona
 pot 880
 wait 250
-tap morse
-wait 300
-expect text quien          # entro al Frasero => "Frase" estaba seleccionada
-print Enviar: "Frase" (ultima) alcanzable con pot 880
-tap finish                  # FINISH en la 1a categoria -> sale a IDLE
+expect text Dibujar        # la ultima opcion se resalta sin llegar a pot 1023
+print Enviar: "Dibujar" (ultima) alcanzable con pot 880
+tap finish                  # salir del menu Enviar a IDLE
 wait 400
 expect text Env
 
@@ -40,7 +38,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-pot 500
+pot 300
 wait 200
 tap morse
 wait 250
@@ -59,7 +57,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-pot 640
+pot 500
 wait 250
 tap morse
 wait 300

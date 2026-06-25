@@ -1,40 +1,50 @@
 # ============================================================
-#  Tier 2 - Lienzo (doodle 24x24): dibujar y enviar un dibujito; recibir y verlo.
-#  Editor (Juegos > Dibujar): pote=fila(Y), pulsar A pinta, mantener B envia
-#  (mantener A + pote = columna X; pulsar B borra). 72 bytes (marcador 0x04).
+#  Tier 2 - Lienzo (doodle 24x24): dibujar y enviar (5o modo de ENVIAR);
+#  recibir (va al Historial como un mensaje mas) y verlo abriendo su registro.
+#  Editor: pote=fila(Y), pulsar A pinta, mantener B envia. 72 bytes (0x04).
 #  (Device_id del sim = 137.)
 # ============================================================
 wait 300
 
-# --- IDLE -> Juegos -> Dibujar (idx5 de 7, pot 800) ---
-pot 1000
+# --- IDLE -> ENVIAR -> Dibujar (idx4 de 0..4, pot 880) ---
+pot 80
 wait 200
 tap morse
 wait 200
-pot 800
+expect text Selecciona
+pot 880
 wait 250
 expect text Dibujar
 
-# --- Entrar al editor, pintar el pixel (0,0) y ENVIAR (finish largo), todo en un
-#     mismo run porque el editor es bloqueante. ---
-pot 0
+# --- Entrar al editor, pintar y ENVIAR (mantener B), todo en un mismo run
+#     porque el editor es bloqueante. (El contenido pintado es indiferente.) ---
 in 0 morse down        # selecciona "Dibujar" y entra al editor
 in 120 morse up
-in 700 morse down      # pulsar A (corto): pinta el pixel (0,0)
+in 700 morse down      # pulsar A (corto): pinta el pixel del cursor
 in 820 morse up
-in 1400 finish down    # FINISH largo (>=1500 ms): envia
+in 1400 finish down    # mantener B (>=1500 ms): envia
 in 3100 finish up
 run 3600
 expect serial Dibujo] enviado
-print Dibujo: editor, pinta y envia OK
+print Dibujo: editor (5o modo de Enviar), pinta y envia OK
 
-# --- RX: recibir un dibujo de #50 -> queda en historial y se muestra al volver ---
+# --- RX: recibir un dibujo de #50 -> va al Historial (NO interrumpe) ---
 wait 400
+settime 79380
 doodle 50
 run 400
 expect serial Dibujo] de #50
-# de vuelta al IDLE, se muestra a pantalla completa "Dibujo de #50"
-wait 400
-expect text Dibujo de #50
+
+# --- Verlo: IDLE -> Historial -> abrir el registro "[dibujo]" (idx 0) ---
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text dibujo
+in 0 morse down
+in 200 morse up
+run 700
+expect text De #50
 shot doodle_recibido
-print Dibujo: recibido y mostrado OK
+print Dibujo: recibido al Historial y visible al abrirlo

@@ -66,21 +66,18 @@ void backgroundTick() {
             // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
             Chat_handleBeacon();
         } else if (kind == CHAT_DOODLE) {
-            // Dibujo entrante: se muestra a pantalla completa al volver al IDLE y se
-            // registra en el historial como "[dibujo]". El dibujo queda guardado con
-            // el MISMO sello de tiempo que su registro, para poder reabrirlo desde el
-            // Historial. Tambien despierta la pantalla si estabamos dormidos.
+            // Dibujo entrante: se trata como un mensaje mas (NO interrumpe ni
+            // despierta). Va al historial como "[dibujo]" y se guarda con el MISMO
+            // sello de tiempo que su registro para poder abrirlo/verlo desde alli.
             if (sender != Device_id()) {
                 Chat_noteHeard(sender);
                 uint8_t buf[DOODLE_BYTES];
                 for (int i = 0; i < DOODLE_BYTES; i++)
                     buf[i] = (i + 2 < (int)raw.length()) ? (uint8_t)raw[i + 2] : 0;
-                if (mainState == STATE_SLEEP) { Display_setPower(true); mainState = STATE_IDLE; }
-                lastInteraction  = millis();
-                lastTimeReceived = millis();
                 History_addIncoming("[dibujo]", sender);
                 Doodle_onReceived(sender, buf, History_getTimestamp(0));   // idx 0 = el recien anadido
-                triggerAnimation(ANIM_CHASING_HEART);
+                lastTimeReceived = millis();
+                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
                 Serial.print("[Dibujo] de #"); Serial.println(sender);
             }
         } else if (kind == CHAT_MSG) {
@@ -316,8 +313,8 @@ static String histListLine(int idx, bool selected) {
 bool handleIdle() {
     static bool justEnteredIdle = true;
 
-    // Dibujo recibido pendiente: mostrarlo a pantalla completa antes que el menu.
-    if (Doodle_pending()) { Doodle_showPending(); justEnteredIdle = true; return true; }
+    // Un dibujo recibido NO interrumpe: se trata como un mensaje mas (queda en el
+    // Historial y se abre/ve desde alli, igual que el texto).
 
     LoRa.idle();
 
@@ -435,16 +432,16 @@ case SEND_WAIT:
     static int lastSel = -1;
     static bool firstDrawComplete = false;  // Nueva variable para controlar si ya se dibujó el título
     
-    int sel = getPotValue(3);
+    int sel = getPotValue(4);            // 5 modos: Morse, Instant, Rueda, Frase, Dibujar
     if (sel < 0) sel = 0;
-    if (sel > 3) sel = 3;
+    if (sel > 4) sel = 4;
 
     if (!firstDrawComplete || sel != lastSel) {
         // Si es la primera vez que entramos O cambió la selección
 
         if (firstDrawComplete && lastSel != -1) {
             // No es la primera vez: solo borrar las líneas de opciones
-            display.fillRect(0, 16, 128, 40, SH110X_BLACK);
+            display.fillRect(0, 16, 128, 50, SH110X_BLACK);
         } else {
             // Primera vez o reset: dibujar título completo
             Display_clear();
@@ -456,7 +453,7 @@ case SEND_WAIT:
             firstDrawComplete = true;  // Marcar que ya dibujamos el título
         }
 
-        // Dibujar las tres opciones
+        // Dibujar los cinco modos
         display.setCursor(0, 16);
         display.print((sel==0) ? "> " : "  ");
         display.println("Morse");
@@ -472,6 +469,10 @@ case SEND_WAIT:
         display.setCursor(0, 46);
         display.print((sel==3) ? "> " : "  ");
         display.println("Frase");
+
+        display.setCursor(0, 56);
+        display.print((sel==4) ? "> " : "  ");
+        display.println("Dibujar");
 
         display.display();
         lastSel = sel;
@@ -489,9 +490,11 @@ case SEND_WAIT:
             } else if (sel == 2) {
                 dialReset();
                 sendSubState = SEND_DIAL;
-            } else {
+            } else if (sel == 3) {
                 fraseroReset();
                 sendSubState = SEND_PHRASE;
+            } else {
+                sendSubState = SEND_DOODLE;   // lienzo: 5o modo de envio
             }
             Display_clear();
             menuTransitionDelay();
@@ -682,6 +685,18 @@ case SEND_WAIT:
 
             return true;
         }
+
+        // ---------------------------------------------------
+        // ---------------------- SEND_DOODLE ----------------
+        // ---------------------------------------------------
+        case SEND_DOODLE:
+        {
+            // Lienzo: editor bloqueante. Al salir (enviar / cancelar) deja
+            // mainState = STATE_IDLE; dejamos el submenu listo para la proxima vez.
+            startDoodle();
+            sendSubState = SEND_WAIT;
+            return true;
+        }
     }
 
     return true;
@@ -849,10 +864,32 @@ bool handleHistoryMenu() {
                     return true;
                 }
             }
-            // La vista de detalle ("A: Borrar  B: Volver") ya ES la confirmación:
-            // si llegamos aquí el usuario pulsó A (Borrar) viendo el mensaje
-            // completo, así que borramos directamente (sin segunda pantalla).
-            delay(120);
+            // ---- CONFIRMACIÓN DE BORRADO ----
+            // Llegamos aquí porque el usuario pulsó A (Borrar) viendo el mensaje.
+            // Pedimos confirmación explícita: A = sí (borra), B = no (cancela).
+            {
+                Display_clear();
+                display.setTextSize(1);
+                display.setTextColor(SH110X_WHITE);
+                display.setCursor(0, 24); display.println("Borrar mensaje?");
+                display.setCursor(0, 44); display.println("A: Si    B: No");
+                display.display();
+
+                while (Serial.available()) Serial.read();
+                delay(120);
+                bool confirm = false, cancel = false;
+                while (!confirm && !cancel) {
+                    if (isMorsePressed())       { delay(60); if (isMorsePressed())  { while (isMorsePressed())  delay(10); confirm = true; } }
+                    else if (isFinishPressed()) { delay(60); if (isFinishPressed()) { while (isFinishPressed()) delay(10); cancel  = true; } }
+                    backgroundTick(); yield(); delay(15);
+                }
+                if (cancel) {                       // No borrar: volver a la lista
+                    prevTop = -1; prevSelected = -1;
+                    forceRedraw = true; firstTime = true; justEntered = true;
+                    menuTransitionDelay();
+                    return true;
+                }
+            }
 
             History_deleteMessage(selected);
 
@@ -959,8 +996,8 @@ bool handleHistoryMenu() {
 bool handleGamesMenu() {
     static bool needRedraw = true;
 
-    // Submenú de iconos; selección con el potenciómetro (7 juegos: 0..6).
-    int seleccion = getPotValue(6);
+    // Submenú de iconos; selección con el potenciómetro (6 juegos: 0..5).
+    int seleccion = getPotValue(5);
     drawGamesMenu(seleccion, needRedraw);
     needRedraw = false;
 
@@ -992,11 +1029,7 @@ bool handleGamesMenu() {
                     startHippoRadar();
                     return true;
 
-                case 5: // Dibujar (lienzo 24x24): gestiona su propia salida a IDLE
-                    startDoodle();
-                    return true;
-
-                case 6: // Tres en raya (2 jugadores por LoRa): gestiona su salida a IDLE
+                case 5: // Tres en raya (2 jugadores por LoRa): gestiona su salida a IDLE
                     startTresEnRaya();
                     return true;
 

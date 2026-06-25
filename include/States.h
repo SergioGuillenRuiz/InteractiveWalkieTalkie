@@ -37,7 +37,8 @@ enum SendSubState {
     SEND_MORSE,
     SEND_INSTANT_MSG,
     SEND_DIAL,
-    SEND_PHRASE
+    SEND_PHRASE,
+    SEND_DOODLE
 };
 
 extern SendSubState sendSubState;

@@ -1,0 +1,15 @@
+# Demo: confirmacion de borrado. Al abrir un mensaje y pulsar A (Borrar) ya no
+# se borra directamente: aparece "Borrar mensaje? A:Si B:No".
+wait 300
+chatmsg 50 1 hola amor
+run 400
+pot 512
+wait 200
+tap morse
+wait 300
+in 0 morse down        # abrir el mensaje
+in 150 morse up
+in 600 morse down       # A: Borrar -> pide confirmacion
+in 750 morse up
+run 1200
+shot demo_delete_confirm

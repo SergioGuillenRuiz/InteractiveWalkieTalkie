@@ -1,0 +1,10 @@
+# Demo: menu ENVIAR con los 5 modos. El 5o, "Dibujar", es el lienzo (antes
+# estaba mal metido en Juegos). Resaltamos "Dibujar" con el pote (pot 880).
+wait 300
+pot 80
+wait 200
+tap morse
+wait 200
+pot 880
+wait 300
+shot demo_send_menu

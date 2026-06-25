@@ -7,7 +7,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-pot 500
+pot 300
 wait 200
 tap morse
 wait 250

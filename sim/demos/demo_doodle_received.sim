@@ -1,7 +1,0 @@
-# Demo: dibujo recibido (se muestra a pantalla completa al volver al IDLE).
-# El comando "doodle 50" inyecta un corazon 24x24 de #50.
-wait 400
-doodle 50
-run 400
-wait 400
-shot demo_doodle_received

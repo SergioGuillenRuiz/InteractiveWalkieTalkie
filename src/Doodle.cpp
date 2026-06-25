@@ -118,34 +118,15 @@ void startDoodle() {
 //  REABRIRLO desde alli (Doodle_isStored()/Doodle_drawStored()).
 // ============================================================
 static uint8_t       g_rx[DOODLE_BYTES];
-static uint8_t       g_rxFrom   = 0;
-static unsigned long g_rxEpoch  = 0;
+static uint8_t       g_rxFrom    = 0;
+static unsigned long g_rxEpoch   = 0;
 static bool          g_hasStored = false;   // hay un dibujo guardado (epoch puede ser 0 sin reloj)
-static bool          g_pending  = false;
 
 void Doodle_onReceived(uint8_t sender, const uint8_t *buf, unsigned long epoch) {
   memcpy(g_rx, buf, DOODLE_BYTES);
   g_rxFrom    = sender;
   g_rxEpoch   = epoch;
   g_hasStored = true;
-  g_pending   = true;
-}
-
-bool Doodle_pending() { return g_pending; }
-
-void Doodle_showPending() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0); display.print("Dibujo de #"); display.print(g_rxFrom);
-  blitCanvas(g_rx, 16, 12, 4, 4);   // 24x4 = 96 px
-  display.setCursor(0, 119); display.print("A/B:ok  en Historial");
-  display.display();
-
-  while (!isMorsePressed() && !isFinishPressed()) { backgroundTick(); delay(15); }
-  while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
-  g_pending = false;          // ya mostrado; el dibujo queda guardado para reabrir
-  Display_clear();
 }
 
 // --- Reapertura desde el Historial ---

@@ -6,12 +6,12 @@
 #include "Inputs.h"
 
 
-const char* nombresJuegos[7] = {
-  "Tetris Coop", "Poker", "RefillGame", "Choose4Me", "HippoRadar", "Dibujar", "3 en raya"
+const char* nombresJuegos[6] = {
+  "Tetris Coop", "Poker", "RefillGame", "Choose4Me", "HippoRadar", "3 en raya"
 };
 
-const unsigned char* iconosJuegos[7] = {
-  iconoTetris, iconoPoker, iconoRefill, iconoDado, iconoRadar, iconoCorazon, iconoCruz
+const unsigned char* iconosJuegos[6] = {
+  iconoTetris, iconoPoker, iconoRefill, iconoDado, iconoRadar, iconoCruz
 };
 
 const char* nombresMensajes[8] = {
@@ -1367,7 +1367,7 @@ void drawGamesMenu(int seleccion, bool force) {
   int marginY = 8;
 
   for (int i = 0; i < cols * rows; i++) {
-    if (i >= 7) continue;
+    if (i >= 6) continue;
     int fila = i / cols;
     int col = i % cols;
     int x = marginX + col * (iconSize + spacingX);
