@@ -24,7 +24,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-expect text Selecciona
+expect text Enviar
 pot 880
 wait 250
 expect text Dibujar        # la ultima opcion se resalta sin llegar a pot 1023

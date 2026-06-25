@@ -9,7 +9,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-expect text Selecciona
+expect text Enviar
 
 # elegir "Frase" (sel 3 de 0..4; banda idx3 = raw 615..818)
 pot 750

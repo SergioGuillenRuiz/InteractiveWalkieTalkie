@@ -8,7 +8,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-expect text Selecciona
+expect text Enviar
 lora rx uno
 wait 400
 expect serial Guardado: uno

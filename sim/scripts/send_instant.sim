@@ -9,7 +9,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-expect text Selecciona
+expect text Enviar
 
 # elegir "Instant" (sel 1 de 0..4; banda idx1 = raw 205..409)
 pot 300

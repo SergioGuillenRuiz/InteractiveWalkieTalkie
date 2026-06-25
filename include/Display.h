@@ -50,6 +50,10 @@ void Display_centerText(const String &text);
 void drawMenu();
 void drawInstantMessagesMenu(int seleccion, bool force = false);
 void drawGamesMenu(int seleccion, bool force = false);
+
+// Estilo común de menús/pantallas de texto (no vuelcan a pantalla):
+void drawTitleBar(const char *title, const char *right = "");   // franja de título
+void drawListRow(int y, const String &text, bool selected);     // fila (selección en píldora)
 void moveCursor();
 void Display_resetMenuCursor();
 

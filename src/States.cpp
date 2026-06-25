@@ -297,12 +297,13 @@ static int histAgeMinForCache(int idx) {
     return (int)((now >= ts) ? ((now - ts) / 60UL) : 0);
 }
 
-// Una línea de la lista del historial: cursor + antigüedad + (Tu: si es enviado) + texto.
-static String histListLine(int idx, bool selected) {
+// Contenido de una fila del historial: antigüedad + (Tu: si es enviado) + texto.
+// (La selección la marca la "píldora" de drawListRow, no un prefijo "> ".)
+static String histListLine(int idx) {
     String body = History_getMessage(idx);
     if (History_isOutgoing(idx)) body = "Tu:" + body;
-    if (body.length() > 18) body = body.substring(0, 15) + "...";
-    return (selected ? "> " : "  ") + histAgeStr(idx) + " " + body;
+    if (body.length() > 14) body = body.substring(0, 12) + "..";
+    return histAgeStr(idx) + " " + body;
 }
 
 //=============================================================
@@ -437,44 +438,14 @@ case SEND_WAIT:
     if (sel > 4) sel = 4;
 
     if (!firstDrawComplete || sel != lastSel) {
-        // Si es la primera vez que entramos O cambió la selección
-
-        if (firstDrawComplete && lastSel != -1) {
-            // No es la primera vez: solo borrar las líneas de opciones
-            display.fillRect(0, 16, 128, 50, SH110X_BLACK);
-        } else {
-            // Primera vez o reset: dibujar título completo
-            Display_clear();
-            display.setCursor(0,0);
-            display.setTextSize(1);
-            display.setTextColor(SH110X_WHITE);
-            display.println("Selecciona modo:");
-            display.println();
-            firstDrawComplete = true;  // Marcar que ya dibujamos el título
-        }
-
-        // Dibujar los cinco modos
-        display.setCursor(0, 16);
-        display.print((sel==0) ? "> " : "  ");
-        display.println("Morse");
-
-        display.setCursor(0, 26);
-        display.print((sel==1) ? "> " : "  ");
-        display.println("Instant");
-
-        display.setCursor(0, 36);
-        display.print((sel==2) ? "> " : "  ");
-        display.println("Rueda");
-
-        display.setCursor(0, 46);
-        display.print((sel==3) ? "> " : "  ");
-        display.println("Frase");
-
-        display.setCursor(0, 56);
-        display.print((sel==4) ? "> " : "  ");
-        display.println("Dibujar");
-
+        // Redibujado completo en cada cambio de selección (sólo ocurre al mover
+        // el pote, así que no satura el bus): barra de título + 5 modos en lista.
+        display.clearDisplay();
+        drawTitleBar("Enviar");
+        const char *modos[5] = { "Morse", "Instant", "Rueda", "Frase", "Dibujar" };
+        for (int i = 0; i < 5; i++) drawListRow(22 + i * 13, modos[i], i == sel);
         display.display();
+        firstDrawComplete = true;
         lastSel = sel;
     }
 
@@ -725,13 +696,14 @@ bool handleHistoryMenu() {
             prevTop = -2;
             prevSelected = -2;
             firstTime = false;
-            Display_clear();
-            display.setCursor(0,0);
+            display.clearDisplay();
+            drawTitleBar("Historial", Clock_hhmm().c_str());
+            // mensaje centrado con un corazón hueco (vacío, pero con cariño)
+            drawHeartOutline(64, 56, SH110X_WHITE);
             display.setTextSize(1);
             display.setTextColor(SH110X_WHITE);
-            display.println("Historial");
-            display.println();
-            display.println("Sin mensajes");
+            srCenter("Sin mensajes", 72, 1);
+            srCenter("B: volver", 110, 1);
             display.display();
         }
 
@@ -761,20 +733,12 @@ bool handleHistoryMenu() {
     if (firstTime || forceRedraw) {
         firstTime = false;
         
-        Display_clear();
-        display.setCursor(0,0);
-        display.setTextSize(1);
-        display.setTextColor(SH110X_WHITE);
-        display.print("Historial");
-        display.setCursor(98, 0); display.print(Clock_hhmm());   // reloj compartido
-        display.println();
-
+        display.clearDisplay();
+        drawTitleBar("Historial", Clock_hhmm().c_str());
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
             if (idx >= total) break;
-
-            display.setCursor(0, 10 + (line * 10));
-            display.println(histListLine(idx, idx == selected));
+            drawListRow(20 + line * 13, histListLine(idx), idx == selected);
         }
         display.display();
 
@@ -816,36 +780,33 @@ bool handleHistoryMenu() {
             {
                 String full = History_getMessage(selected);
 
-                Display_clear();
-                display.setTextSize(1);
-                display.setTextColor(SH110X_WHITE);
-                display.setCursor(0, 0);
+                String titulo;
                 if (History_isOutgoing(selected)) {
-                    display.print("Enviado");
+                    titulo = "Enviado";
                 } else {
-                    display.print("De ");
                     uint8_t s = History_getSender(selected);
-                    if (s) { display.print("#"); display.print(s); }
-                    else   { display.print("?"); }
+                    titulo = s ? (String("De #") + String((int)s)) : String("De ?");
                 }
-                if (histAgeKnown(selected)) {
-                    display.print("  hace ");
-                    display.print(histAgeStr(selected));
-                }
-                display.println();
+                String edad = histAgeKnown(selected) ? (String("hace ") + histAgeStr(selected)) : String("");
+
+                display.clearDisplay();
+                drawTitleBar(titulo.c_str(), edad.c_str());
                 if (full == "[dibujo]") {
                     // Registro de un dibujo: mostrar el dibujo REAL (si sigue guardado).
                     if (Doodle_isStored(History_getSender(selected), History_getTimestamp(selected))) {
-                        Doodle_drawStored(16, 16);                      // lienzo 24x24
+                        Doodle_drawStored(16, 20);                      // lienzo 24x24
                     } else {
-                        display.setCursor(0, 28); display.print("Dibujo recibido");
-                        display.setCursor(0, 40); display.print("(ya no guardado)");
+                        display.setTextColor(SH110X_WHITE);
+                        srCenter("Dibujo recibido", 40, 1);
+                        srCenter("(ya no guardado)", 54, 1);
                     }
                 } else {
-                    drawWrappedMessage(full, 16);
+                    display.setTextColor(SH110X_WHITE);
+                    drawWrappedMessage(full, 20);
                 }
-                display.setCursor(0, 118);
-                display.print("A: Borrar  B: Volver");
+                display.drawFastHLine(0, 114, SCREEN_WIDTH, SH110X_WHITE);
+                display.setTextColor(SH110X_WHITE);
+                display.setCursor(2, 118); display.print("A: Borrar  B: Volver");
                 display.display();
 
                 // Esperar accion: MORSE (A) = borrar, FINISH (B) = volver
@@ -868,11 +829,16 @@ bool handleHistoryMenu() {
             // Llegamos aquí porque el usuario pulsó A (Borrar) viendo el mensaje.
             // Pedimos confirmación explícita: A = sí (borra), B = no (cancela).
             {
-                Display_clear();
+                display.clearDisplay();
                 display.setTextSize(1);
                 display.setTextColor(SH110X_WHITE);
-                display.setCursor(0, 24); display.println("Borrar mensaje?");
-                display.setCursor(0, 44); display.println("A: Si    B: No");
+                // diálogo centrado con marco y dos "botones"
+                display.drawRoundRect(8, 30, 112, 66, 5, SH110X_WHITE);
+                srCenter("Borrar mensaje?", 44, 1);
+                display.drawRoundRect(18, 66, 40, 18, 3, SH110X_WHITE);   // A: Si
+                display.setCursor(28, 71); display.print("A Si");
+                display.drawRoundRect(70, 66, 40, 18, 3, SH110X_WHITE);   // B: No
+                display.setCursor(80, 71); display.print("B No");
                 display.display();
 
                 while (Serial.available()) Serial.read();
@@ -893,11 +859,11 @@ bool handleHistoryMenu() {
 
             History_deleteMessage(selected);
 
-            Display_clear();
-            display.setCursor(0, 0);
+            display.clearDisplay();
+            display.drawBitmap(54, 38, iconoTick, 20, 20, SH110X_WHITE);   // visto: borrado
             display.setTextSize(1);
             display.setTextColor(SH110X_WHITE);
-            display.println("Mensaje borrado");
+            srCenter("Mensaje borrado", 70, 1);
             display.display();
             delay(1200);
 
@@ -947,14 +913,8 @@ bool handleHistoryMenu() {
     }
 
     if (needRedraw) {
-        display.fillRect(0, 0, 128, 128, SH110X_BLACK);
-
-        display.setCursor(0,0);
-        display.setTextSize(1);
-        display.setTextColor(SH110X_WHITE);
-        display.print("Historial");
-        display.setCursor(98, 0); display.print(Clock_hhmm());   // reloj compartido
-        display.println();
+        display.clearDisplay();
+        drawTitleBar("Historial", Clock_hhmm().c_str());
 
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
@@ -963,12 +923,10 @@ bool handleHistoryMenu() {
                 break;
             }
 
-            display.setCursor(0, 10 + (line * 10));
-            display.println(histListLine(idx, idx == selected));
-
+            drawListRow(20 + line * 13, histListLine(idx), idx == selected);
             cachedMinutes[line] = histAgeMinForCache(idx);
         }
-        
+
         display.display();
         
         prevTop = topIndex;

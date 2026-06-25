@@ -9,7 +9,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-expect text Selecciona
+expect text Enviar
 
 # elegir "Rueda" (sel 2 de 0..4; bandas iguales: idx2 = raw 410..614)
 pot 500

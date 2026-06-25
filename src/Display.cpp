@@ -147,6 +147,47 @@ void Display_resetMenuCursor() {
   menuCursorLastX = -1;
 }
 
+// ------------------------------------------------------------
+//  Estilo común de los menús/pantallas de texto (para que no se vean sosos):
+//  barra de título arriba + filas de lista con la selección resaltada en
+//  "píldora" (relleno blanco, texto en negro). NO vuelcan a pantalla.
+// ------------------------------------------------------------
+
+// Barra de título: franja blanca con el título en negro. Si 'right' no es vacío
+// (p.ej. la hora en el Historial), el título va a la izquierda y 'right' a la
+// derecha; si no, el título va centrado.
+void drawTitleBar(const char *title, const char *right) {
+  display.fillRect(0, 0, SCREEN_WIDTH, 13, SH110X_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_BLACK);
+  bool hasRight = (right && right[0]);
+  int16_t bx, by; uint16_t bw, bh;
+  display.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+  int tx = hasRight ? 4 : (SCREEN_WIDTH - (int)bw) / 2;
+  display.setCursor(tx, 3); display.print(title);
+  if (hasRight) {
+    display.getTextBounds(right, 0, 0, &bx, &by, &bw, &bh);
+    display.setCursor(SCREEN_WIDTH - (int)bw - 4, 3); display.print(right);
+  }
+  display.setTextColor(SH110X_WHITE);
+}
+
+// Fila de lista. La seleccionada se resalta como "píldora" (relleno + texto
+// negro); el resto, texto blanco con una viñeta a la izquierda.
+void drawListRow(int y, const String &text, bool selected) {
+  display.setTextSize(1);
+  if (selected) {
+    display.fillRoundRect(2, y - 2, SCREEN_WIDTH - 4, 12, 3, SH110X_WHITE);
+    display.setTextColor(SH110X_BLACK);
+  } else {
+    display.setTextColor(SH110X_WHITE);
+    display.fillRect(4, y + 2, 3, 3, SH110X_WHITE);   // viñeta cuadrada (no ensucia el texto)
+  }
+  display.setCursor(selected ? 7 : 11, y);
+  display.print(text);
+  display.setTextColor(SH110X_WHITE);
+}
+
 bool animateHippo() {
   static int frame = 0;
   static unsigned long lastFrameTime = 0;

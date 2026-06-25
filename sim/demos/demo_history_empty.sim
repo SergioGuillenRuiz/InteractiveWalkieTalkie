@@ -1,0 +1,8 @@
+# Demo: historial vacío (barra de título + corazón hueco + "Sin mensajes").
+wait 300
+settime 79380
+pot 512
+wait 200
+tap morse
+wait 400
+shot demo_history_empty

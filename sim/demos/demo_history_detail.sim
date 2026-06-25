@@ -1,0 +1,15 @@
+# Demo: detalle de un mensaje de texto (barra de título + cuerpo + pie de acción).
+wait 300
+settime 79380
+chatmsg 50 1 te quiero mucho mi amor
+run 400
+pot 512
+wait 200
+tap morse
+wait 300
+pot 0
+wait 250
+in 0 morse down
+in 200 morse up
+run 700
+shot demo_history_detail
