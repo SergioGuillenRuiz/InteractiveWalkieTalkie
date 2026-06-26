@@ -1257,9 +1257,9 @@ void drawDial(const String &msg, const char *charset, int len, int index, bool f
   display.setTextColor(SH110X_WHITE);
 
   // --- Cabecera + mensaje en construccion ---
+  drawTitleBar("Escribe");
+  display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.print("Escribe:");
 
   // Ajuste simple por ancho (21 chars/linea, hasta 4 lineas). Si se pasa,
   // mostramos el final (lo ultimo escrito). El "_" marca donde se escribe.
@@ -1268,7 +1268,7 @@ void drawDial(const String &msg, const char *charset, int len, int index, bool f
   String body = msg + "_";
   int maxChars = MAXC * MAXLINES;
   if ((int)body.length() > maxChars) body = body.substring(body.length() - maxChars);
-  int y = 12;
+  int y = 16;
   for (int i = 0; i < (int)body.length(); i += MAXC) {
     display.setCursor(0, y);
     display.print(body.substring(i, min((int)body.length(), i + MAXC)));
@@ -1314,26 +1314,17 @@ void drawDial(const String &msg, const char *charset, int len, int index, bool f
 
 void drawMorse() {
 
-  // Limpiar solo la zona superior
-  display.fillRect(0, 0, 128,40, SH110X_BLACK);
+  // Limpiar solo la zona superior (la tabla inferior empieza en y=48)
+  display.fillRect(0, 0, 128, 46, SH110X_BLACK);
 
-  display.setCursor(0, 0);
+  drawTitleBar("Morse");
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.println("CREACION DE MENSAJE");
-  display.println();
 
-  display.setTextSize(1);
-  display.println("MENSAJE HASTA AHORA:");
-
-  // Mostramos mensaje en texto
-  display.setTextSize(1);
-  display.println(mensajeAEnviar);
-
-  // Mostramos código Morse
-  display.setTextSize(1);
-  display.print("Morse: ");
-  display.println(morseCode);
+  // Mensaje en construccion + su codigo Morse
+  display.setCursor(0, 17); display.print("Tu: ");    display.print(mensajeAEnviar);
+  display.setCursor(0, 29); display.print("Morse: "); display.print(morseCode);
+  display.drawFastHLine(0, 44, 128, SH110X_WHITE);
 
   if (morsePrefix.length() == 0) {
     drawMorseTable();

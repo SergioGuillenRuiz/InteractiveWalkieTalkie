@@ -213,28 +213,23 @@ static void drawCompose() {
   last = key;
 
   display.clearDisplay();
+  drawTitleBar("Frase");
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0);
-  display.print("Frase");
 
-  int y = 16;
+  int y = 18;
   for (int c = 0; c < FR_CATEGORIES; c++) {
-    display.setCursor(0, y);
-    display.print(CAT_NAME[c]);
-    if (c == s_pos) { display.setCursor(34, y); display.print(">"); }
     String v = optionText(c, s_sel[c]);
     if (v.length() == 0) v = "(vacio)";
-    display.setCursor(46, y);
-    display.print(fitLine(v, 13));
-    y += 12;
+    drawListRow(y, String(CAT_NAME[c]) + ": " + fitLine(v, 11), c == s_pos);
+    y += 13;
   }
 
-  display.setCursor(0, 56);
-  display.print(">");
+  display.drawFastHLine(0, 59, 128, SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);
   String prev = composeMessage();
   if (prev.length() == 0) prev = "(vacio)";
-  drawWrap(prev, 66, 3);
+  drawWrap(prev, 64, 3);
 
   display.setCursor(0, 108);
   display.print("A:fija/avanza B:atras");
@@ -252,13 +247,11 @@ static void drawManage() {
   last = key;
 
   display.clearDisplay();
+  drawTitleBar("Mis palabras", CAT_NAME[s_pos]);
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0);
-  display.print("Mis palabras: ");
-  display.print(CAT_NAME[s_pos]);
 
-  int y = 16;
+  int y = 18;
   for (int s = 0; s < FR_SLOTS_PER_CAT; s++) {
     display.setCursor(0, y);
     display.print(s == s_manageSlot ? ">" : " ");

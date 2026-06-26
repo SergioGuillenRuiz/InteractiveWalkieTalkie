@@ -1,0 +1,13 @@
+# Frasero manage restyled: barra "Mis palabras" + slots
+wait 300
+pot 80
+wait 200
+tap morse
+wait 200
+pot 750
+wait 200
+tap morse
+wait 300
+hold morse 2200
+wait 400
+shot demo_frase_manage

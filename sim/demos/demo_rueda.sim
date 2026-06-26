@@ -1,47 +1,17 @@
-# DEMO G4 - Rueda (texto libre A-Z con el potenciometro)
-wait 400
+# Rueda restyled: barra "Escribe" + texto + rueda de caracteres
+wait 300
 pot 80
-wait 300
+wait 200
+tap morse
+wait 200
+pot 500
+wait 200
 tap morse
 wait 300
-expect text Selecciona
-# "Rueda" es el modo idx2 de 0..3 (Morse/Instant/Rueda/Frase). Con bandas iguales
-# idx2 = raw [512..767); pot 640 cae dentro. (pot 850 caia en idx3 = Frase.)
-pot 640
-wait 350
-expect text Rueda
-shot g4_rueda_01_modo
-tap morse
-wait 300
-expect text Escribe
-shot g4_rueda_02_inicio
-# letra H (indice 8): pote 335
 pot 335
 wait 350
-shot g4_rueda_03_letraH
 tap morse
-wait 250
-# letra I (indice 9): pote 375
+wait 200
 pot 375
-wait 350
-tap morse
-wait 250
-expect text HI
-shot g4_rueda_04_HI
-# borrar la I (FINISH corto)
-tap finish
-wait 300
-shot g4_rueda_05_borrado
-# reescribir I y enviar (mantener FINISH) + salir
-pot 375
-wait 350
-tap morse
-wait 250
-expect text HI
-in 0 finish down
-in 1700 finish up
-in 2700 finish down
-in 2850 finish up
-run 3300
-expect serial Enviando: HI
-print G4 Rueda: compone HI, borra, reescribe y envia
+wait 400
+shot demo_rueda

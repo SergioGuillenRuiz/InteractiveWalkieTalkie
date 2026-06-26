@@ -13,7 +13,7 @@ pot 0
 wait 200
 tap morse
 wait 300
-expect text CREACION
+expect text Morse
 
 # Punto corto (< 250 ms) -> '.'
 tap morse 120

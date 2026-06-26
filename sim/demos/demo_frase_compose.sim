@@ -1,0 +1,13 @@
+# Frasero compose restyled: barra "Frase" + categorias en pildora + preview
+wait 300
+pot 80
+wait 200
+tap morse
+wait 200
+pot 750
+wait 200
+tap morse
+wait 300
+pot 256
+wait 400
+shot demo_frase_compose
