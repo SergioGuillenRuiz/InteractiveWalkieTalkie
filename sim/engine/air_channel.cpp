@@ -6,22 +6,53 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <chrono>
 
 namespace fs = std::filesystem;
+
+// Un paquete solo "esta en el aire" mientras se transmite. Pasado este tiempo
+// (de reloj real) ya nadie puede oirlo: se borra del directorio, asi este no
+// crece sin limite en sesiones largas (cada nodo lo recorre en cada sondeo).
+static const uint64_t AIR_TTL_MS      = 10000;
+static const uint64_t AIR_CLEANUP_MS  = 1000;    // barrido como mucho 1 vez/s
 
 static bool        g_enabled = false;
 static std::string g_dir;
 static std::string g_node;
 static int         g_rssi = -50;
 static uint64_t    g_counter = 0;
+static uint64_t    g_initMs = 0;       // instante de "encendido" de esta radio
+static uint64_t    g_lastCleanup = 0;
 static std::set<std::string> g_seen;   // ficheros de paquete ya consumidos/propios
+
+static uint64_t nowMs() {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// La etiqueta va en el nombre del fichero y en su contenido (separado por
+// espacios): sin espacios ni separadores de ruta.
+static std::string sanitizeNode(const char *node) {
+    std::string s = (node && *node) ? node : "n";
+    for (char &c : s)
+        if (c == ' ' || c == '\t' || c == '/' || c == '\\' || c == '_' || c == ':') c = '-';
+    return s;
+}
+
+// Instante de emision codificado en el nombre: pkt_<ms 20 digitos>_<nodo>_<n>.txt
+static bool packetTime(const std::string &fn, uint64_t *ms) {
+    if (fn.size() < 4 + 20 || fn.compare(0, 4, "pkt_") != 0) return false;
+    *ms = std::strtoull(fn.substr(4, 20).c_str(), nullptr, 10);
+    return true;
+}
 
 void air_init(const char *dir, const char *node, int rssi) {
     g_dir = dir ? dir : "";
-    g_node = node ? node : "n";
+    g_node = sanitizeNode(node);
     g_rssi = rssi;
     g_enabled = !g_dir.empty();
+    g_initMs = nowMs();
     if (g_enabled) {
         std::error_code ec;
         fs::create_directories(g_dir, ec);
@@ -29,11 +60,6 @@ void air_init(const char *dir, const char *node, int rssi) {
 }
 
 bool air_enabled() { return g_enabled; }
-
-static uint64_t nowMs() {
-    return (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch()).count();
-}
 
 void air_publish(const std::string &payloadHex) {
     if (!g_enabled) return;
@@ -55,8 +81,33 @@ void air_publish(const std::string &payloadHex) {
     g_seen.insert(name);        // no recibir lo propio
 }
 
+// Borra los paquetes (y .tmp huerfanos) que ya han salido del aire y olvida los
+// nombres vistos que ya no pueden volver a aparecer.
+static void cleanup(uint64_t now) {
+    if (now - g_lastCleanup < AIR_CLEANUP_MS) return;
+    g_lastCleanup = now;
+    std::error_code ec;
+    for (auto &e : fs::directory_iterator(g_dir, ec)) {
+        if (ec) break;
+        std::string fn = e.path().filename().string();
+        uint64_t t;
+        if (packetTime(fn, &t) && t + AIR_TTL_MS < now) {
+            std::error_code rec;
+            fs::remove(e.path(), rec);   // si otro nodo ya lo borro, da igual
+        }
+    }
+    for (auto it = g_seen.begin(); it != g_seen.end();) {
+        uint64_t t;
+        if (packetTime(*it, &t) && t + 2 * AIR_TTL_MS < now) it = g_seen.erase(it);
+        else ++it;
+    }
+}
+
 void air_poll(std::vector<std::pair<std::string, int>> &out) {
     if (!g_enabled) return;
+
+    uint64_t now = nowMs();
+    cleanup(now);
 
     std::error_code ec;
     std::vector<std::string> names;
@@ -67,6 +118,13 @@ void air_poll(std::vector<std::pair<std::string, int>> &out) {
         if (fn.size() < 4 || fn.compare(0, 4, "pkt_") != 0) continue;
         if (fn.size() >= 4 && fn.substr(fn.size() - 4) == ".tmp") continue;
         if (g_seen.count(fn)) continue;
+        uint64_t t;
+        if (!packetTime(fn, &t) || t < g_initMs || t + AIR_TTL_MS < now) {
+            // Emitido antes de encender esta radio (o ya fuera del aire): una
+            // radio real no puede oirlo. Se ignora (y no se vuelve a mirar).
+            g_seen.insert(fn);
+            continue;
+        }
         names.push_back(fn);
     }
     std::sort(names.begin(), names.end());   // por nombre == por tiempo de emision

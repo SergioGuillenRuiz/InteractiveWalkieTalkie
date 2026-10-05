@@ -9,6 +9,10 @@
 //  compartido donde cada transmision es un fichero de paquete; los receptores
 //  leen los paquetes nuevos que no han emitido ellos.
 //
+//  Como en la radio real, solo se oye lo emitido MIENTRAS la radio esta
+//  encendida: un dispositivo que arranca despues no recibe paquetes anteriores.
+//  Los paquetes caducan a los pocos segundos y se borran del directorio.
+//
 //  Cada proceso = un dispositivo real e independiente (firmware + EEPROM propios).
 // ============================================================
 
