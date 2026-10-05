@@ -445,7 +445,13 @@ static void pressKey(int c) {
         case 'M': scheduleTap(sim::EV_MORSE, 1700); break;   // pulsacion larga
         case 'N': scheduleTap(sim::EV_FINISH, 1700); break;
         case 'r': { String e = SimpleCrypto_encrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
-        case 'q': g_iRunning = false; break;
+        case 'q':
+            g_iRunning = false;
+            // Salir YA aunque el firmware este en una espera bloqueante (pantallas
+            // "Enviado"/"Entregado", juegos...): el siguiente delay() supera el
+            // deadline, lanza sim::Timeout y interactive() termina limpio.
+            sim::setDeadline(sim::now());
+            break;
     }
 }
 
@@ -621,7 +627,7 @@ static void interactive() {
                     sim::advance((uint32_t)behind);
                 }
             }
-        } catch (sim::Timeout &) { break; }   // solo en modo scripted: fin del guion -> salir limpio
+        } catch (sim::Timeout &) { break; }   // fin del guion (--keys) o tecla [q]: salir limpio
     }
     sim::setPumpHook(nullptr);
     sim::clearDeadline();
