@@ -65,11 +65,11 @@ pot 80
 wait 350
 tap morse
 wait 300
-expect text Selecciona
+expect text Enviar
 shot g7_chat_05_send_menu
 
-print g7_chat 06: elegir modo Instant
-pot 500
+print g7_chat 06: elegir modo Instant (sel 1 de 0..4; banda idx1 = raw 205..409)
+pot 300
 wait 350
 tap morse
 wait 300

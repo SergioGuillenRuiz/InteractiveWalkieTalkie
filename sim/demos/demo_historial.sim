@@ -39,9 +39,9 @@ pot 80
 wait 300
 tap morse
 wait 300
-expect text Selecciona
-# Enviar -> Instant (pot 500)
-pot 500
+expect text Enviar
+# Enviar -> Instant (sel 1 de 0..4; banda idx1 = raw 205..409)
+pot 300
 wait 300
 tap morse
 wait 300
@@ -77,7 +77,8 @@ shot g8_hist_02_lista
 print Paso 4: abrir vista completa de un recibido
 pot 1023
 wait 400
-expect text hola desde el
+# la fila en pildora recorta el texto largo ("hola desde e..")
+expect text hola desde
 # abrir el mensaje seleccionado (MORSE corto)
 in 0 morse down
 in 150 morse up
@@ -88,17 +89,19 @@ expect text Volver
 shot g8_hist_03_vista
 
 # ------------------------------------------------------------
-# PASO 5: BORRADO EN UN SOLO PASO  (vista de detalle -> A borra directo;
-#  ya no hay segunda pantalla "Borrar mensaje?"). Mismo patron que history.sim:
-#  reabrir la vista y pulsar A, ambas pulsaciones dentro del mismo run.
+# PASO 5: BORRADO CON CONFIRMACION  (abrir (A) -> Borrar (A) -> confirmar (A)).
+#  Mismo patron que history.sim: las tres pulsaciones dentro del mismo run,
+#  porque la vista de detalle y la confirmacion son bloqueantes.
 # ------------------------------------------------------------
-print Paso 5: borrar en un paso (vista -> A)
+print Paso 5: borrar con confirmacion (vista -> Borrar -> confirmar)
 pot 1023
 wait 300
 in 0 morse down
 in 150 morse up
 in 600 morse down
 in 750 morse up
+in 1200 morse down
+in 1350 morse up
 run 3200
 expect serial Borrado. Total: 2
 
@@ -112,4 +115,4 @@ expect text Historial
 expect notext cincuenta
 expect text nos vemos
 shot g8_hist_05_tras_borrado
-print g8 HISTORIAL: vacio, recibidos, enviado, lista, vista y borrado (un paso) OK
+print g8 HISTORIAL: vacio, recibidos, enviado, lista, vista y borrado (con confirmacion) OK

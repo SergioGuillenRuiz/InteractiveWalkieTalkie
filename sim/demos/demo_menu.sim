@@ -46,7 +46,7 @@ wait 350
 tap morse
 wait 300
 print g1 - paso 4: entrada al menu Enviar desde IDLE
-expect text Selecciona
+expect text Enviar
 expect text Morse
 shot g1_menu_05_entra_enviar
 # FINISH vuelve a IDLE (en IDLE FINISH no hace nada; aqui es el submenu quien lo gestiona).
@@ -107,7 +107,11 @@ shot g1_menu_11_finish_idle_noop
 # (animateHippoWithZzz). Importante: NO mover el pote (resetea el temporizador).
 # Aun lejos del SLEEP_TIMEOUT (5 min), asi que el menu sigue vivo.
 ff 22000
-wait 500
+# Las ZZZ suben 2 px por vuelta de loop(), no por tiempo: en la placa cada vuelta
+# cuesta decenas de ms (volcado I2C del OLED) y se ven casi siempre, pero en el
+# sim una vuelta son ~2 ms y cruzan la pantalla en ~0.1 s cada 400 ms. El sim es
+# determinista: a los 420 ms tras el ff hay una tanda de ZZZ junto a la boca.
+wait 420
 print g1 - paso 8: hipo dormido (ZZZ) por inactividad, menu aun activo
 expect text Env
 shot g1_menu_12_hipo_dormido

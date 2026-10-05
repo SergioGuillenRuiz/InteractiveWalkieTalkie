@@ -1,4 +1,7 @@
 # DEMO G9 - Juegos A: Tetris Coop, Poker, RefillGame
+# Menu Juegos: 6 opciones (0..5) en bandas iguales de ~171 cuentas:
+#   Tetris 0..170, Poker 171..341, Refill 342..511, Choose4Me 512..682,
+#   HippoRadar 683..853, 3 en raya 854..1023.
 wait 400
 # --- Tetris Coop (icono 0) ---
 pot 1000
@@ -21,7 +24,7 @@ pot 1000
 wait 300
 tap morse
 wait 300
-pot 300
+pot 256
 wait 350
 expect text Poker
 shot g9_poker_01_menu
@@ -37,7 +40,7 @@ pot 1000
 wait 300
 tap morse
 wait 300
-pot 512
+pot 427
 wait 350
 expect text RefillGame
 shot g9_refill_01_menu

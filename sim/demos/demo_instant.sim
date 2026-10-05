@@ -15,16 +15,16 @@ wait 350
 shot g3_instant_01_idle
 expect text Env
 
-# ---- Paso 2: entrar a ENVIAR -> "Selecciona modo" ----
-print g3 paso 2: entrar a Enviar (Selecciona modo)
+# ---- Paso 2: entrar a ENVIAR (barra de titulo "Enviar") ----
+print g3 paso 2: entrar a Enviar
 tap morse
 wait 300
-expect text Selecciona
+expect text Enviar
 shot g3_instant_02_modo
 
-# ---- Paso 3: elegir "Instant" (sel 1 de 0..3, pot medio) ----
+# ---- Paso 3: elegir "Instant" (sel 1 de 0..4; banda idx1 = raw 205..409) ----
 print g3 paso 3: cursor en Instant
-pot 500
+pot 300
 wait 350
 expect text Instant
 shot g3_instant_03_modo_instant

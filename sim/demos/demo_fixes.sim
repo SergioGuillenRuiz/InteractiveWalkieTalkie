@@ -3,18 +3,20 @@
 # ============================================================
 wait 300
 
-# IDLE -> ENVIAR -> Frase
+# IDLE -> ENVIAR -> Frase (sel 3 de 0..4; banda idx3 = raw 615..818)
 pot 80
 wait 200
 tap morse
 wait 200
-pot 1023
+pot 750
 wait 200
 tap morse
 wait 300
 expect text quien
 
-# --- Fix #2: la gestion de piezas arranca en el slot 1 (el pote venia en 1023) ---
+# --- Fix #2: la gestion de piezas arranca en el slot 1 aunque el pote venga en 1023 ---
+pot 1023
+wait 300
 hold morse 2200
 wait 200
 expect text palabras

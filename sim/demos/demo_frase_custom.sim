@@ -4,7 +4,7 @@ pot 80
 wait 300
 tap morse
 wait 300
-pot 1023
+pot 750      # Frase (sel 3 de 0..4; banda idx3 = raw 615..818)
 wait 300
 tap morse
 wait 300
@@ -46,7 +46,7 @@ pot 80
 wait 300
 tap morse
 wait 300
-pot 1023
+pot 750      # Frase (sel 3 de 0..4; banda idx3 = raw 615..818)
 wait 300
 tap morse
 wait 300

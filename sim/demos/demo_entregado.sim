@@ -7,7 +7,7 @@ pot 80
 wait 200
 tap morse
 wait 200
-pot 500
+pot 300      # Instant (sel 1 de 0..4; banda idx1 = raw 205..409)
 wait 200
 tap morse
 wait 250
@@ -18,4 +18,6 @@ in 0 morse down
 in 120 morse up
 in 700 chatack 137 1
 run 1600
+expect sent kissy
+expect text Entregado
 shot demo_entregado

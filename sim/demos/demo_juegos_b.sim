@@ -24,17 +24,17 @@ expect text Jueg
 print g10: arranque en IDLE
 
 # ============================================================
-#  CHOOSE4ME  (bola magica 8-ball, indice 3 del menu Juegos)
+#  CHOOSE4ME  (bola magica 8-ball, indice 3 de 0..5 del menu Juegos)
 # ============================================================
 print --- CHOOSE4ME ---
 
-# Entrar a JUEGOS desde IDLE (cursor alto) y elegir Choose4Me (idx3 de 0..4).
-# Con bandas iguales (Inputs.cpp) idx3 = raw [615..819); pot 720 cae dentro.
+# Entrar a JUEGOS desde IDLE (cursor alto) y elegir Choose4Me (idx3 de 0..5).
+# Con bandas iguales (Inputs.cpp) idx3 = raw [512..683); pot 597 es su centro.
 pot 1000
 wait 350
 tap morse
 wait 300
-pot 720
+pot 597
 wait 350
 expect text Choose4Me
 shot g10_c4m_01_menu
@@ -106,15 +106,18 @@ shot g10_c4m_06_salida_idle
 print Choose4Me sale limpio a IDLE
 
 # ============================================================
-#  HIPPO RADAR  (utilidad de localizacion, indice 4 del menu Juegos)
+#  HIPPO RADAR  (utilidad de localizacion, indice 4 de 0..5 del menu Juegos)
 # ============================================================
 print --- HIPPO RADAR ---
 
-# Volver a entrar a JUEGOS desde IDLE y elegir HippoRadar (idx4 -> el ultimo,
-# pot 1023). pot 1023 sirve a la vez para el cursor de IDLE (Juegos) y para idx4.
+# Volver a entrar a JUEGOS desde IDLE (cursor alto) y elegir HippoRadar
+# (idx4 de 0..5 = raw [683..854); pot 768 es su centro). Ya NO es la ultima
+# opcion: la ultima es "3 en raya", asi que pot 1023 no sirve para ambos.
 pot 1023
 wait 350
 tap morse
+wait 300
+pot 768
 wait 350
 expect text HippoRadar
 shot g10_hippo_01_menu
