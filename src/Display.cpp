@@ -217,7 +217,7 @@ bool animateHippo() {
     switch (frame) {
       case 0: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
       case 1: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
-      case 2: display.drawBitmap(65, 70, hippoBitMap62, 63, 63, SH110X_WHITE); break;
+      case 2: display.drawBitmap(65, 70, hippoBitMap62, 62, 62, SH110X_WHITE); break;
       case 3: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
       case 4: display.drawBitmap(65, 70, hippoBitMap64, 64, 64, SH110X_WHITE); break;
       case 5: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
@@ -278,7 +278,7 @@ bool animateHippoWithZzz() {
     switch (frame) {
       case 0: display.drawBitmap(65, 70, hippoBitMap60, 60, 60, SH110X_WHITE); break;
       case 1: display.drawBitmap(65, 70, hippoBitMap61, 61, 61, SH110X_WHITE); break;
-      case 2: display.drawBitmap(65, 70, hippoBitMap62, 63, 63, SH110X_WHITE); break;
+      case 2: display.drawBitmap(65, 70, hippoBitMap62, 62, 62, SH110X_WHITE); break;
       case 3: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
       case 4: display.drawBitmap(65, 70, hippoBitMap64, 64, 64, SH110X_WHITE); break;
       case 5: display.drawBitmap(65, 70, hippoBitMap63, 63, 63, SH110X_WHITE); break;
