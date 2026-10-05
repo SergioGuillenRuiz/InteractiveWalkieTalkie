@@ -23,6 +23,10 @@ botones, potenciómetro, EEPROM) por una capa *mock* equivalente.
   (proporciona `cl.exe`). El script lo localiza automáticamente con `vswhere`.
 - Windows. (No requiere PlatformIO, ni internet, ni token de Wokwi.)
 
+> **¿Linux?** Hay una versión equivalente (GNOME, g++) en [`linux/`](linux/README.md)
+> con sus propios scripts (`build.sh`, `run.sh`, `run_tests.sh`, `net.sh`,
+> `net_test.sh`). Usa el mismo firmware, motor y scripts de prueba que esta.
+
 ## Uso rápido
 
 ```bat
@@ -257,6 +261,8 @@ sim/
   scripts/    scripts de prueba (.sim)
   out/        artefactos de compilación (ignorado por git)
   build.bat / run.bat / run_tests.bat
+  linux/      versión Linux (GNOME): build.sh, run.sh, run_tests.sh, net.sh,
+              net_test.sh + capa de plataforma (termios). Salida en out/linux/
 ```
 
 ## Cómo añadir un test

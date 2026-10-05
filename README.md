@@ -39,3 +39,13 @@ run.bat                  :: modo interactivo (teclado)
 
 Requiere *Visual Studio Build Tools* (C++). Más detalles en [`sim/README.md`](sim/README.md).
 
+En **Linux (GNOME)** hay una versión equivalente y separada en [`sim/linux/`](sim/linux/):
+
+```bash
+cd sim/linux
+./run_tests.sh           # compila y ejecuta toda la batería de tests
+./run.sh                 # modo interactivo (abre una ventana de GNOME Terminal)
+```
+
+Requiere `g++`/`gcc`. Más detalles en [`sim/linux/README.md`](sim/linux/README.md).
+

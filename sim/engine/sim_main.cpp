@@ -11,8 +11,12 @@
 #include <cstring>
 #include <cstdlib>
 #include <csignal>
+#ifdef _WIN32
 #include <conio.h>
 #include <process.h>
+#else
+#include "platform_linux.h"   // sim/linux: _kbhit/_getch/_getpid... sobre termios
+#endif
 #include <thread>
 #include <chrono>
 
@@ -361,9 +365,11 @@ static void execLine(const std::string &raw) {
 // ---------------------------------------------------------------------------
 // Sube la resolucion del temporizador de Windows a 1 ms (por defecto ~15 ms),
 // para que los sleep cortos del ritmo en tiempo real no se pasen de largo.
+#ifdef _WIN32
 extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int);
 extern "C" __declspec(dllimport) unsigned int __stdcall timeEndPeriod(unsigned int);
 #pragma comment(lib, "winmm.lib")
+#endif
 
 static int  g_iPot = 512;
 static bool g_iRunning = true;
@@ -560,7 +566,9 @@ static void interactivePump(uint32_t ms) {
 static void iRestoreOnSignal(int) { fputs("\x1b[?25h", stdout); fflush(stdout); _exit(0); }
 
 static void interactive() {
+#ifdef _WIN32
     system("chcp 65001 > nul");
+#endif
     if (!g_keysScripted) { printf("\x1b[?25l"); signal(SIGINT, iRestoreOnSignal); }   // ocultar cursor (evita parpadeos del DSR)
     printf("\x1b[2J");
     g_iPot = 512;
@@ -627,7 +635,9 @@ static void interactive() {
 // main
 // ---------------------------------------------------------------------------
 int main(int argc, char **argv) {
+#ifdef _WIN32
     system("chcp 65001 > nul");   // consola en UTF-8 para los bloques del render
+#endif
 
     // Directorio del ejecutable (sim/out) -> base para EEPROM y capturas.
     std::string base = ".";
@@ -642,7 +652,11 @@ int main(int argc, char **argv) {
     g_shotsDir = base;
 
     std::string scriptPath;
+#ifdef _WIN32
     std::string eepromPath = base + "\\eeprom.bin";
+#else
+    std::string eepromPath = base + "/eeprom.bin";
+#endif
     bool interactiveMode = false, fresh = false;
     std::string airDir, airNode;
     int airRssi = -50;
