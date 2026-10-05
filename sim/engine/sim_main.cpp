@@ -19,6 +19,7 @@
 #endif
 #include <thread>
 #include <chrono>
+#include <filesystem>
 
 #include "sim_state.h"
 #include "framebuffer.h"
@@ -178,12 +179,42 @@ static void check(bool ok, const std::string &desc) {
     else    { g_fail++; printf("  [FAIL] %s\n", desc.c_str()); }
 }
 
+// Errores del PROPIO guion (comando o comprobacion mal escritos, argumentos que
+// faltan...). Cuentan como FAIL: si no, una errata como "expect txt X" no
+// comprobaria nada y el test pasaria en silencio.
+static int g_lineNo = 0;
+static std::string g_curLine;
+static void scriptError(const std::string &msg) {
+    g_fail++;
+    if (g_lineNo > 0) printf("  [FAIL] linea %d: %s  -> \"%s\"\n", g_lineNo, msg.c_str(), g_curLine.c_str());
+    else              printf("  [FAIL] %s  -> \"%s\"\n", msg.c_str(), g_curLine.c_str());
+}
+
+// Validadores de argumentos.
+static bool parseBtn(const std::string &b, sim::EvKind *k) {
+    if (b == "morse")  { *k = sim::EV_MORSE;  return true; }
+    if (b == "finish") { *k = sim::EV_FINISH; return true; }
+    scriptError("boton desconocido \"" + b + "\" (usa morse|finish)");
+    return false;
+}
+static bool parseUpDown(const std::string &v, bool *down) {
+    if (v == "down") { *down = true;  return true; }
+    if (v == "up")   { *down = false; return true; }
+    scriptError("estado de boton desconocido \"" + v + "\" (usa down|up)");
+    return false;
+}
+
+// Un paquete que el firmware no puede cifrar (texto > 95 bytes) se inyectaria
+// VACIO y no llegaria nada: se avisa como error del guion.
+static bool encryptedOk(const String &enc) {
+    if (enc.length() > 0) return true;
+    scriptError("el paquete supera el limite de 95 bytes que cifra el firmware: no se inyecta");
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Intérprete de comandos
 // ---------------------------------------------------------------------------
-static sim::EvKind btnKind(const std::string &b) {
-    return (b == "finish") ? sim::EV_FINISH : sim::EV_MORSE;
-}
 
 static void doShot(const std::string &nameArg) {
     char path[512];
@@ -193,12 +224,13 @@ static void doShot(const std::string &nameArg) {
         snprintf(path, sizeof(path), "%s/%s%s", g_shotsDir.c_str(), nameArg.c_str(),
                  contains(nameArg, ".bmp") ? "" : ".bmp");
     if (simSaveBMP(path, g_scale)) printf("  captura -> %s\n", path);
-    else printf("  ERROR guardando captura %s\n", path);
+    else scriptError(std::string("no se pudo guardar la captura ") + path);
 }
 
 static void execLine(const std::string &raw) {
     std::string line = trim(raw);
     if (line.empty() || line[0] == '#') return;
+    g_curLine = line;
     // Comentarios en linea: cortar a partir de " #"
     size_t cpos = line.find(" #");
     if (cpos != std::string::npos) line = trim(line.substr(0, cpos));
@@ -207,31 +239,50 @@ static void execLine(const std::string &raw) {
     std::istringstream is(line);
     std::string cmd; is >> cmd;
 
-    if (cmd == "pot") { int v; is >> v; sim::setPot(v); }
-    else if (cmd == "pot%") { int p; is >> p; sim::setPot(p * 1023 / 100); }
-    else if (cmd == "morse") { std::string s; is >> s; sim::setMorse(s == "down"); }
-    else if (cmd == "finish") { std::string s; is >> s; sim::setFinish(s == "down"); }
-    else if (cmd == "tap") { std::string b; uint32_t ms = 150; is >> b; if (!(is >> ms)) ms = 150; tap(btnKind(b), ms); }
-    else if (cmd == "hold") { std::string b; uint32_t ms = 1000; is >> b >> ms; holdRelease(btnKind(b), ms); }
+    if (cmd == "pot") { int v; if (!(is >> v)) { scriptError("pot necesita un valor 0-1023"); return; } sim::setPot(v); }
+    else if (cmd == "pot%") { int p; if (!(is >> p)) { scriptError("pot% necesita un valor 0-100"); return; } sim::setPot(p * 1023 / 100); }
+    else if (cmd == "morse" || cmd == "finish") {
+        std::string v; is >> v; bool down;
+        if (!parseUpDown(v, &down)) return;
+        if (cmd == "morse") sim::setMorse(down); else sim::setFinish(down);
+    }
+    else if (cmd == "tap") {
+        std::string b; uint32_t ms = 150; is >> b; sim::EvKind k;
+        if (!parseBtn(b, &k)) return;
+        if (!(is >> ms)) ms = 150;
+        tap(k, ms);
+    }
+    else if (cmd == "hold") {
+        std::string b; uint32_t ms = 0; is >> b; sim::EvKind k;
+        if (!parseBtn(b, &k)) return;
+        if (!(is >> ms)) { scriptError("hold necesita la duracion en ms"); return; }
+        holdRelease(k, ms);
+    }
     else if (cmd == "wait" || cmd == "run") {
-        uint32_t ms = 0; is >> ms;
+        uint32_t ms = 0;
+        if (!(is >> ms)) { scriptError(cmd + " necesita los ms a esperar"); return; }
         uint32_t slack = SLACK;            // por defecto, margen antibloqueo largo (60 s)
         uint32_t s; if (is >> s) slack = s; // opcional: "run <ms> <slack>" congela el frame en ~now+ms+slack
         runFor(ms, slack);
     }
-    else if (cmd == "ff") { uint32_t ms = 0; is >> ms; fastForward(ms); }
+    else if (cmd == "ff") { uint32_t ms = 0; if (!(is >> ms)) { scriptError("ff necesita los ms a avanzar"); return; } fastForward(ms); }
     else if (cmd == "in") {
-        uint32_t off = 0; std::string what; is >> off >> what;
+        uint32_t off = 0; std::string what;
+        if (!(is >> off >> what)) { scriptError("in necesita: in <ms> <accion> ..."); return; }
         uint32_t t = sim::now() + off;
-        if (what == "morse")  { std::string val; is >> val; sim::scheduleAt(t, sim::EV_MORSE, val == "down" ? 1 : 0); }
-        else if (what == "finish") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_FINISH, val == "down" ? 1 : 0); }
-        else if (what == "pot") { std::string val; is >> val; sim::scheduleAt(t, sim::EV_POT, atoi(val.c_str())); }
+        if (what == "morse" || what == "finish") {
+            std::string val; is >> val; bool down;
+            if (!parseUpDown(val, &down)) return;
+            sim::scheduleAt(t, what == "morse" ? sim::EV_MORSE : sim::EV_FINISH, down ? 1 : 0);
+        }
+        else if (what == "pot") { int v; if (!(is >> v)) { scriptError("in <ms> pot necesita un valor"); return; } sim::scheduleAt(t, sim::EV_POT, v); }
         else if (what == "lora") {   // paquete LoRa crudo diferido: in <ms> lora <texto>
             // Como "lora rx" pero entregado en el instante pedido, incluso mientras el
             // firmware esta dentro de un bucle de juego (p.ej. los pings "HR" de HippoRadar,
             // que su rxTick lee pero backgroundTick descartaria si llegaran fuera del juego).
             std::string txt = restAfter(line, 3);
             String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
         else if (what == "chatack") {   // ACK diferido: in <ms> chatack <destino> <msgId>
@@ -245,6 +296,7 @@ static void execLine(const std::string &raw) {
             std::string txt = restAfter(line, 5);
             String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
             String enc = SimpleCrypto_encrypt(p);
+            if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
         else if (what == "battery") {   // bateria diferida: in <ms> battery <pct>
@@ -261,11 +313,12 @@ static void execLine(const std::string &raw) {
             if (sub == "hello") is >> peer; else is >> peer >> cells >> ov;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildTtt(sub, peer, cells, ov)));
         }
+        else scriptError("accion desconocida en in: \"" + what + "\"");
     }
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
-    else if (cmd == "battery") { int pct; is >> pct; sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
-    else if (cmd == "settime") { long ep = 0; is >> ep; Clock_set((uint32_t)ep); printf("  reloj fijado a %ld\n", ep); }
+    else if (cmd == "battery") { int pct; if (!(is >> pct)) { scriptError("battery necesita un % 0-100"); return; } sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
+    else if (cmd == "settime") { long ep = 0; if (!(is >> ep)) { scriptError("settime necesita segundos epoch"); return; } Clock_set((uint32_t)ep); printf("  reloj fijado a %ld\n", ep); }
     else if (cmd == "presence") {   // baliza de un peer: presence <peerId> [epoch] [batt]
         int peer = 0, batt = 100; long ep = 0; is >> peer >> ep >> batt;
         int flags = (batt <= 15) ? 1 : 0;   // BEACON_FLAG_LOWBATT
@@ -300,23 +353,30 @@ static void execLine(const std::string &raw) {
         if (sub == "rx") {
             std::string txt = restAfter(line, 2);
             String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            if (!encryptedOk(enc)) return;
             simLoraInject(std::string(enc.c_str(), enc.length()));
             printf("  LoRa RX inyectado: \"%s\"\n", txt.c_str());
         } else if (sub == "rxraw") {
-            std::string hex; is >> hex; simLoraInject(hex);
+            std::string hex;
+            if (!(is >> hex)) { scriptError("lora rxraw necesita los bytes en hex"); return; }
+            simLoraInject(hex);
         } else if (sub == "loopback") {
-            std::string s; is >> s; simLoraSetLoopback(s == "on");
+            std::string s; is >> s;
+            if (s != "on" && s != "off") { scriptError("lora loopback necesita on|off"); return; }
+            simLoraSetLoopback(s == "on");
         } else if (sub == "sent") {
             std::string last = simLoraLastSent();
             String dec = SimpleCrypto_decrypt(String(last.c_str()));
             printf("  LoRa TX (hex)=%s  descifrado=\"%s\"\n", last.c_str(), dec.c_str());
         }
+        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxraw|loopback|sent)");
     }
     else if (cmd == "chatmsg") {   // inyecta un MENSAJE de chat de un peer: chatmsg <emisor> <msgId> <texto>
         int sender = 0, mid = 0; is >> sender >> mid;
         std::string txt = restAfter(line, 3);
         String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
         String enc = SimpleCrypto_encrypt(p);
+        if (!encryptedOk(enc)) return;
         simLoraInject(std::string(enc.c_str(), enc.length()));
         printf("  Chat MSG inyectado de #%d (msg %d): \"%s\"\n", sender, mid, txt.c_str());
     }
@@ -335,6 +395,9 @@ static void execLine(const std::string &raw) {
     else if (cmd == "reset-eeprom") { EEPROM.begin(2048); for (int i = 0; i < 2048; i++) EEPROM.write(i, 0xFF); EEPROM.commit(); setup(); }
     else if (cmd == "expect") {
         std::string sub; is >> sub;
+        if ((sub == "text" || sub == "notext" || sub == "serial" || sub == "sent") && restAfter(line, 2).empty()) {
+            scriptError("expect " + sub + " necesita el texto a buscar"); return;
+        }
         if (sub == "text") { std::string n = restAfter(line, 2); check(contains(display.simText(), n), "pantalla contiene \"" + n + "\""); }
         else if (sub == "notext") { std::string n = restAfter(line, 2); check(!contains(display.simText(), n), "pantalla NO contiene \"" + n + "\""); }
         else if (sub == "serial") { std::string n = restAfter(line, 2); check(contains(sim::serialLog(), n), "serial contiene \"" + n + "\""); }
@@ -350,9 +413,15 @@ static void execLine(const std::string &raw) {
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
         }
-        else if (sub == "pixel") { int x, y; std::string st; is >> x >> y >> st; bool on = display.simPixel(x, y); check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st); }
+        else if (sub == "pixel") {
+            int x, y; std::string st;
+            if (!(is >> x >> y >> st) || (st != "on" && st != "off")) { scriptError("expect pixel necesita: <x> <y> on|off"); return; }
+            bool on = display.simPixel(x, y);
+            check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st);
+        }
+        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|pixel)");
     }
-    else { fprintf(stderr, "[sim] comando desconocido: %s\n", cmd.c_str()); }
+    else scriptError("comando desconocido \"" + cmd + "\"");
 }
 
 // ---------------------------------------------------------------------------
@@ -667,11 +736,16 @@ int main(int argc, char **argv) {
     std::string airDir, airNode;
     int airRssi = -50;
 
+    // Opciones que llevan valor: si falta, es un error de uso.
+    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi" };
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
+        for (const char *o : withValue)
+            if (a == o && i + 1 >= argc) { fprintf(stderr, "[sim] falta el valor de %s\n", o); return 2; }
         if (a == "--interactive") interactiveMode = true;
-        else if (a == "--keys" && i + 1 < argc) {   // reproducir teclas con guion (pruebas/demos)
+        else if (a == "--keys") {   // reproducir teclas con guion (pruebas/demos)
             std::ifstream kf(argv[++i]);
+            if (!kf) { fprintf(stderr, "[sim] no puedo abrir el guion de teclas: %s\n", argv[i]); return 2; }
             std::string ln;
             while (std::getline(kf, ln)) {
                 ln = trim(ln);
@@ -686,13 +760,26 @@ int main(int argc, char **argv) {
         }
         else if (a == "--color") g_color = true;
         else if (a == "--fresh") fresh = true;
-        else if (a == "--eeprom" && i + 1 < argc) eepromPath = argv[++i];
-        else if (a == "--shots" && i + 1 < argc) g_shotsDir = argv[++i];
-        else if (a == "--scale" && i + 1 < argc) g_scale = atoi(argv[++i]);
-        else if (a == "--air" && i + 1 < argc) airDir = argv[++i];     // directorio del "aire" compartido
-        else if (a == "--node" && i + 1 < argc) airNode = argv[++i];   // etiqueta unica del dispositivo
-        else if (a == "--rssi" && i + 1 < argc) airRssi = atoi(argv[++i]); // dBm con que oyen los demas
-        else if (!a.empty() && a[0] != '-') scriptPath = a;
+        else if (a == "--eeprom") eepromPath = argv[++i];
+        else if (a == "--shots") g_shotsDir = argv[++i];
+        else if (a == "--scale") g_scale = atoi(argv[++i]);
+        else if (a == "--air") airDir = argv[++i];     // directorio del "aire" compartido
+        else if (a == "--node") airNode = argv[++i];   // etiqueta unica del dispositivo
+        else if (a == "--rssi") airRssi = atoi(argv[++i]); // dBm con que oyen los demas
+        else if (!a.empty() && a[0] != '-') {
+            if (!scriptPath.empty()) { fprintf(stderr, "[sim] solo se admite un script (%s y %s)\n", scriptPath.c_str(), a.c_str()); return 2; }
+            scriptPath = a;
+        }
+        else { fprintf(stderr, "[sim] opcion desconocida: %s\n", a.c_str()); return 2; }
+    }
+
+    // Crear las carpetas de capturas y de la EEPROM si no existen: si no, las
+    // capturas fallarian y la EEPROM no se guardaria (sin persistencia).
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(g_shotsDir, ec);
+        std::filesystem::path ep(eepromPath);
+        if (ep.has_parent_path()) std::filesystem::create_directories(ep.parent_path(), ec);
     }
 
     // Aire compartido entre procesos (comunicacion real multi-dispositivo).
@@ -716,10 +803,10 @@ int main(int argc, char **argv) {
         if (!f) { fprintf(stderr, "[sim] no puedo abrir script: %s\n", scriptPath.c_str()); return 2; }
         printf("=== Ejecutando script: %s ===\n", scriptPath.c_str());
         std::string line;
-        while (std::getline(f, line)) execLine(line);
+        while (std::getline(f, line)) { g_lineNo++; execLine(line); }
     } else {
         std::string line;
-        while (std::getline(std::cin, line)) execLine(line);
+        while (std::getline(std::cin, line)) { g_lineNo++; execLine(line); }
     }
 
     printf("\n=== Resultado: %d PASS, %d FAIL ===\n", g_pass, g_fail);

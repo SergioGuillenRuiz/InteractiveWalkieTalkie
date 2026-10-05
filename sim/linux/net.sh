@@ -14,6 +14,10 @@
 set -euo pipefail
 
 N="${1:-2}"
+if ! [[ "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Uso: ./net.sh [N]   (N = numero de dispositivos, 1 o mas; por defecto 2)"
+  exit 2
+fi
 LNX="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIM="$(dirname "$LNX")"
 WORK="$SIM/out/linux"

@@ -78,6 +78,9 @@ firmware, su propia EEPROM y su propia identidad de equipo (`Device_id`).
 No es una maqueta: el cifrado AES, el sobre de chat, el auto-ACK de entrega y el
 historial son los mismos que en la placa. Lo único simulado es el medio (un
 directorio donde cada transmisión es un fichero de paquete que los demás leen).
+Como en la radio real, un equipo solo oye lo que se emite mientras está
+encendido (si arranca después, no recibe los mensajes anteriores) y cada paquete
+caduca a los 10 s y se borra, así el directorio no crece en sesiones largas.
 
 ### Interactivo — varias ventanas que se hablan
 
@@ -140,6 +143,11 @@ out\walkie_sim.exe --fresh scripts\history.sim
 
 Un comando por línea. Las líneas que empiezan por `#`, y todo lo que siga a ` #`,
 son comentarios.
+
+Un error en el propio guion (comando o comprobación desconocidos, argumentos que
+faltan o no válidos, un mensaje inyectado demasiado largo para que el firmware
+lo cifre, una captura que no se puede guardar) cuenta como `[FAIL]` e indica la
+línea, para que una errata no deje pasar un test sin comprobar nada.
 
 **Entradas**
 ```
@@ -231,6 +239,8 @@ walkie_sim.exe [script.sim] [opciones]
   --rssi <dBm>      potencia con que los demás oyen sus transmisiones (por defecto -50)
 ```
 Sin script y sin `--interactive`, lee comandos por la entrada estándar.
+Una opción desconocida o sin su valor, o un guion de teclas que no existe, termina
+con código 2. Las carpetas de `--shots` y de `--eeprom` se crean si no existen.
 Para dar un id de equipo distinto a cada dispositivo, exporta `SIM_CHIPID` antes de
 lanzarlo (`Device_id()` lo deriva de ahí en el simulador).
 

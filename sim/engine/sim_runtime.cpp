@@ -191,7 +191,12 @@ void EEPROMClass::write(int address, uint8_t value) {
 }
 bool EEPROMClass::commit() {
     FILE *f = fopen(g_eePath.c_str(), "wb");
-    if (!f) return false;
+    if (!f) {
+        // Sin fichero no hay persistencia: avisar (una vez) en vez de perder datos en silencio.
+        static bool warned = false;
+        if (!warned) { fprintf(stderr, "[sim] ERROR: no se puede guardar la EEPROM en %s\n", g_eePath.c_str()); warned = true; }
+        return false;
+    }
     if (!g_ee.empty()) fwrite(g_ee.data(), 1, g_ee.size(), f);
     fclose(f);
     return true;
