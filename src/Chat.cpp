@@ -29,6 +29,7 @@ static uint8_t  s_beaconSender = 0;
 static uint32_t s_beaconEpoch  = 0;
 static uint8_t  s_beaconBatt   = 0xFF;
 static uint8_t  s_beaconFlags  = 0;
+static uint8_t  s_beaconGen    = 0;
 
 // --- Dedup de recepcion (anillo de los ultimos N (sender,msgId)) ---
 #define SEEN_N 8
@@ -82,6 +83,7 @@ static void sendBeacon() {
   p += (char)((ep >> 8) & 0xFF);
   p += (char)(ep & 0xFF);
   p += (char)Battery_percent();
+  p += (char)Clock_gen();               // generacion de ajuste de la hora (ver Clock.h)
   Lora_send(p);
 }
 
@@ -220,6 +222,7 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
     s_beaconEpoch = ((uint32_t)(uint8_t)raw[3] << 24) | ((uint32_t)(uint8_t)raw[4] << 16) |
                     ((uint32_t)(uint8_t)raw[5] << 8)  |  (uint32_t)(uint8_t)raw[6];
     s_beaconBatt  = (raw.length() >= 8) ? (uint8_t)raw[7] : 0xFF;
+    s_beaconGen   = (raw.length() >= 9) ? (uint8_t)raw[8] : 0;
     msgId = 0;
     return CHAT_BEACON;
   }
@@ -229,6 +232,7 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
 uint32_t Chat_beaconEpoch() { return s_beaconEpoch; }
 uint8_t  Chat_beaconBatt()  { return s_beaconBatt; }
 uint8_t  Chat_beaconFlags() { return s_beaconFlags; }
+uint8_t  Chat_beaconGen()   { return s_beaconGen; }
 
 // ============================================================
 //  Envio
@@ -324,7 +328,18 @@ void Chat_handleBeacon() {
   Chat_noteHeard(s_beaconSender);
   g_peerBatt = s_beaconBatt;
   g_peerFlags = s_beaconFlags;
-  Clock_syncFromPeer(s_beaconEpoch);
+  // Hora del peer. Si es de una generacion de ajuste MAS RECIENTE el reloj salta: se
+  // reajustan las marcas de tiempo guardadas para que las antiguedades no cambien.
+  int32_t step = Clock_syncFromPeer(s_beaconEpoch, s_beaconGen);
+  if (step != 0) {
+    History_shiftTimestamps(step);
+    Doodle_shiftTimestamps(step);
+  }
+}
+
+void Chat_beaconSoon() {
+  g_beaconedOnce = true;
+  g_lastBeacon = millis() - BEACON_INTERVAL_MS;   // aritmetica modular: ya toca emitir
 }
 
 // ============================================================

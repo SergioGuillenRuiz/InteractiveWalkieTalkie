@@ -13,6 +13,9 @@
 #                                   uno recibe el del otro, lo confirma y NO oye
 #                                   el propio. Prueba ambos sentidos del enlace.
 #
+#  Escena C (2 equipos, hora): #1 pone la hora a mano (y la corrige hacia atras)
+#                              y #2 la adopta por radio.
+#
 #  Plantilla para testear futuras funciones de comunicacion multi-dispositivo.
 #  Uso:  ./net_test.sh
 # ============================================================
@@ -22,6 +25,10 @@ LNX="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIM="$(dirname "$LNX")"
 WORK="$SIM/out/linux"
 EXE="$WORK/walkie_sim"
+# Tope de velocidad del tiempo virtual (ms virtuales por ms real). Sin tope cada proceso
+# corre su tiempo casi instantaneo y los equipos dejan de coincidir en el aire (el que
+# arranca unas decenas de ms despues se pierde lo ya emitido). 20 -> 14 s virtuales = 0,7 s.
+PACE="${PACE:-20}"
 
 # --- Compilar ---
 "$LNX/build.sh" >/dev/null || { echo "build fallo"; exit 1; }
@@ -31,7 +38,7 @@ clear_air() { mkdir -p "$1"; rm -f "$1"/* 2>/dev/null || true; }
 # start_node <air> <node> <chip> <keysText> <keysFile> <log>  -> deja el PID en $NODE_PID
 start_node() {
   printf '%s\n' "$4" > "$WORK/$5"
-  SIM_CHIPID="$3" "$EXE" --keys "$WORK/$5" --air "$1" --node "$2" \
+  SIM_CHIPID="$3" "$EXE" --keys "$WORK/$5" --air "$1" --node "$2" --pace "$PACE" \
       --eeprom "$WORK/net_$2.bin" --fresh --shots "$WORK" </dev/null >"$6" 2>&1 &
   NODE_PID=$!
 }
@@ -132,6 +139,59 @@ check "#2 confirma su envio (ACK de #1)"     "$(has "$q2" 'Confirmado: entregado
 check "half-duplex: #1 NO recibe su 'happy'" "$(hasnot "$q1" 'ACK a #101')"
 check "half-duplex: #2 NO recibe su 'kissy'" "$(hasnot "$q2" 'ACK a #201')"
 
+# ============================================================
+#  ESCENA C: la hora puesta a mano en un equipo la adopta el otro (#1 -> #2).
+#  #1 abre "Poner la hora" (mantener B), pone 09:06 y guarda; despues la corrige
+#  HACIA ATRAS a 07:20. #2 (otro proceso, sin hora) adopta ambas por radio: la
+#  segunda tiene una generacion de ajuste mas reciente aunque su hora sea anterior.
+#  (Teclas: fdown/fup = B mantenida; pote -> horas pot*24/1024, decenas pot*6/1024,
+#  unidades pot*10/1024.)
+# ============================================================
+echo
+echo "==== Escena C: hora puesta a mano en #1 -> adoptada por #2 ===="
+AIR_C="$WORK/air_c"
+clear_air "$AIR_C"
+
+keys_c1=$(cat <<EOF
+0 pot 0
+3000 fdown
+4700 fup
+5200 pot 400
+5700 mdown
+5850 mup
+6300 pot 100
+6800 mdown
+6950 mup
+7400 pot 700
+7900 mdown
+8050 mup
+10500 pot 0
+11000 fdown
+12700 fup
+13200 pot 300
+13700 mdown
+13850 mup
+14300 pot 500
+14800 mdown
+14950 mup
+15400 pot 100
+15900 mdown
+16050 mup
+24000 q
+EOF
+)
+start_node "$AIR_C" 1 100 "$keys_c1" "_c1.txt" "$WORK/_c1.out"; c1=$NODE_PID
+start_node "$AIR_C" 2 200 "0 pot 512
+30000 q" "_c2.txt" "$WORK/_c2.out"; c2=$NODE_PID
+wait_all 60 "$c1" "$c2"
+
+r1="$WORK/_c1.out"; r2="$WORK/_c2.out"
+check "#1 pone 09:06 a mano"                    "$(has "$r1" 'puesta a mano: 09:06')"
+check "#1 la difunde (baliza con gen 1)"        "$(has "$r1" 'hora fijada: 327[0-9]{2} gen 1')"
+check "#2 adopta 09:06 de #1 (gen 1)"           "$(has "$r2" 'hora adoptada del peer: 327[0-9]{2} gen 1')"
+check "#1 corrige a 07:20 (hacia atras)"        "$(has "$r1" 'puesta a mano: 07:20')"
+check "#2 adopta 07:20 aunque sea anterior"     "$(has "$r2" 'hora adoptada del peer: 264[0-9]{2} gen 2')"
+
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""
 command -v magick  >/dev/null 2>&1 && conv="magick"
@@ -140,7 +200,7 @@ for n in net_rx2 net_rx3; do
   if [[ -n "$conv" && -f "$WORK/$n.bmp" ]]; then "$conv" "$WORK/$n.bmp" "$WORK/$n.png" 2>/dev/null || true; fi
 done
 
-rm -f "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt
+rm -f "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
 echo
 if (( fail == 0 )); then echo "MULTI-DISPOSITIVO OK: comunicacion real (difusion + bidireccional) verificada."
 else                     echo "$fail comprobacion(es) fallaron."; fi

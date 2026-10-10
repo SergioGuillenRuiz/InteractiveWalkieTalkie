@@ -22,4 +22,9 @@ bool          History_isFromThisBoot(int index); // true = recibido/enviado en e
 int  History_count();
 void History_deleteMessage(int index);
 
+// Suma 'delta' segundos a las marcas de tiempo guardadas (y persiste). Se usa cuando
+// el reloj SALTA (se pone la hora a mano o se adopta la del companero): asi las
+// antiguedades ("hace 3m") no cambian aunque el epoch de referencia sea otro.
+void History_shiftTimestamps(int32_t delta);
+
 #endif

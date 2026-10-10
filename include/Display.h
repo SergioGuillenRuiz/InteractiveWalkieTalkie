@@ -78,6 +78,8 @@ void drawHeartOutline(int x, int y, int color);
 // bateria del companero a su izquierda (solo si esta en alcance y la ha comunicado).
 void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow,
                    uint8_t peerBatt = 0xFF, bool peerBattLow = false);
+// Hora ("HH:MM", o "--:--" si nadie la ha puesto) centrada en la franja de estado.
+void drawStatusClock(const char *hhmm);
 
 void updateHippoAnimation();
 void triggerAnimation(HippoAnimation anim);

@@ -18,16 +18,16 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24) |
 | Mensajería | Identificador por equipo, cifrado AES-128 con IV aleatorio, confirmación "Entregado", 3 reintentos, cola de pendientes persistente y descarte de duplicados |
 | Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación |
+| Hora | Se pone a mano (mantener **B** 1,5 s en el menú principal → "Poner la hora": horas / decenas / unidades de minuto con el pote), se muestra en el menú principal y en el Historial, se difunde y es **autoritativa** entre equipos (generación de ajuste en la baliza: la última hora puesta gana aunque se corrija hacia atrás), persiste en EEPROM y las antigüedades del historial no cambian al saltar el reloj. Es la hora local (sin zona horaria: al cambiar la hora de verano/invierno hay que volver a ponerla). No se puede por puerto serie: el SCL del OLED va al pin RX |
 | Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance, con su nivel de batería (y "!" si avisa de batería baja) a la izquierda del corazón |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 28 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 30 tests, multi-dispositivo y demos |
 
 ---
 
 ## 🟡 A medias
 
-- [ ] **Hora compartida.** No hay forma de poner la hora en la placa: `Clock_set()` solo lo llama el simulador (comando `settime`). Los equipos arrancan en 00:00 y se sincronizan entre ellos, así que la hora de la barra de título es falsa. Tampoco hay zona horaria (`Clock_hhmm()` usa UTC).
 - [ ] **Batería.** En la placa, la lectura siempre devuelve 100 % (`src/Battery.cpp:13`), porque el único ADC del ESP8266 lo usa el potenciómetro. Hace falta hardware (y, por tanto, también el nivel que envía la baliza es siempre 100 %).
 - [ ] **Dibujos.**
   - Solo se guarda el último recibido, y solo en RAM (`src/Doodle.cpp:119`). Tras reiniciar sale "(ya no guardado)".
@@ -44,7 +44,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 ## ⚪ Sin implementar
 
-- [ ] Ajuste de la hora (por menú o por puerto serie).
 - [ ] Medición real de la batería (necesita hardware).
 - [ ] Emparejamiento y seguridad:
   - La clave AES está fija en el código y es la misma para todos los equipos.
@@ -86,12 +85,11 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
    - escuchar de forma continua;
    - enviar los paquetes en binario;
    - bajar el ritmo de Tetris 2J y HippoRadar a algo que quepa en el canal.
-3. [ ] **Ajuste de la hora** y la zona horaria.
-4. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
-5. [ ] **Recepción dentro de los juegos** y el indicador de no leídos.
-6. [ ] **Dibujos:** persistentes, en el historial y con confirmación.
-7. [ ] **Seguridad:** emparejamiento y clave por pareja.
-8. [ ] **Pulido:** un manual de usuario.
+3. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
+4. [ ] **Recepción dentro de los juegos** y el indicador de no leídos.
+5. [ ] **Dibujos:** persistentes, en el historial y con confirmación.
+6. [ ] **Seguridad:** emparejamiento y clave por pareja.
+7. [ ] **Pulido:** un manual de usuario.
 
 ---
 

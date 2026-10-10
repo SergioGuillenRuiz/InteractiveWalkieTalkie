@@ -1,0 +1,166 @@
+# ============================================================
+#  Ajuste de la hora por menu ("Poner la hora").
+#  Mantener B ~1,5 s en el menu principal abre la pantalla: tres pasos (horas,
+#  decenas y unidades de minuto) con el pote, A acepta y avanza (en el ultimo
+#  GUARDA), B retrocede (en el primero CANCELA), 60 s sin tocar = cancela.
+#
+#  La hora puesta a mano es AUTORITATIVA: sube la "generacion de ajuste" que viaja
+#  en la baliza y el companero la adopta aunque sea ANTERIOR a la suya.
+#  Las antiguedades del historial no cambian cuando el reloj salta.
+#
+#  Pote -> valor: horas pot*24/1024 (400->09), decenas pot*6/1024 (100->0, 300->1),
+#  unidades pot*10/1024 (700->6, 900->8).   (Device_id del sim = 137.)
+#
+#  La pantalla es BLOQUEANTE: cada escenario programa todas sus pulsaciones con
+#  "in" y las ejecuta en un unico "run". Un "run <ms> <slack>" corto congela el
+#  fotograma en mitad de la pantalla (para mirarla) y abandona el bucle.
+# ============================================================
+wait 800
+
+# --- 0) Sin hora puesta: "--:--" en el menu principal ---
+expect text --:--
+shot clock_set_0_sin_hora
+print Sin hora puesta: el menu principal muestra --:--
+
+# --- 1) Una pulsacion corta de B (menos de 1,5 s) NO abre nada ---
+tap finish 900
+wait 400
+expect notext Poner la hora
+print B corta: no abre la pantalla
+
+# --- 2) Mantener B abre la pantalla en el paso de las horas ---
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 400            # horas = 09
+run 2500 300               # congela el fotograma dentro de la pantalla
+expect text Poner la hora
+expect text Horas
+expect text 09
+expect text A: siguiente
+expect text B: cancelar
+shot clock_set_1_horas
+print Mantener B abre Poner la hora (paso: horas)
+
+# --- 3) A avanza a decenas y luego a unidades; B retrocede ---
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 400
+in 2800 morse down         # A: horas -> decenas
+in 2950 morse up
+in 3400 pot 300            # decenas = 1
+run 3600 300
+expect text Minutos: decenas
+expect text 09:10
+expect text B: atras
+shot clock_set_2_decenas
+in 0 finish down           # B: vuelve a horas  (se programa tras 'abandonar' la anterior)
+in 1700 finish up
+in 2300 pot 400
+in 2800 morse down
+in 2950 morse up
+in 3400 pot 300
+in 3900 morse down         # A: decenas -> unidades
+in 4050 morse up
+in 4500 pot 900            # unidades = 8
+run 4700 300
+expect text Minutos: unidades
+expect text 09:18
+expect text A: guardar
+shot clock_set_3_unidades
+print A avanza de campo: horas -> decenas -> unidades (09:18)
+
+# --- 4) B en el primer campo CANCELA: la hora sigue sin ponerse ---
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 400
+in 2800 finish down
+in 2950 finish up          # B en el primer campo = cancelar
+run 3100 300
+expect text Cancelado
+run 2500
+expect text --:--
+print B en el primer campo cancela y no cambia la hora
+
+# --- 5) Guardar 09:06 con la hora sin poner y un mensaje ya en el historial ---
+# (el mensaje tiene una marca de tiempo del reloj "de uptime"; al fijar la hora el epoch salta de
+# segundos a las 09:06: las antiguedades NO deben cambiar)
+chatmsg 50 1 hola
+run 500
+expect serial Guardado: hola
+ff 120000                  # pasan 2 minutos de verdad
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 400            # 09
+in 2800 morse down
+in 2950 morse up
+in 3400 pot 100            # decenas 0
+in 3900 morse down
+in 4050 morse up
+in 4500 pot 700            # unidades 6
+in 5000 morse down         # A: GUARDA
+in 5150 morse up
+run 5600 400               # congela en la confirmacion
+expect text Hora guardada
+expect text 09:06
+expect serial puesta a mano: 09:06
+expect beacon gen 1
+expect beacon time 09:06
+shot clock_set_4_guardada
+print Guardar: confirma, difunde una baliza con generacion 1 y la hora 09:06
+
+# El menu principal muestra la hora; el historial tambien y la antiguedad se conserva
+wait 3000
+expect text 09:06
+pot 512
+wait 300
+tap morse
+wait 400
+expect text Historial
+expect text 09:0
+expect text 2m hola
+expect notext --:--
+shot clock_set_5_historial
+print Historial: hora en la barra y antiguedad conservada (2m) al saltar el reloj
+in 0 finish down
+in 150 finish up
+run 600
+pot 80
+
+# --- 6) Persistencia: sobrevive a un reinicio en frio, con su generacion ---
+reboot-cold
+wait 600
+expect serial gen 1
+expect text 09:0
+print Reinicio en frio: la hora y la generacion persisten
+
+# --- 7) Mensajes y ACK siguen funcionando MIENTRAS se ajusta la hora ---
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 700            # horas = 16
+in 3000 morse down
+in 3150 morse up
+in 3200 chatmsg 60 5 llego a las cinco
+run 4000 300
+expect serial Guardado: llego a las cinco
+expect serial ACK a #60
+print Durante el ajuste se recibe y se confirma como siempre
+
+# --- 8) Sin tocar nada durante 60 s: se cancela solo ---
+pot 0
+wait 300
+in 0 finish down
+in 1700 finish up
+in 2300 pot 400
+run 70000
+expect notext Poner la hora
+print Abandonado 60 s: cancela

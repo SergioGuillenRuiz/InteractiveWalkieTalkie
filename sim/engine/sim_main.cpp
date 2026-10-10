@@ -67,8 +67,9 @@ static int deferPacket(const std::string &enc) {
     return (int)g_deferredPackets.size() - 1;
 }
 
-// Construye una baliza de presencia cifrada: 0x02 | peer | flags | epoch(4) | batt.
-static std::string buildBeacon(int peer, long epoch, int batt, int flags) {
+// Construye una baliza de presencia cifrada: 0x02 | peer | flags | epoch(4) | batt | gen.
+// 'gen' = generacion de ajuste de la hora del peer (0 = nunca fijada; <0 = formato antiguo sin el byte).
+static std::string buildBeacon(int peer, long epoch, int batt, int flags, int gen = 0) {
     String p;
     p += (char)0x02;
     p += (char)peer;
@@ -78,6 +79,7 @@ static std::string buildBeacon(int peer, long epoch, int batt, int flags) {
     p += (char)((epoch >> 8) & 0xFF);
     p += (char)(epoch & 0xFF);
     p += (char)batt;
+    if (gen >= 0) p += (char)gen;     // gen < 0: baliza ANTIGUA, sin el byte de generacion
     String enc = SimpleCrypto_encrypt(p);
     return std::string(enc.c_str(), enc.length());
 }
@@ -265,6 +267,39 @@ static void execLine(const std::string &raw) {
         uint32_t s; if (is >> s) slack = s; // opcional: "run <ms> <slack>" congela el frame en ~now+ms+slack
         runFor(ms, slack);
     }
+    else if (cmd == "watch") {   // watch pixel <x> <y> on|off <ms>: el pixel debe mantenerse TODO ese tiempo
+        // Ejecuta el firmware como "run" y comprueba el pixel tras CADA vuelta de loop(): detecta
+        // parpadeos que un expect puntual no ve (p.ej. algo que borra y repinta en la misma vuelta).
+        std::string what; is >> what;
+        int x = 0, y = 0; std::string st; uint32_t ms = 0;
+        if (what != "pixel" || !(is >> x >> y >> st >> ms) || (st != "on" && st != "off")) {
+            scriptError("watch necesita: pixel <x> <y> on|off <ms>"); return;
+        }
+        bool want = (st == "on");
+        uint32_t target = sim::now() + ms;
+        sim::setDeadline(target + SLACK);
+        long samples = 0, bad = 0; uint32_t firstBad = 0;
+        try {
+            sim::applyDue();
+            while (sim::now() < target) {
+                uint32_t before = sim::now();
+                loop();
+                samples++;
+                if (display.simPixel(x, y) != want) { if (!bad) firstBad = sim::now() - (target - ms); bad++; }
+                if (sim::now() == before) {
+                    uint32_t step = TICK;
+                    if (before + step > target) step = target - before;
+                    if (step == 0) step = 1;
+                    sim::advance(step);
+                }
+            }
+        } catch (sim::Timeout &) { fprintf(stderr, "[sim] aviso: espera bloqueante (deadline alcanzado)\n"); }
+        sim::clearDeadline();
+        char b[160];
+        if (bad == 0) snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms (%ld vueltas)", x, y, st.c_str(), (unsigned)ms, samples);
+        else          snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms: falla en %ld de %ld vueltas (la 1a a los %u ms)", x, y, st.c_str(), (unsigned)ms, bad, samples, (unsigned)firstBad);
+        check(bad == 0, b);
+    }
     else if (cmd == "ff") { uint32_t ms = 0; if (!(is >> ms)) { scriptError("ff necesita los ms a avanzar"); return; } fastForward(ms); }
     else if (cmd == "in") {
         uint32_t off = 0; std::string what;
@@ -302,10 +337,10 @@ static void execLine(const std::string &raw) {
         else if (what == "battery") {   // bateria diferida: in <ms> battery <pct>
             int pct = 100; is >> pct; sim::scheduleAt(t, sim::EV_BATTERY, pct * 1023 / 100);
         }
-        else if (what == "presence") {  // baliza diferida: in <ms> presence <peer> [epoch] [batt]
-            int peer = 0, batt = 100; long ep = 0; is >> peer >> ep >> batt;
+        else if (what == "presence") {  // baliza diferida: in <ms> presence <peer> [epoch] [batt] [gen]
+            int peer = 0, batt = 100, gen = 0; long ep = 0; is >> peer >> ep >> batt >> gen;
             int flags = (batt <= 15) ? 1 : 0;
-            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags)));
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags, gen)));
         }
         else if (what == "ttt") {        // tres en raya diferido: in <ms> ttt hello|state ...
             std::string sub; is >> sub;
@@ -318,12 +353,12 @@ static void execLine(const std::string &raw) {
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
     else if (cmd == "battery") { int pct; if (!(is >> pct)) { scriptError("battery necesita un % 0-100"); return; } sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
-    else if (cmd == "settime") { long ep = 0; if (!(is >> ep)) { scriptError("settime necesita segundos epoch"); return; } Clock_set((uint32_t)ep); printf("  reloj fijado a %ld\n", ep); }
-    else if (cmd == "presence") {   // baliza de un peer: presence <peerId> [epoch] [batt]
-        int peer = 0, batt = 100; long ep = 0; is >> peer >> ep >> batt;
+    else if (cmd == "settime") { long ep = 0; if (!(is >> ep)) { scriptError("settime necesita segundos epoch"); return; } Clock_set((uint32_t)ep); printf("  reloj fijado a %ld (gen %d)\n", ep, (int)Clock_gen()); }
+    else if (cmd == "presence") {   // baliza de un peer: presence <peerId> [epoch] [batt] [gen]
+        int peer = 0, batt = 100, gen = 0; long ep = 0; is >> peer >> ep >> batt >> gen;
         int flags = (batt <= 15) ? 1 : 0;   // BEACON_FLAG_LOWBATT
-        simLoraInject(buildBeacon(peer, ep, batt, flags));
-        printf("  baliza de #%d inyectada (epoch %ld, bat %d%%)\n", peer, ep, batt);
+        simLoraInject(buildBeacon(peer, ep, batt, flags, gen));
+        printf("  baliza de #%d inyectada (epoch %ld, bat %d%%, gen %d)\n", peer, ep, batt, gen);
     }
     else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (24x24, un corazon)
         int peer = 0; is >> peer;
@@ -413,13 +448,37 @@ static void execLine(const std::string &raw) {
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
         }
+        else if (sub == "beacon") {   // ultima BALIZA transmitida: expect beacon gen|batt|epoch|time <valor>
+            std::string field, val; is >> field >> val;
+            if (field.empty() || val.empty() || (field != "gen" && field != "batt" && field != "epoch" && field != "time")) {
+                scriptError("expect beacon necesita: gen|batt|epoch|time <valor>"); return;
+            }
+            std::string got; bool found = false;
+            auto ring = simLoraSentRing();
+            for (auto it = ring.rbegin(); it != ring.rend() && !found; ++it) {
+                String dec = SimpleCrypto_decrypt(String(*it));
+                if (dec.length() < 7 || dec[0] != 0x02) continue;      // no es una baliza
+                uint32_t ep = ((uint32_t)(uint8_t)dec[3] << 24) | ((uint32_t)(uint8_t)dec[4] << 16) |
+                              ((uint32_t)(uint8_t)dec[5] << 8)  |  (uint32_t)(uint8_t)dec[6];
+                int batt = dec.length() >= 8 ? (uint8_t)dec[7] : -1;
+                int gen  = dec.length() >= 9 ? (uint8_t)dec[8] : 0;
+                char b[32];
+                if (field == "gen") snprintf(b, sizeof(b), "%d", gen);
+                else if (field == "batt") snprintf(b, sizeof(b), "%d", batt);
+                else if (field == "epoch") snprintf(b, sizeof(b), "%u", (unsigned)ep);
+                else snprintf(b, sizeof(b), "%02u:%02u", (unsigned)((ep % 86400u) / 3600u), (unsigned)((ep % 3600u) / 60u));
+                got = b; found = true;
+            }
+            if (!found) check(false, "hay una baliza transmitida (para comprobar " + field + ")");
+            else check(got == val, "ultima baliza TX: " + field + " = " + val + " (es " + got + ")");
+        }
         else if (sub == "pixel") {
             int x, y; std::string st;
             if (!(is >> x >> y >> st) || (st != "on" && st != "off")) { scriptError("expect pixel necesita: <x> <y> on|off"); return; }
             bool on = display.simPixel(x, y);
             check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st);
         }
-        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|pixel)");
+        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|pixel)");
     }
     else scriptError("comando desconocido \"" + cmd + "\"");
 }
@@ -498,6 +557,7 @@ static std::vector<std::pair<uint32_t, std::string>> g_keyScript;
 static size_t   g_ksIdx = 0;
 static uint32_t g_iStart = 0;
 static bool     g_keysScripted = false;
+static double   g_pace = 0.0;        // --pace: ms virtuales por ms real como MAXIMO en modo --keys (0 = sin limite)
 static bool     g_ksArmed = false;   // deadline de fin de guion ya armado (una sola vez)
 
 // Programa una pulsacion (sin runFor: la aplica el avance del reloj del firmware).
@@ -614,7 +674,20 @@ static void iRender() {
 static void interactivePump(uint32_t ms) {
     (void)ms;
     iHandleKeys();
-    if (g_keysScripted) { fireScriptedKeys(); return; }   // modo prueba: rapido
+    if (g_keysScripted) {                                  // modo prueba: rapido
+        fireScriptedKeys();
+        if (g_pace > 0.0) {
+            // Con varios procesos en el "aire" compartido el tiempo virtual de cada uno debe
+            // avanzar a un ritmo comparable: en modo rapido uno arranca unas decenas de ms
+            // despues y ya ha pasado "toda su vida" (y la radio apagada no oye lo emitido).
+            double ahead = (double)(sim::now() - g_iVirtEpoch) - g_pace * (double)iRealMs();
+            if (ahead > 0.0) {
+                double sl = ahead / g_pace; if (sl > 20.0) sl = 20.0;
+                if (sl >= 1.0) std::this_thread::sleep_for(std::chrono::milliseconds((long long)sl));
+            }
+        }
+        return;
+    }
 
     auto nowR = std::chrono::steady_clock::now();
     if (std::chrono::duration_cast<std::chrono::milliseconds>(nowR - g_iLastRender).count() >= 33) {
@@ -737,7 +810,7 @@ int main(int argc, char **argv) {
     int airRssi = -50;
 
     // Opciones que llevan valor: si falta, es un error de uso.
-    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi" };
+    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi", "--pace" };
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         for (const char *o : withValue)
@@ -766,6 +839,7 @@ int main(int argc, char **argv) {
         else if (a == "--air") airDir = argv[++i];     // directorio del "aire" compartido
         else if (a == "--node") airNode = argv[++i];   // etiqueta unica del dispositivo
         else if (a == "--rssi") airRssi = atoi(argv[++i]); // dBm con que oyen los demas
+        else if (a == "--pace") g_pace = atof(argv[++i]);  // tope de velocidad en modo --keys (multi-dispositivo)
         else if (!a.empty() && a[0] != '-') {
             if (!scriptPath.empty()) { fprintf(stderr, "[sim] solo se admite un script (%s y %s)\n", scriptPath.c_str(), a.c_str()); return 2; }
             scriptPath = a;

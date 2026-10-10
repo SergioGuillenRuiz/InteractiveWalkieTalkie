@@ -18,6 +18,7 @@
 #include "HippoRadar.h"
 #include "Doodle.h"
 #include "TresEnRaya.h"
+#include "ClockSetup.h"
 #include <LoRa.h>
 
 #if defined(ESP8266)
@@ -325,6 +326,7 @@ bool handleIdle() {
     drawMenu();
     drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow(),
                   Chat_peerBatt(), Chat_peerBattLow());
+    drawStatusClock(Clock_hhmm().c_str());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
@@ -344,6 +346,23 @@ bool handleIdle() {
             Display_clear();
             menuTransitionDelay();
             return true;
+        }
+    }
+
+    // B mantenido -> "Poner la hora" (en el IDLE B no hacia nada; leerlo reinicia el
+    // temporizador de inactividad del hipopotamo como cualquier otra pulsacion).
+    {
+        static unsigned long bSince = 0;
+        if (isFinishPressed()) {
+            if (bSince == 0) bSince = millis();
+            else if (millis() - bSince >= CLOCK_SETUP_HOLD_MS) {
+                bSince = 0;
+                justEnteredIdle = true;
+                startClockSetup();
+                return true;
+            }
+        } else {
+            bSince = 0;
         }
     }
 

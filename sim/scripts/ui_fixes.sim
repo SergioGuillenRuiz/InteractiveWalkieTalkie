@@ -31,6 +31,12 @@ print Cursor: sigue al pote (3 columnas) y borra el anterior
 pot 512
 wait 400
 ff 21000                  # >20 s sin tocar nada: el hipopotamo se duerme
+# "watch" muestrea tras CADA vuelta del firmware durante la ventana: el cursor (68,53)
+# no puede faltar ni un instante, ni siquiera mientras una Zzz lo cruza.
+watch pixel 68 53 on 4000
+# Lo mismo para la hora de la barra de estado (los dos puntos, pixel (63,2)): las Zzz suben
+# por el centro de la pantalla y NO deben borrar la franja de estado (y<8).
+watch pixel 63 2 on 4000
 wait 100
 expect pixel 68 53 on
 wait 130

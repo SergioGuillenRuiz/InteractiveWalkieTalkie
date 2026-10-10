@@ -11,7 +11,7 @@
 //  Formato (texto plano antes de cifrar):
 //    MENSAJE:  0x01 | emisor(1) | msgId(1) | texto...
 //    ACK:      0x06 | destino(1) | msgId(1)            (destino = emisor original)
-//    BALIZA:   0x02 | emisor(1) | flags(1) | epoch(4, BE) | bateria%(1)
+//    BALIZA:   0x02 | emisor(1) | flags(1) | epoch(4, BE) | bateria%(1) | generacionHora(1)
 //    DIBUJO:   0x04 | emisor(1) | bytes del lienzo (MSB primero)
 //
 //  Los marcadores 0x01/0x02/0x04/0x06 no colisionan con los protocolos de los
@@ -32,6 +32,7 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
 uint32_t Chat_beaconEpoch();
 uint8_t  Chat_beaconBatt();
 uint8_t  Chat_beaconFlags();
+uint8_t  Chat_beaconGen();     // generacion de ajuste de la hora del emisor (0 si no la lleva)
 
 // Procesa la ultima baliza recibida: presencia + bateria del peer + sync de reloj.
 void Chat_handleBeacon();
@@ -47,6 +48,10 @@ void Chat_sendAck(uint8_t targetId, uint8_t msgId);
 
 // Envia un dibujo (lienzo cuadrado, MSB primero), fire-and-forget.
 void Chat_sendDoodle(const uint8_t *buf32);
+
+// Adelanta la proxima baliza a la siguiente llamada de Chat_tick() (p.ej. tras poner
+// la hora a mano: asi el companero la adopta enseguida y no a los 30 s).
+void Chat_beaconSoon();
 
 // Tareas periodicas: emite la baliza de presencia y reintenta los mensajes de la
 // outbox sin confirmar. Llamar a menudo (desde backgroundTick()).

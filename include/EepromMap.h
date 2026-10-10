@@ -44,11 +44,11 @@
 // --- Region RELOJ: epoch (segundos) persistido para sobrevivir reinicios ---
 #define EE_CLOCK_BASE      (EE_OUTBOX_BASE + EE_OUTBOX_SIZE)     // 1798
 #define CLK_HDR_SIZE       4            // 3 magia {'C','K','1'} + 1 version
-#define EE_CLOCK_SIZE      (CLK_HDR_SIZE + 4)                    // 8 (4B epoch)
+#define EE_CLOCK_SIZE      (CLK_HDR_SIZE + 4 + 1)                // 9 (4B epoch + 1B generacion de ajuste, v2)
 
 // Tamano total que TODOS deben pasar a EEPROM.begin() (un commit con un tamano
 // menor borraria a 0xFF las regiones de arriba, asi que SIEMPRE EE_TOTAL_SIZE).
-#define EE_TOTAL_SIZE      (EE_CLOCK_BASE + EE_CLOCK_SIZE)       // 1806
+#define EE_TOTAL_SIZE      (EE_CLOCK_BASE + EE_CLOCK_SIZE)       // 1807
 
 // Cota fisica: el sector de EEPROM del ESP8266 es 4096 B y el backing del
 // simulador usa 2048 B; el mapa debe caber en ambos.

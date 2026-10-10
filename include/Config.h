@@ -44,6 +44,9 @@
 // Tiempo mínimo que permanece visible una pantalla de resultado (Enviado, etc.)
 #define RESULT_MIN_MS      800
 
+// Mantener B este tiempo en el menú principal abre "Poner la hora" (ClockSetup.h)
+#define CLOCK_SETUP_HOLD_MS  1500
+
 // Light-sleep de la CPU durante la suspensión (gran ahorro, ESP8266).
 // Ponlo a 0 si en tu placa diera problemas al despertar (recuperable con RESET).
 #define ENABLE_CPU_LIGHT_SLEEP  1

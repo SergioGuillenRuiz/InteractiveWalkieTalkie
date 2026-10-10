@@ -222,6 +222,17 @@ bool History_isFromThisBoot(int index) {
 
 int History_count() { return messageCount; }
 
+void History_shiftTimestamps(int32_t delta) {
+    if (delta == 0 || messageCount == 0) return;
+    for (int i = 0; i < messageCount; i++) {
+        uint32_t t = (uint32_t)messageTime[i] + (uint32_t)delta;   // 32 bits como en la EEPROM (el sim tiene long de 64)
+        if (t == 0xFFFFFFFFUL) t = 0xFFFFFFFEUL;                    // 0xFFFFFFFF = slot vacio
+        messageTime[i] = t;
+    }
+    saveAll();
+    Serial.print("[Historial] marcas de tiempo desplazadas "); Serial.print((long)delta); Serial.println(" s");
+}
+
 void History_deleteMessage(int index) {
     if (index < 0 || index >= messageCount) {
         Serial.println("[Historial] Indice invalido para borrar");

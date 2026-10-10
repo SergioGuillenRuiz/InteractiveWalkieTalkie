@@ -325,7 +325,9 @@ bool animateHippoWithZzz() {
     if (zzzParticles[i].active) {
       // Solo borrar si la posición anterior era visible
       if (zzzParticles[i].prevY >= 0 && zzzParticles[i].prevY <= 128) {
-        eraseKeepCursor(50, zzzParticles[i].prevY - 16, 20, ZZZ_HEIGHT);
+        int ey = zzzParticles[i].prevY - 16, eh = ZZZ_HEIGHT;
+        if (ey < 8) { eh -= (8 - ey); ey = 8; }   // la franja de estado (y<8) no se toca
+        if (eh > 0) eraseKeepCursor(50, ey, 20, eh);
       }
     }
   }
@@ -353,14 +355,11 @@ bool animateHippoWithZzz() {
   for (int i = 0; i < MAX_ZZZ; i++) {
     if (zzzParticles[i].active && zzzParticles[i].y >= 0 && zzzParticles[i].y <= 128) {
       // Dibujar las 3 Z en cascada
-      display.setCursor(60, zzzParticles[i].y);
-      display.print("Z");
-      
-      display.setCursor(55, zzzParticles[i].y - 8);
-      display.print("Z");
-      
-      display.setCursor(50, zzzParticles[i].y - 16);
-      display.print("Z");
+      // (solo por debajo de la franja de estado, y>=8: ahi van la bateria, la hora y la presencia)
+      int zy = zzzParticles[i].y;
+      if (zy >= 8)      { display.setCursor(60, zy);      display.print("Z"); }
+      if (zy - 8 >= 8)  { display.setCursor(55, zy - 8);  display.print("Z"); }
+      if (zy - 16 >= 8) { display.setCursor(50, zy - 16); display.print("Z"); }
     }
   }
   
@@ -936,6 +935,18 @@ void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow, uint8_t peerB
   display.fillRect(114, 0, 14, 8, SH110X_BLACK);
   if (peerOnline) drawHeart(121, 5, SH110X_WHITE);
   else            drawHeartOutline(121, 5, SH110X_WHITE);
+}
+
+// Hora en el centro de la franja de estado (y=0..7), entre la bateria propia (x<=26)
+// y la del companero (x>=94).
+void drawStatusClock(const char *hhmm) {
+  display.fillRect(30, 0, 60, 8, SH110X_BLACK);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  int16_t bx, by; uint16_t bw, bh;
+  display.getTextBounds(hhmm, 0, 0, &bx, &by, &bw, &bh);
+  display.setCursor((SCREEN_WIDTH - (int)bw) / 2, 0);
+  display.print(hhmm);
 }
 
 bool animateHippoGivingHeart() {

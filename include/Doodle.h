@@ -30,6 +30,7 @@ void Doodle_onReceived(uint8_t sender, const uint8_t *buf, unsigned long epoch);
 
 // Apertura desde el Historial: ¿el dibujo guardado es el de este registro?
 bool Doodle_isStored(uint8_t sender, unsigned long epoch);
+void Doodle_shiftTimestamps(int32_t delta);   // acompana a History_shiftTimestamps (mismo sello de tiempo)
 void Doodle_drawStored(int ox, int oy);                      // pinta el dibujo guardado (sin clear/display)
 
 #endif

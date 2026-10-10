@@ -1,0 +1,132 @@
+# ============================================================
+#  Autoridad de la hora entre equipos: "generacion de ajuste".
+#  Cada ajuste manual sube un contador (1..255 con vuelta; 0 = nunca fijada) que
+#  viaja en la baliza:
+#    - del peer MAS RECIENTE que la propia -> se adopta su hora aunque sea ANTERIOR
+#      (corregir la hora hacia atras no lo deshace el otro equipo);
+#    - MAS ANTIGUA -> se ignora;
+#    - IGUAL -> se adopta la mayor (converge la deriva);
+#    - baliza ANTIGUA sin el byte de generacion = generacion 0.
+#  Al saltar el reloj las marcas del historial se reajustan (las edades no cambian).
+#
+#  "presence <peer> <epoch> <bat> <gen>" inyecta la baliza (gen -1 = sin el byte).
+#  Dia de las horas: 1700006400 (medianoche); 10:00=1700042400  10:10=1700043000
+#  23:30=1700091000  08:00=1700035200  12:34=1700051640  15:45=1700063100
+#  18:20=1700072400  07:07=1700032020.      (Device_id del sim = 137, peer #50.)
+# ============================================================
+wait 600
+
+# Un mensaje recibido ANTES de tener hora: su marca es del reloj de "uptime"
+chatmsg 50 1 hola
+run 500
+expect serial Guardado: hola
+ff 120000                       # pasan 2 min
+expect text --:--
+print Sin hora: se muestra --:--
+
+# --- 1) El peer (generacion 3) tiene la hora puesta: se adopta ---
+presence 50 1700042400 80 3
+run 600
+expect serial hora adoptada del peer
+expect serial desplazadas
+expect text 10:00
+print Peer gen 3 (10:00): adoptada por mi gen 0
+
+# La antiguedad del mensaje NO cambia aunque el epoch haya saltado de segundos a 10:00
+pot 512
+wait 300
+tap morse
+wait 400
+expect text Historial
+expect text 2m hola
+expect notext 600m
+in 0 finish down
+in 150 finish up
+run 700
+pot 80
+wait 300
+expect notext --:--        # el Historial limpio la pantalla: el menu ya solo pinta la hora real
+print Historial: edad del mensaje conservada tras adoptar la hora (2m)
+
+# --- 2) Misma generacion y epoch mayor: converge a la mayor ---
+presence 50 1700043000 80 3
+run 600
+expect serial sincronizado con peer
+expect text 10:10
+print Misma generacion: converge a la mayor (10:10)
+
+# --- 3) Generacion MAS ANTIGUA con epoch mayor: se ignora ---
+presence 50 1700091000 80 2
+run 600
+expect notext 23:30
+print Peer gen 2 (mas antigua) con epoch mayor: ignorada
+
+# --- 4) Generacion MAS RECIENTE con epoch MENOR: se adopta (correccion hacia atras) ---
+presence 50 1700035200 80 4
+run 600
+expect text 08:00
+ff 31000                        # a los 30 s sale mi baliza con la generacion adoptada
+expect beacon gen 4
+expect beacon time 08:00
+print Peer gen 4 (08:00, ANTERIOR): adoptada; mi baliza ya lleva gen 4
+
+# --- 5) Ajuste manual propio (gen 5): el peer con gen 4 deja de mandar ---
+settime 1700051640              # 12:34 -> gen 5
+run 600
+expect serial gen 5
+expect text 12:34
+presence 50 1700091000 80 4
+run 600
+expect notext 23:30
+print Ajuste propio (gen 5): una baliza gen 4 mas adelantada se ignora
+presence 50 1700091000 80 5
+run 600
+expect text 23:30
+print Misma generacion 5: converge a la mayor (23:30)
+
+# --- 6) Vuelta del contador: 255 -> 1 ---
+presence 50 1700042400 80 130   # (130-5)=125 < 128: mas reciente
+run 600
+presence 50 1700042400 80 200
+run 600
+presence 50 1700042400 80 255
+run 600
+expect serial gen 255
+settime 1700063100              # 15:45 -> nextGen(255) = 1
+run 600
+expect serial gen 1
+expect text 15:45
+presence 50 1700072400 80 255   # 255 es ANTERIOR a 1 (vuelta): se ignora
+run 600
+expect notext 18:20
+presence 50 1700072400 80 2     # 2 es posterior a 1: se adopta
+run 600
+expect text 18:20
+print Vuelta del contador: gen 1 gana a 255 y pierde ante 2
+
+# --- 7) Baliza ANTIGUA sin byte de generacion = generacion 0: no pisa una hora puesta ---
+presence 50 1700032020 80 -1    # 07:07, mayor que la mia? no: menor, pero sobre todo gen 0 < 2
+run 600
+expect notext 07:07
+presence 50 1700099999 80 -1    # y aunque su epoch sea MUY posterior (gen 0 pierde ante mi gen)
+run 600
+expect notext 01:59            # 1700099999 = 01:59 del dia siguiente
+print Baliza sin generacion (formato antiguo): ignorada si ya hay hora puesta
+
+# --- 8) Persistencia de la generacion tras un reinicio en frio ---
+reboot-cold
+wait 600
+expect serial gen 2
+expect text 18:2
+print Reinicio en frio: la hora y la generacion (2) persisten
+
+# --- 9) Equipo sin hora (EEPROM virgen): una baliza antigua (gen 0) mayor converge pero NO cuenta como hora puesta ---
+reset-eeprom
+wait 600
+expect text --:--
+presence 50 1700042400 80 -1
+run 600
+expect serial sincronizado con peer
+expect notext 10:00
+expect text --:--
+print Sin hora: una baliza gen 0 converge el reloj interno pero sigue mostrando --:--

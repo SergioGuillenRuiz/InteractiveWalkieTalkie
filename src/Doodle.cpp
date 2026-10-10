@@ -129,6 +129,10 @@ void Doodle_onReceived(uint8_t sender, const uint8_t *buf, unsigned long epoch) 
   g_hasStored = true;
 }
 
+void Doodle_shiftTimestamps(int32_t delta) {
+  if (g_hasStored) g_rxEpoch = (uint32_t)((uint32_t)g_rxEpoch + (uint32_t)delta);
+}
+
 // --- Reapertura desde el Historial ---
 bool Doodle_isStored(uint8_t sender, unsigned long epoch) {
   return g_hasStored && g_rxFrom == sender && g_rxEpoch == epoch;

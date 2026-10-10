@@ -47,7 +47,7 @@ print Reloj: sobrevive a reboot-cold
 in 0 finish down
 in 150 finish up
 run 400
-presence 50 1700086400 80    # +1 dia (mismo HH:MM 22:13 pero epoch mayor)
+presence 50 1700086400 80 1  # +1 dia (mismo HH:MM 22:13 pero epoch mayor), misma generacion de ajuste (1)
 run 500
 expect serial sincronizado con peer
 print Reloj: sincronizado desde la baliza del peer

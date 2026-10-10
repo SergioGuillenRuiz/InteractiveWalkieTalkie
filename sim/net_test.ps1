@@ -27,11 +27,13 @@ function Clear-Air($dir) {
     else { New-Item -ItemType Directory -Path $dir | Out-Null }
 }
 
+# --pace 20: tope de velocidad del tiempo virtual (20 ms virtuales por ms real). Sin tope cada
+# proceso corre su tiempo casi instantaneo y los equipos dejan de coincidir en el aire.
 function Start-Node($air, $node, $chip, $keysText, $keysFile, $log) {
     Set-Content "$work\$keysFile" $keysText -Encoding ASCII
     $env:SIM_CHIPID = "$chip"
     $p = Start-Process -FilePath $sim -PassThru -NoNewWindow -RedirectStandardOutput $log `
-        -ArgumentList @("--keys","$work\$keysFile","--air",$air,"--node","$node",
+        -ArgumentList @("--keys","$work\$keysFile","--air",$air,"--node","$node","--pace","20",
                         "--eeprom","$work\net_$node.bin","--fresh","--shots",$work)
     Remove-Item Env:\SIM_CHIPID -ErrorAction SilentlyContinue
     return $p

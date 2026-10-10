@@ -131,6 +131,10 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `clock.sim`        | Reloj compartido: hora fijada/sincronizada, antigüedad real y persistencia tras reboot |
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
 | `doodle.sim`       | Lienzo 24×24: dibujar y enviar; recibir y mostrar |
+| `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
+| `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
+| `peer_batt.sim`    | Batería del compañero junto al corazón de presencia (nivel, "!" de batería baja, oculta fuera de alcance) |
+| `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
 
 Ejecutar uno con salida detallada:
@@ -176,8 +180,9 @@ lora loopback on|off  reenvía lo transmitido como recibido
 lora sent           muestra el último paquete transmitido (y su descifrado)
 chatmsg <emisor> <msgId> <texto>   inyecta un MENSAJE de chat de un peer (con sobre)
 chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de entrega)
-presence <peerId> [epoch] [batt]   inyecta una BALIZA de presencia de un peer
-in <ms> presence <peerId> [epoch] [batt]   baliza diferida (durante esperas bloqueantes)
+presence <peerId> [epoch] [batt] [gen]   inyecta una BALIZA de presencia de un peer
+                                   (gen = generación de ajuste de su hora; -1 = baliza antigua sin ese byte)
+in <ms> presence <peerId> [epoch] [batt] [gen]   baliza diferida (durante esperas bloqueantes)
 doodle <peerId>                    inyecta un DIBUJO 24x24 de ejemplo de un peer (marco + diagonal)
 ttt hello <peerId>                 Tres en raya: inyecta el HELLO de emparejamiento de un peer
 ttt state <peerId> <9digitos> <fin>   Tres en raya: inyecta un ESTADO del tablero (0/1/2 por casilla)
@@ -188,7 +193,8 @@ in <ms> doodle|ttt ...             variantes diferidas (durante el bucle bloquea
 ```
 battery <0-100>        fija el nivel de batería simulado (canal ADC mockeado)
 in <ms> battery <pct>  cambio de batería diferido (durante una espera bloqueante)
-settime <epoch>        fija el reloj de pared (segundos epoch) y lo persiste
+settime <epoch>        fija el reloj de pared (segundos epoch), lo persiste y sube la generación de ajuste
+                       (equivale a "alguien puso la hora"; no reajusta las marcas del historial)
 reboot-cold            reinicio EN FRÍO: re-ejecuta setup() Y pone millis()=0
 ```
 `reboot-cold` conserva la EEPROM (es justo lo que se quiere probar: que algo
@@ -206,7 +212,10 @@ expect text <sub>      la pantalla contiene <sub>
 expect notext <sub>    la pantalla NO contiene <sub>
 expect serial <sub>    el log serie contiene <sub>
 expect sent <sub>      el último TX LoRa descifra y contiene <sub>
+expect beacon gen|batt|epoch|time <v>   la última BALIZA transmitida lleva ese valor (time = HH:MM)
 expect pixel <x> <y> on|off   estado de un píxel
+watch pixel <x> <y> on|off <ms>   ejecuta el firmware <ms> y comprueba el píxel tras CADA vuelta de loop()
+                       (detecta parpadeos que un expect puntual no ve)
 print <texto>          imprime una nota
 reboot                 re-ejecuta setup() (recarga el historial de EEPROM)
 reset-eeprom           borra la EEPROM
@@ -237,6 +246,10 @@ walkie_sim.exe [script.sim] [opciones]
   --air <dir>       conecta este dispositivo al "aire" compartido (radio multi-dispositivo)
   --node <etiqueta> identidad única en el aire (para no oír lo propio)
   --rssi <dBm>      potencia con que los demás oyen sus transmisiones (por defecto -50)
+  --pace <x>        con --keys: tope de velocidad del tiempo virtual (x ms virtuales por ms real;
+                    0 = sin tope). Imprescindible con varios procesos en el aire compartido:
+                    sin tope cada uno corre su tiempo casi instantáneo y deja de coincidir con
+                    los demás (net_test usa 20)
 ```
 Sin script y sin `--interactive`, lee comandos por la entrada estándar.
 Una opción desconocida o sin su valor, o un guion de teclas que no existe, termina
