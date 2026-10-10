@@ -42,7 +42,12 @@ public:
 
     void setContrast(uint8_t c) { (void)c; }
     void invertDisplay(bool i) { (void)i; }
-    void oled_command(uint8_t c) { (void)c; }
+    // DISPLAYOFF/DISPLAYON apagan/encienden el panel (la suspension lo apaga). El simulador
+    // lo recuerda para poder comprobarlo con "expect panel on|off".
+    void oled_command(uint8_t c) {
+        if (c == SH110X_DISPLAYOFF) panelOn_ = false;
+        else if (c == SH110X_DISPLAYON) panelOn_ = true;
+    }
     uint8_t *getBuffer() { return pixels_; }   // 1 byte por píxel (0/1)
 
     void drawPixel(int16_t x, int16_t y, uint16_t color) override {
@@ -64,11 +69,13 @@ public:
     }
     const std::string &simText() const { return text_; }
     unsigned long simFrames() const { return frames_; }
+    bool simPanelOn() const { return panelOn_; }
 
 private:
     uint8_t pixels_[W * H];   // 0/1 por píxel
     std::string text_;        // texto dibujado desde el último clearDisplay
     unsigned long frames_;
+    bool panelOn_ = true;
 };
 
 #endif // SIM_ADAFRUIT_SH110X_H

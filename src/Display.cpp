@@ -190,16 +190,18 @@ void drawTitleBar(const char *title, const char *right) {
 
 // Fila de lista. La seleccionada se resalta como "píldora" (relleno + texto
 // negro); el resto, texto blanco con una viñeta a la izquierda.
-void drawListRow(int y, const String &text, bool selected) {
+void drawListRow(int y, const String &text, bool selected, bool marker) {
   display.setTextSize(1);
   if (selected) {
     display.fillRoundRect(2, y - 2, SCREEN_WIDTH - 4, 12, 3, SH110X_WHITE);
     display.setTextColor(SH110X_BLACK);
+    if (marker) display.fillCircle(5, y + 3, 2, SH110X_BLACK);   // "nuevo": punto negro dentro de la píldora
   } else {
     display.setTextColor(SH110X_WHITE);
-    display.fillRect(4, y + 2, 3, 3, SH110X_WHITE);   // viñeta cuadrada (no ensucia el texto)
+    if (marker) display.fillCircle(5, y + 3, 2, SH110X_WHITE);   // "nuevo": punto de 5x5
+    else        display.fillRect(4, y + 2, 3, 3, SH110X_WHITE);   // viñeta cuadrada (no ensucia el texto)
   }
-  display.setCursor(selected ? 7 : 11, y);
+  display.setCursor((selected && !marker) ? 7 : 11, y);
   display.print(text);
   display.setTextColor(SH110X_WHITE);
 }
@@ -947,6 +949,36 @@ void drawStatusClock(const char *hhmm) {
   display.getTextBounds(hhmm, 0, 0, &bx, &by, &bw, &bh);
   display.setCursor((SCREEN_WIDTH - (int)bw) / 2, 0);
   display.print(hhmm);
+}
+
+// Insignia de mensajes sin leer sobre el icono "Hist" (x=48..87, y=8..37), alineada a su
+// derecha. Si el recuento cambia (o desaparece) se borra la anterior y se repinta el icono.
+void drawUnreadBadge(int n) {
+  static int shownN = 0, shownW = 0;
+  char buf[3];
+  int len = 0;
+  if (n > 0) {
+    if (n > 9) { buf[0] = '9'; buf[1] = '+'; len = 2; } else { buf[0] = (char)('0' + n); len = 1; }
+    buf[len] = 0;
+  }
+  int w = (n > 0) ? 6 * len + 5 : 0;
+
+  if (shownW && (n != shownN)) {           // la insignia anterior ya no vale: borrarla
+    display.fillRect(88 - shownW - 1, 7, shownW + 2, 13, SH110X_BLACK);
+    display.drawBitmap(48, 8, carpetaBitMap, 40, 30, SH110X_WHITE);   // repintar el icono de debajo
+    shownW = 0;
+  }
+  if (n <= 0) { shownN = 0; return; }
+
+  const int h = 11, x = 88 - w, y = 8;
+  display.fillRoundRect(x - 1, y - 1, w + 2, h + 2, 5, SH110X_BLACK);   // contorno: la separa del icono
+  display.fillRoundRect(x, y, w, h, 5, SH110X_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_BLACK);
+  display.setCursor(x + 3, y + 2);
+  display.print(buf);
+  display.setTextColor(SH110X_WHITE);
+  shownN = n; shownW = w;
 }
 
 bool animateHippoGivingHeart() {

@@ -42,6 +42,32 @@ MainState mainState = STATE_IDLE;
 SendSubState sendSubState = SEND_WAIT;
 
 //=============================================================
+// AVISO DE MENSAJE NUEVO
+//=============================================================
+
+// Con la pantalla apagada (suspension) backgroundTick() no puede dibujar: anota aqui el
+// aviso y lo atiende handleSleep() (enciende la pantalla SLEEP_ALERT_MS con una vista previa).
+static bool    g_alertPending = false;
+static uint8_t g_alertFrom    = 0;
+static String  g_alertText;
+
+// Un mensaje (o dibujo) acaba de entrar en el historial, ya marcado como NO LEIDO:
+//  - en el IDLE, el hipopotamo persigue el corazon (y la insignia de "Hist" sube);
+//  - en suspension, se pide el aviso con la pantalla;
+//  - en cualquier otro sitio (menus, juegos) queda la insignia al volver al IDLE.
+static void onNewIncoming(uint8_t sender, const String &preview) {
+    lastTimeReceived = millis();
+    Serial.print("[Historial] no leidos: "); Serial.println(History_unreadCount());
+    if (mainState == STATE_IDLE) {
+        triggerAnimation(ANIM_CHASING_HEART);
+    } else if (mainState == STATE_SLEEP) {
+        g_alertPending = true;
+        g_alertFrom = sender;
+        g_alertText = preview;
+    }
+}
+
+//=============================================================
 // SERVICIO DE FONDO
 //=============================================================
 
@@ -77,9 +103,8 @@ void backgroundTick() {
                     buf[i] = (i + 2 < (int)raw.length()) ? (uint8_t)raw[i + 2] : 0;
                 History_addIncoming("[dibujo]", sender);
                 Doodle_onReceived(sender, buf, History_getTimestamp(0));   // idx 0 = el recien anadido
-                lastTimeReceived = millis();
-                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
                 Serial.print("[Dibujo] de #"); Serial.println(sender);
+                onNewIncoming(sender, "(un dibujo)");
             }
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
@@ -87,8 +112,7 @@ void backgroundTick() {
                 Chat_sendAck(sender, msgId);    // confirmar recepcion SIEMPRE (aunque sea repetido)
                 if (!Chat_seenBefore(sender, msgId)) {   // dedup: solo guardar la 1a vez
                     History_addIncoming(text, sender);
-                    lastTimeReceived = millis();
-                    if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+                    onNewIncoming(sender, text);
                 } else {
                     Serial.print("[Chat] Duplicado descartado de #"); Serial.print(sender);
                     Serial.print(" msg "); Serial.println(msgId);
@@ -108,8 +132,7 @@ void backgroundTick() {
                 (raw.length() >= 2 && raw[0] == 'H' && raw[1] == 'R');
             if (!gamePkt) {
                 History_addIncoming(raw, 0);
-                lastTimeReceived = millis();
-                if (mainState == STATE_IDLE) triggerAnimation(ANIM_CHASING_HEART);
+                onNewIncoming(0, raw);
             }
         }
     }
@@ -327,6 +350,7 @@ bool handleIdle() {
     drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow(),
                   Chat_peerBatt(), Chat_peerBattLow());
     drawStatusClock(Clock_hhmm().c_str());
+    drawUnreadBadge(History_unreadCount());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
@@ -397,11 +421,69 @@ static void cpuLightSleep() {
 }
 #endif
 
+// Pantalla de aviso (suspension): vista previa del mensaje recien llegado.
+static void drawSleepAlert() {
+    display.clearDisplay();
+    drawTitleBar("Mensaje nuevo");
+    display.drawBitmap(54, 17, iconoCorazon, 20, 20, SH110X_WHITE);
+    String from = g_alertFrom ? (String("De #") + String((int)g_alertFrom)) : String("De ?");
+    int n = History_unreadCount();
+    if (n > 1) from += String("  (") + String(n) + " sin leer)";
+    display.setTextColor(SH110X_WHITE);
+    srCenter(from, 42, 1);
+    drawWrappedMessage(g_alertText, 56);
+    display.drawFastHLine(0, 114, SCREEN_WIDTH, SH110X_WHITE);
+    display.setCursor(2, 118); display.print("A: leer    B: cerrar");
+    display.display();
+}
+
 // ==================== STATE_SLEEP ====================
 bool handleSleep() {
 
     if (millis() - lastTimeReceived > LORA_DEEP_SLEEP) {
         LoRa.sleep();
+    }
+
+    // --- Aviso de mensaje nuevo con la pantalla apagada ---
+    // backgroundTick() pide el aviso (g_alertPending); aqui se enciende la pantalla
+    // SLEEP_ALERT_MS con una vista previa. A = leer (abre el Historial y despierta del
+    // todo), B = cerrar; sin pulsar, vuelve a apagarse sola. Mientras dura, las
+    // pulsaciones NO cuentan para el despertar de 3 pulsaciones.
+    static bool alertActive = false;
+    static unsigned long alertSince = 0;
+    static bool alertPrevA = false, alertPrevB = false;
+    if (g_alertPending) {                        // llego un mensaje (otro, si ya habia aviso): (re)dibujar
+        g_alertPending = false;
+        if (!alertActive) {
+            Display_setPower(true);
+            alertPrevA = isMorsePressed(); alertPrevB = isFinishPressed();
+        }
+        alertActive = true;
+        alertSince = millis();
+        drawSleepAlert();
+    }
+    if (alertActive) {
+        bool a = isMorsePressed(), b = isFinishPressed();
+        bool wantRead = (a && !alertPrevA), wantClose = (b && !alertPrevB);
+        alertPrevA = a; alertPrevB = b;
+        if (wantRead) {                          // A: leer ahora
+            alertActive = false;
+            buttonPressCount = 0;
+            mainState = STATE_HISTORY_MENU;
+            lastInteraction = millis();
+            Display_clear();
+            menuTransitionDelay();
+            return true;
+        }
+        if (wantClose || millis() - alertSince > SLEEP_ALERT_MS) {   // B o sin pulsar: a dormir
+            alertActive = false;
+            buttonPressCount = 0;
+            Display_clear();
+            Display_setPower(false);
+            if (wantClose) menuTransitionDelay();
+        }
+        delay(15);                               // atento a los botones (sin siesta de CPU)
+        return true;
     }
 
     // Para despertar hacen falta WAKE_PRESS_COUNT pulsaciones DISTINTAS dentro
@@ -702,6 +784,7 @@ bool handleHistoryMenu() {
     static bool forceRedraw = true;
     static bool firstTime = true;
     static bool justEntered = true;
+    static int  seenDepth = -1;        // fila mas antigua (indice) que ha llegado a verse en esta visita
 
     static int candidateSel = -1;
     static unsigned long candidateSince = 0;
@@ -748,6 +831,7 @@ bool handleHistoryMenu() {
         prevSelected = -1;
         selected = 0;       // empezar siempre en el mensaje más reciente
         topIndex = 0;
+        seenDepth = -1;
     }
 
     if (firstTime || forceRedraw) {
@@ -758,9 +842,10 @@ bool handleHistoryMenu() {
         for (int line = 0; line < LINES_PER_PAGE; ++line) {
             int idx = topIndex + line;
             if (idx >= total) break;
-            drawListRow(20 + line * 13, histListLine(idx), idx == selected);
+            drawListRow(20 + line * 13, histListLine(idx), idx == selected, History_isUnread(idx));
         }
         display.display();
+        seenDepth = max(seenDepth, min(total - 1, topIndex + LINES_PER_PAGE - 1));
 
         prevTop = topIndex;
         prevSelected = selected;
@@ -789,6 +874,7 @@ bool handleHistoryMenu() {
         topIndex = selected - LINES_PER_PAGE + 1;
         forceRedraw = true;
     }
+    seenDepth = max(seenDepth, min(total - 1, topIndex + LINES_PER_PAGE - 1));   // filas que se han visto
 
     if (isMorsePressed()) {
         delay(50);
@@ -799,6 +885,7 @@ bool handleHistoryMenu() {
             // ---- VISTA DEL MENSAJE COMPLETO ----
             {
                 String full = History_getMessage(selected);
+                History_markRead(selected);      // abrirlo = leerlo
 
                 String titulo;
                 if (History_isOutgoing(selected)) {
@@ -943,7 +1030,7 @@ bool handleHistoryMenu() {
                 break;
             }
 
-            drawListRow(20 + line * 13, histListLine(idx), idx == selected);
+            drawListRow(20 + line * 13, histListLine(idx), idx == selected, History_isUnread(idx));
             cachedMinutes[line] = histAgeMinForCache(idx);
         }
 
@@ -960,6 +1047,7 @@ bool handleHistoryMenu() {
             while (isFinishPressed()) { delay(10); }
             delay(50);
             
+            History_markReadUpTo(seenDepth);     // lo que ha llegado a verse en la lista, leido
             mainState = STATE_IDLE;
             menuTransitionDelay();
             display.clearDisplay();

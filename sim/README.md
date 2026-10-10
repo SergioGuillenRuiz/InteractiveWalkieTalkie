@@ -133,6 +133,8 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `doodle.sim`       | Lienzo 24×24: dibujar y enviar; recibir y mostrar |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
+| `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
+| `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
 | `peer_batt.sim`    | Batería del compañero junto al corazón de presencia (nivel, "!" de batería baja, oculta fuera de alcance) |
 | `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
@@ -213,6 +215,7 @@ expect notext <sub>    la pantalla NO contiene <sub>
 expect serial <sub>    el log serie contiene <sub>
 expect sent <sub>      el último TX LoRa descifra y contiene <sub>
 expect beacon gen|batt|epoch|time <v>   la última BALIZA transmitida lleva ese valor (time = HH:MM)
+expect panel on|off    el panel OLED está encendido/apagado (la suspensión lo apaga)
 expect pixel <x> <y> on|off   estado de un píxel
 watch pixel <x> <y> on|off <ms>   ejecuta el firmware <ms> y comprueba el píxel tras CADA vuelta de loop()
                        (detecta parpadeos que un expect puntual no ve)

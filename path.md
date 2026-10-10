@@ -17,12 +17,13 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Menú | Menú principal (Enviar / Historial / Juegos) con el hipopótamo animado y dormido por inactividad; el cursor se repinta en cada vuelta (no desaparece tras dormir/despertar ni tras las animaciones) y las etiquetas del menú de juegos no se cortan |
 | Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24) |
 | Mensajería | Identificador por equipo, cifrado AES-128 con IV aleatorio, confirmación "Entregado", 3 reintentos, cola de pendientes persistente y descarte de duplicados |
-| Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación |
+| Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación. Los recibidos entran como **no leídos** (bit persistente): insignia con el recuento sobre el icono "Hist" (9+), punto de "nuevo" en la fila y se marcan como leídos al abrirlos o al salir de la lista si su fila llegó a verse |
+| Aviso | Mensaje o dibujo nuevo: el hipopótamo persigue el corazón en el menú principal; con la pantalla apagada (suspensión) se enciende 8 s con vista previa (**A** = leer, abre el Historial; **B** = cerrar; sin pulsar se apaga sola) y esas pulsaciones no cuentan para el despertar de 3 pulsaciones |
 | Hora | Se pone a mano (mantener **B** 1,5 s en el menú principal → "Poner la hora": horas / decenas / unidades de minuto con el pote), se muestra en el menú principal y en el Historial, se difunde y es **autoritativa** entre equipos (generación de ajuste en la baliza: la última hora puesta gana aunque se corrija hacia atrás), persiste en EEPROM y las antigüedades del historial no cambian al saltar el reloj. Es la hora local (sin zona horaria: al cambiar la hora de verano/invierno hay que volver a ponerla). No se puede por puerto serie: el SCL del OLED va al pin RX |
 | Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance, con su nivel de batería (y "!" si avisa de batería baja) a la izquierda del corazón |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 30 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 32 tests, multi-dispositivo y demos |
 
 ---
 
@@ -37,7 +38,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - Tres en raya y Tetris 2 jugadores descartan cualquier paquete que no sea del juego (`src/TresEnRaya.cpp:61`, `src/TetrisCoop.cpp:349`).
   - HippoRadar guarda en el historial los paquetes en crudo (`src/HippoRadar.cpp:106`), así que confirmaciones y balizas aparecerían como texto basura.
   - Durante esas partidas no se envían balizas ni reintentos.
-- [ ] **Aviso de mensaje nuevo.** Solo hay una animación si estás en el menú principal. En suspensión no se avisa, y al despertar no hay indicador de "no leído".
 - [ ] **Varios equipos.** El firmware solo conoce un "compañero" (el último que oyó). Con 3 o más equipos, la presencia salta de uno a otro.
 
 ---
@@ -49,7 +49,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - La clave AES está fija en el código y es la misma para todos los equipos.
   - No hay autenticación de mensajes (cualquiera con el firmware podría suplantar a otro equipo).
   - No hay protección contra reenvíos de paquetes antiguos.
-- [ ] Indicador de mensajes no leídos.
 - [ ] Dibujos guardados en EEPROM.
 - [ ] Manual de usuario: el README solo tiene la lista de componentes y el simulador.
 - [ ] Zumbador o vibración (opcional; no está en la lista de componentes).
@@ -86,7 +85,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
    - enviar los paquetes en binario;
    - bajar el ritmo de Tetris 2J y HippoRadar a algo que quepa en el canal.
 3. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
-4. [ ] **Recepción dentro de los juegos** y el indicador de no leídos.
+4. [ ] **Recepción dentro de los juegos.**
 5. [ ] **Dibujos:** persistentes, en el historial y con confirmación.
 6. [ ] **Seguridad:** emparejamiento y clave por pareja.
 7. [ ] **Pulido:** un manual de usuario.

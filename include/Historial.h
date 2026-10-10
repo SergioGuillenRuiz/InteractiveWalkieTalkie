@@ -19,6 +19,14 @@ bool          History_isOutgoing(int index);   // true = lo enviaste tu
 uint8_t       History_getSender(int index);    // id del emisor (0 = desconocido / propio)
 bool          History_isFromThisBoot(int index); // true = recibido/enviado en esta sesion (antiguedad fiable)
 
+// --- No leidos --------------------------------------------------------------
+// Todo mensaje RECIBIDO entra como "no leido" (bit persistente en EEPROM: sobrevive a un
+// reinicio); los enviados nunca lo estan. Indices como el resto de la API (0 = mas reciente).
+int  History_unreadCount();               // cuantos mensajes recibidos siguen sin leer
+bool History_isUnread(int index);
+void History_markRead(int index);         // marca UNO como leido
+void History_markReadUpTo(int index);     // marca como leidos los mas recientes 0..index
+
 int  History_count();
 void History_deleteMessage(int index);
 

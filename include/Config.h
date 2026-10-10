@@ -47,6 +47,10 @@
 // Mantener B este tiempo en el menú principal abre "Poner la hora" (ClockSetup.h)
 #define CLOCK_SETUP_HOLD_MS  1500
 
+// Con la pantalla apagada (suspensión), un mensaje nuevo la enciende este tiempo para
+// avisar (A = leer, B = cerrar; sin pulsar, vuelve a apagarse sola).
+#define SLEEP_ALERT_MS       8000
+
 // Light-sleep de la CPU durante la suspensión (gran ahorro, ESP8266).
 // Ponlo a 0 si en tu placa diera problemas al despertar (recuperable con RESET).
 #define ENABLE_CPU_LIGHT_SLEEP  1

@@ -1,0 +1,229 @@
+# ============================================================
+#  Mensajes NO LEIDOS.
+#  Todo mensaje (o dibujo) recibido entra como "no leido" (bit persistente en EEPROM);
+#  los enviados nunca. Se ve como:
+#    - insignia con el recuento sobre el icono "Hist" del menu principal: pastilla en
+#      x=77..87, y=8..18 (x=71..87 con "9+"); el pixel (87,13) cae dentro de ella;
+#    - punto de "nuevo" en la fila del Historial: circulo de 5x5 (el pixel (3,23) solo
+#      se enciende con el circulo; la vineta normal es un cuadrado de 3x3 en x=4..6).
+#  Un mensaje pasa a leido al abrirlo, o al SALIR del Historial si su fila llego a verse.
+#  (Device_id del sim = 137, peer #50.)
+# ============================================================
+wait 600
+pot 80
+wait 300
+
+# --- Sin mensajes: sin insignia ---
+expect pixel 87 13 off
+print Sin mensajes: sin insignia
+
+# --- Tres mensajes en el IDLE: el recuento sube y aparece la insignia ---
+chatmsg 50 1 hola
+run 400
+expect serial no leidos: 1
+expect pixel 87 13 on
+chatmsg 50 2 que tal
+run 400
+expect serial no leidos: 2
+chatmsg 50 3 cenamos fuera
+run 5000
+expect serial no leidos: 3
+expect pixel 87 13 on
+shot unread_idle_3
+print Tres mensajes recibidos: insignia y recuento 3
+
+# --- Duplicado (mismo msgId), eco propio y ACK/baliza NO cuentan ---
+chatmsg 50 3 cenamos fuera
+run 400
+chatmsg 137 9 eco propio
+run 400
+chatack 137 77
+run 300
+presence 50 0 80
+run 400
+expect serial Duplicado descartado
+print Duplicados, eco propio, ACK y balizas no son mensajes nuevos
+
+# --- Reinicio: los no leidos persisten (bit en EEPROM) ---
+reboot
+wait 800
+pot 80
+wait 400
+expect pixel 87 13 on
+print Reinicio: la insignia sigue (no leidos persistentes)
+
+# --- Abrir el Historial: filas nuevas marcadas; salir las deja leidas ---
+pot 80
+wait 200
+pot 512
+wait 300
+tap morse                       # IDLE -> Historial (cursor en Hist)
+wait 500
+expect text Historial
+pot 0
+wait 400
+expect pixel 5 23 off           # fila 0 (SELECCIONADA: pildora blanca): punto NEGRO de "nuevo" en su centro
+expect pixel 3 36 on            # fila 1: circulo blanco de "nuevo" (el cuadrado normal no llega a x=3)
+expect pixel 3 49 on            # fila 2
+shot unread_historial
+print Historial: las tres filas llevan el punto de nuevo
+in 0 finish down
+in 200 finish up
+run 700
+expect serial leidos; quedan sin leer: 0
+wait 600
+pot 80
+wait 300
+expect pixel 87 13 off
+print Al salir del Historial: leidos y sin insignia
+
+# --- Los ENVIADOS nunca son no leidos ---
+tap morse
+wait 300
+pot 300
+wait 300
+tap morse
+wait 300
+pot 585
+wait 300
+tap morse
+wait 700
+expect serial Chat] Enviando: happy
+in 0 finish down
+in 150 finish up
+run 700
+pot 80
+wait 800
+expect pixel 87 13 off
+print Un mensaje enviado no cuenta como no leido
+
+# --- Un dibujo recibido tambien es no leido ---
+doodle 50
+run 400
+expect serial Dibujo] de #50
+expect serial no leidos: 1
+expect pixel 87 13 on
+print Un dibujo recibido es no leido
+
+# --- Llegan mientras se esta en otro menu (Enviar): cuentan al volver ---
+pot 80
+wait 200
+tap morse
+wait 400
+expect text Enviar
+chatmsg 50 20 desde el menu enviar
+run 500
+expect serial no leidos: 2
+in 0 finish down
+in 150 finish up
+run 700
+pot 80
+wait 800
+expect pixel 87 13 on
+print Recibido en el menu Enviar: la insignia aparece al volver al IDLE
+
+# --- Visibilidad parcial: 6 sin leer, solo se ven 4 filas -> quedan 2 ---
+# (primero leer lo pendiente)
+pot 512
+wait 300
+tap morse
+wait 500
+in 0 finish down
+in 200 finish up
+run 700
+pot 80
+wait 800
+expect pixel 87 13 off
+chatmsg 50 31 m1
+run 450
+chatmsg 50 32 m2
+run 450
+chatmsg 50 33 m3
+run 450
+chatmsg 50 34 m4
+run 450
+chatmsg 50 35 m5
+run 450
+chatmsg 50 36 m6
+run 450
+expect serial no leidos: 6
+pot 350                         # columna Hist del menu; en la lista cae en la fila 3 (no hace falta desplazarse)
+wait 300
+tap morse                       # abrir el Historial: se ven las filas 0..3
+wait 500
+in 0 finish down                # y salir sin desplazarse
+in 200 finish up
+run 700
+expect serial leidos; quedan sin leer: 2
+pot 80
+wait 800
+expect pixel 87 13 on           # siguen 2 sin leer
+print Solo se marcan los mensajes cuya fila llego a verse (6 -> 2)
+
+# --- Desplazarse hasta el final de la lista los marca todos ---
+pot 512
+wait 300
+tap morse
+wait 500
+pot 1000                        # baja hasta la fila mas antigua
+wait 600
+in 0 finish down
+in 200 finish up
+run 700
+expect serial quedan sin leer: 0
+pot 80
+wait 800
+expect pixel 87 13 off
+print Al desplazarse hasta el final todos pasan a leidos
+
+# --- Abrir un mensaje en detalle lo marca como leido al instante ---
+chatmsg 50 41 uno
+run 450
+chatmsg 50 42 dos
+run 450
+expect serial no leidos: 2
+pot 512
+wait 300
+tap morse
+wait 500
+pot 0
+wait 400
+in 0 morse down                 # abrir el detalle de la fila 0
+in 200 morse up
+run 700
+expect serial leido; quedan sin leer: 1
+expect text De #50
+print Abrir el detalle marca ese mensaje como leido
+
+# --- Mas de 9 sin leer: "9+" (pastilla mas ancha) ---
+in 0 finish down                # volver a la lista
+in 200 finish up
+run 700
+in 0 finish down                # y salir al IDLE
+in 200 finish up
+run 700
+pot 80
+wait 800
+chatmsg 50 51 a
+run 450
+chatmsg 50 52 b
+run 450
+chatmsg 50 53 c
+run 450
+chatmsg 50 54 d
+run 450
+chatmsg 50 55 e
+run 450
+chatmsg 50 56 f
+run 450
+chatmsg 50 57 g
+run 450
+chatmsg 50 58 h
+run 450
+chatmsg 50 59 i
+run 450
+chatmsg 50 60 j
+run 450
+expect pixel 72 13 on           # pastilla ancha (x=71..87)
+shot unread_9mas
+print Diez o mas sin leer: insignia 9+

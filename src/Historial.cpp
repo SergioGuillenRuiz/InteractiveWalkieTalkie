@@ -24,6 +24,7 @@ static const uint8_t MAGIC[3] = { 'W', 'M', '2' };   // Walkie Messages v2
 static_assert(EEPROM_SIZE == EE_HISTORIAL_END, "EE_HISTORIAL_END no coincide con EEPROM_SIZE");
 
 #define FLAG_OUTGOING  0x01                       // bit0: el mensaje lo envie yo
+#define FLAG_UNREAD    0x02                       // bit1: recibido y aun sin leer (persistente)
 
 // Historial en RAM (cronologico): 0 = mas antiguo, count-1 = mas reciente.
 // (la API expone el indice 0 como el mas RECIENTE)
@@ -191,9 +192,9 @@ static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
     Serial.println(shortMsg);
 }
 
-void History_addIncoming(const String &msg, uint8_t sender) { addEntry(msg, 0, sender); }
+void History_addIncoming(const String &msg, uint8_t sender) { addEntry(msg, FLAG_UNREAD, sender); }
 void History_addOutgoing(const String &msg)                 { addEntry(msg, FLAG_OUTGOING, 0); }
-void History_addMessage(const String &msg)                  { addEntry(msg, 0, 0); }
+void History_addMessage(const String &msg)                  { addEntry(msg, FLAG_UNREAD, 0); }
 
 String History_getMessage(int index) {
     if (index < 0 || index >= messageCount) return "";
@@ -221,6 +222,36 @@ bool History_isFromThisBoot(int index) {
 }
 
 int History_count() { return messageCount; }
+
+int History_unreadCount() {
+    int n = 0;
+    for (int i = 0; i < messageCount; i++) if (messageFlags[i] & FLAG_UNREAD) n++;
+    return n;
+}
+
+bool History_isUnread(int index) {
+    if (index < 0 || index >= messageCount) return false;
+    return (messageFlags[messageCount - 1 - index] & FLAG_UNREAD) != 0;
+}
+
+void History_markRead(int index) {
+    if (!History_isUnread(index)) return;
+    messageFlags[messageCount - 1 - index] &= (uint8_t)~FLAG_UNREAD;
+    saveAll();
+    Serial.print("[Historial] leido; quedan sin leer: "); Serial.println(History_unreadCount());
+}
+
+void History_markReadUpTo(int index) {
+    bool changed = false;
+    for (int i = 0; i <= index && i < messageCount; i++) {
+        uint8_t &f = messageFlags[messageCount - 1 - i];
+        if (f & FLAG_UNREAD) { f &= (uint8_t)~FLAG_UNREAD; changed = true; }
+    }
+    if (changed) {
+        saveAll();
+        Serial.print("[Historial] leidos; quedan sin leer: "); Serial.println(History_unreadCount());
+    }
+}
 
 void History_shiftTimestamps(int32_t delta) {
     if (delta == 0 || messageCount == 0) return;

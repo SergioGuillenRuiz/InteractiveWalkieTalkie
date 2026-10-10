@@ -53,7 +53,7 @@ void drawGamesMenu(int seleccion, bool force = false);
 
 // Estilo común de menús/pantallas de texto (no vuelcan a pantalla):
 void drawTitleBar(const char *title, const char *right = "");   // franja de título
-void drawListRow(int y, const String &text, bool selected);     // fila (selección en píldora)
+void drawListRow(int y, const String &text, bool selected, bool marker = false);  // fila (selección en píldora; marker = punto de "nuevo")
 void moveCursor();
 void Display_resetMenuCursor();
 
@@ -80,6 +80,9 @@ void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow,
                    uint8_t peerBatt = 0xFF, bool peerBattLow = false);
 // Hora ("HH:MM", o "--:--" si nadie la ha puesto) centrada en la franja de estado.
 void drawStatusClock(const char *hhmm);
+// Insignia con el nº de mensajes sin leer (9+ si hay más) en la esquina superior derecha del
+// icono "Hist" del menú principal. n <= 0 la borra. Idempotente: se llama en cada vuelta.
+void drawUnreadBadge(int n);
 
 void updateHippoAnimation();
 void triggerAnimation(HippoAnimation anim);

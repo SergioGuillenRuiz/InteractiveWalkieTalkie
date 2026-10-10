@@ -1,0 +1,165 @@
+# ============================================================
+#  Aviso de mensaje nuevo con la PANTALLA APAGADA (suspension).
+#  Un mensaje o dibujo NUEVO enciende el panel SLEEP_ALERT_MS (8 s) con una vista previa
+#  ("Mensaje nuevo", emisor, texto). A abre el Historial (despierta del todo); B lo cierra
+#  y vuelve a dormir; sin pulsar, se apaga solo. Las pulsaciones del aviso NO cuentan para
+#  el despertar de 3 pulsaciones. Duplicados, ACK y balizas no encienden nada.
+#  La insignia de no leidos (pixel (87,13)) se ve al despertar.   (Device_id del sim = 137.)
+# ============================================================
+wait 300
+expect panel on
+
+# --- Entrar en suspension (5 min sin tocar nada): panel apagado ---
+ff 305000
+wait 200
+expect panel off
+expect pixel 64 64 off
+print En suspension el panel esta apagado
+
+# --- Mensaje nuevo: se enciende el panel con la vista previa ---
+chatmsg 50 1 hola desde lejos
+run 600
+expect panel on
+expect text Mensaje nuevo
+expect text De #50
+expect text hola desde lejos
+expect text A: leer
+expect serial no leidos: 1
+shot sleep_alert_1
+print Mensaje nuevo en suspension: panel encendido con vista previa
+
+# --- Sin pulsar nada se apaga solo (8 s) ---
+run 7000
+expect panel on
+run 2500
+expect panel off
+expect pixel 64 64 off
+print Sin pulsar: vuelve a apagarse sola
+
+# --- Despertar con 3 pulsaciones: la insignia de no leidos sigue ahi ---
+tap morse
+tap morse
+tap morse
+wait 600
+expect panel on
+expect text Env
+expect pixel 87 13 on
+print Al despertar: insignia de no leidos
+
+# --- B cierra el aviso: sigue dormido y esa pulsacion NO cuenta para el despertar ---
+ff 305000
+wait 200
+expect panel off
+chatmsg 50 2 segundo
+run 600
+expect panel on
+expect text Mensaje nuevo
+expect serial no leidos: 2
+expect text (2 sin leer)
+tap finish
+wait 400
+expect panel off
+tap morse
+tap morse                       # 2 pulsaciones (la de B no cuenta): aun NO despierta
+wait 400
+expect panel off
+tap morse                       # la 3a SI
+wait 600
+expect panel on
+expect text Env
+print B cierra el aviso y no cuenta para el despertar (hacen falta 3 pulsaciones)
+
+# --- A abre el Historial y marca como leido ---
+ff 305000
+wait 200
+expect panel off
+chatmsg 50 3 mira esto
+run 600
+expect text Mensaje nuevo
+expect text mira esto
+tap morse
+wait 700
+expect panel on
+expect text Historial
+expect text mira esto
+in 0 finish down
+in 200 finish up
+run 800
+expect serial leidos; quedan sin leer: 0
+pot 80
+wait 800
+expect pixel 87 13 off
+print A abre el Historial desde el aviso y los mensajes pasan a leidos
+
+# --- Un segundo mensaje durante el aviso lo reinicia y lo actualiza ---
+ff 305000
+wait 200
+chatmsg 50 4 uno
+run 600
+expect text uno
+run 5000                        # el aviso lleva ~5 s encendido
+chatmsg 50 5 dos
+run 600
+expect text dos
+run 6000                        # 6 s despues del segundo: sigue encendido (se reinicio el plazo)
+expect panel on
+run 3000
+expect panel off
+print Otro mensaje durante el aviso reinicia el plazo
+
+# --- Duplicado, ACK, baliza y eco propio NO encienden el panel ---
+chatmsg 50 5 dos
+run 600
+expect panel off
+chatack 137 99
+run 400
+expect panel off
+presence 50 0 80
+run 600
+expect panel off
+chatmsg 137 7 mi eco
+run 600
+expect panel off
+print Duplicados, ACK, balizas y eco propio: el panel sigue apagado
+
+# --- Un dibujo tambien avisa ---
+doodle 50
+run 600
+expect panel on
+expect text (un dibujo)
+expect text De #50
+run 9500
+expect panel off
+print Un dibujo recibido en suspension avisa
+
+# --- Mensaje sin sobre (formato antiguo): emisor desconocido ---
+lora rx texto sin sobre
+run 600
+expect panel on
+expect text De ?
+expect text texto sin sobre
+tap finish
+wait 400
+expect panel off
+print Mensaje sin sobre: De ?
+
+# --- Mensaje largo (92 caracteres): se ve entero, ajustado a lineas ---
+chatmsg 50 8 uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince
+run 600
+expect panel on
+expect text quince
+tap finish
+wait 400
+expect panel off
+print Mensaje largo: la vista previa lo muestra entero
+
+# --- Todo sigue como antes: despertar con 3 pulsaciones y volver a dormir ---
+tap morse
+tap morse
+tap morse
+wait 600
+expect text Env
+ff 305000
+wait 200
+expect panel off
+print Ciclo completo suspension-aviso-despertar OK

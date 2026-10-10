@@ -448,6 +448,11 @@ static void execLine(const std::string &raw) {
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
         }
+        else if (sub == "panel") {    // expect panel on|off: el panel OLED esta encendido/apagado
+            std::string st; is >> st;
+            if (st != "on" && st != "off") { scriptError("expect panel necesita on|off"); return; }
+            check(display.simPanelOn() == (st == "on"), "panel OLED " + st);
+        }
         else if (sub == "beacon") {   // ultima BALIZA transmitida: expect beacon gen|batt|epoch|time <valor>
             std::string field, val; is >> field >> val;
             if (field.empty() || val.empty() || (field != "gen" && field != "batt" && field != "epoch" && field != "time")) {
@@ -478,7 +483,7 @@ static void execLine(const std::string &raw) {
             bool on = display.simPixel(x, y);
             check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st);
         }
-        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|pixel)");
+        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|panel|pixel)");
     }
     else scriptError("comando desconocido \"" + cmd + "\"");
 }
