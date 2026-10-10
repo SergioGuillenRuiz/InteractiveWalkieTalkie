@@ -1,0 +1,143 @@
+# ============================================================
+#  Regresion de fallos de interfaz:
+#   1) El cursor del menu principal (triangulo bajo el icono elegido) desaparecia
+#      cuando el hipopotamo se dormia o al despertar, y tras las animaciones
+#      (corazon al recibir un mensaje), hasta mover el pote.
+#   2) "Tetris Coop" se dibujaba con la "T" cortada en el menu de juegos.
+#
+#  El cursor es un triangulo con el vertice en (X,49) y la base en y=55:
+#  el pixel (X,53) esta SIEMPRE dentro. X = 20 / 68 / 115 segun la columna.
+#  (Device_id del sim = 137.)
+# ============================================================
+wait 600
+
+# --- Cursor: sigue al pote y borra el anterior ---
+pot 80
+wait 400
+expect pixel 20 53 on
+expect pixel 68 53 off
+pot 512
+wait 400
+expect pixel 68 53 on
+expect pixel 20 53 off
+pot 1000
+wait 400
+expect pixel 115 53 on
+expect pixel 68 53 off
+print Cursor: sigue al pote (3 columnas) y borra el anterior
+
+# --- Cursor en la columna central mientras el hipopotamo duerme: las Zzz pasan
+#     por encima del cursor (borran x=50..69) y NO deben llevarselo ---
+pot 512
+wait 400
+ff 21000                  # >20 s sin tocar nada: el hipopotamo se duerme
+wait 100
+expect pixel 68 53 on
+wait 130
+expect pixel 68 53 on
+wait 170
+expect pixel 68 53 on
+wait 90
+expect pixel 68 53 on
+wait 210
+expect pixel 68 53 on
+wait 333
+expect pixel 68 53 on
+wait 777
+expect pixel 68 53 on
+wait 1501
+expect pixel 68 53 on
+shot ui_cursor_dormido
+print Cursor: intacto con el hipopotamo dormido (Zzz sobre el cursor)
+
+# --- Despertar moviendo el pote: la pantalla se limpia entera y el cursor vuelve
+pot 100
+wait 600
+expect pixel 20 53 on
+expect pixel 68 53 off
+print Cursor: reaparece al despertar al hipopotamo
+
+# --- Despertar tras dormir con el cursor a la derecha ---
+pot 1000
+wait 400
+ff 21000
+wait 800
+expect pixel 115 53 on
+pot 900
+wait 600
+expect pixel 115 53 on
+print Cursor: tambien en la columna derecha
+
+# --- Tras la animacion de "mensaje nuevo" (el hipopotamo persigue el corazon) ---
+pot 80
+wait 400
+chatmsg 50 1 hola
+wait 150
+expect serial Guardado: hola
+wait 1200
+expect pixel 20 53 on        # en mitad de la animacion
+wait 8000
+expect pixel 20 53 on        # animacion terminada
+wait 1500
+expect pixel 20 53 on
+shot ui_cursor_tras_animacion
+print Cursor: intacto durante y tras la animacion de mensaje nuevo
+
+# --- Animacion de "dar corazon" al enviar (Instant -> happy) ---
+pot 80
+wait 300
+tap morse
+wait 300
+expect text Enviar
+pot 300
+wait 300
+tap morse
+wait 300
+pot 585
+wait 300
+tap morse
+wait 600
+expect text Enviado
+in 0 finish down
+in 150 finish up
+run 700
+in 0 finish down       # B en la pantalla de modo: volver a IDLE
+in 150 finish up
+run 900
+expect text Hist
+# El pote sigue en 585 (columna central): el cursor debe estar en X=68 durante
+# la animacion del corazon y despues.
+expect pixel 68 53 on
+wait 1000
+expect pixel 68 53 on
+wait 6000
+expect pixel 68 53 on
+print Cursor: intacto durante y tras la animacion de envio
+
+# --- Etiqueta "Tetris Coop" completa en el menu de juegos ---
+pot 1000
+wait 300
+tap morse
+wait 500
+pot 80
+wait 500
+expect text Tetris Coop
+# La "T" mide 5 px de ancho con el palo en la columna 2: con la etiqueta cortada
+# (x=-3) el palo quedaba fuera (x=-1) y en x=2 solo habia hueco.
+expect pixel 2 27 on
+expect pixel 0 24 on
+shot ui_tetris_label
+print Etiqueta Tetris Coop: la T no se corta
+
+# --- El resto de etiquetas siguen dentro de la pantalla ---
+pot 250
+wait 400
+expect text Poker
+expect pixel 127 24 off
+pot 800
+wait 400
+expect text HippoRadar
+pot 1020
+wait 400
+expect text 3 en raya
+print Etiquetas del menu de juegos OK

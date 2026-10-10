@@ -36,6 +36,22 @@ static unsigned long lastUpdate = 0;
 // moveCursor para poder forzar su redibujado al re-entrar al menú).
 static int menuCursorLastX = -1;
 
+// Triangulo del cursor del menu principal (y=49..55, justo bajo el texto de los
+// iconos). Las animaciones del hipopotamo borran rectangulos que invaden esa
+// franja y un Display_clear() la borra entera: por eso el cursor se REPINTA en
+// cada vuelta (restoreMenuCursor, idempotente) y todo borrado de la zona de
+// animaciones pasa por eraseKeepCursor(), que lo restaura antes de volcar.
+static void paintMenuCursor(int x, uint16_t color) {
+  display.fillTriangle(x, 49, x - 3, 55, x + 3, 55, color);
+}
+static void restoreMenuCursor() {
+  if (menuCursorLastX >= 0) paintMenuCursor(menuCursorLastX, SH110X_WHITE);
+}
+static void eraseKeepCursor(int x, int y, int w, int h) {
+  display.fillRect(x, y, w, h, SH110X_BLACK);
+  restoreMenuCursor();
+}
+
 //Variables de gestión de animaciones
 static HippoAnimation currentAnimation = ANIM_NORMAL;
 static HippoAnimation forcedAnimation = ANIM_NONE;
@@ -211,7 +227,7 @@ bool animateHippo() {
   // Dibujar el frame actual
   if (needsRedraw) {
     // Borrar área del hipopótamo
-    display.fillRect(50, 55, 81, 81, SH110X_BLACK);
+    eraseKeepCursor(50, 55, 81, 81);
     
     // Dibujar frame actual
     switch (frame) {
@@ -309,7 +325,7 @@ bool animateHippoWithZzz() {
     if (zzzParticles[i].active) {
       // Solo borrar si la posición anterior era visible
       if (zzzParticles[i].prevY >= 0 && zzzParticles[i].prevY <= 128) {
-        display.fillRect(50, zzzParticles[i].prevY - 16, 20, ZZZ_HEIGHT, SH110X_BLACK);
+        eraseKeepCursor(50, zzzParticles[i].prevY - 16, 20, ZZZ_HEIGHT);
       }
     }
   }
@@ -959,7 +975,7 @@ bool animateHippoGivingHeart() {
       // Movimiento lento hacia el corazón (1 pixel cada 50ms)
       if (now - lastMoveTime >= 50 && hippoX > heartX + 10) {
         // Borrar área de animación (sin iconos superiores)
-        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        eraseKeepCursor(0, 50, screenWidth, screenHeight - 50);
         
         // Mover hipopótamo
         hippoX -= 1;
@@ -993,7 +1009,7 @@ bool animateHippoGivingHeart() {
       // Movimiento rápido (5 pixels cada 30ms)
       if (now - lastMoveTime >= 30 && hippoX > heartX - 5) {
         // Borrar área de animación
-        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        eraseKeepCursor(0, 50, screenWidth, screenHeight - 50);
         
         // Mover hipopótamo rápidamente
         hippoX -= 5;
@@ -1018,7 +1034,7 @@ bool animateHippoGivingHeart() {
       // Saltitos sincronizados (15 saltos)
       if (now - lastMoveTime >= 60) {
         // Borrar área de animación
-        display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+        eraseKeepCursor(0, 50, screenWidth, screenHeight - 50);
         
         // Saltar arriba o abajo
         if (jumpCounter % 2 == 0) {
@@ -1048,7 +1064,7 @@ bool animateHippoGivingHeart() {
     // ----------------------------------------------------
     case STATE_CLEANUP:
       // Borrar área de animación final
-      display.fillRect(0, 50, screenWidth, screenHeight - 50, SH110X_BLACK);
+      eraseKeepCursor(0, 50, screenWidth, screenHeight - 50);
       display.display();
       
       animState = STATE_DONE;
@@ -1073,7 +1089,11 @@ void moveCursor() {
   static int stableValue = 0;
   static unsigned long lastPotRead = 0;
   const unsigned long POT_READ_INTERVAL = 20;
-  
+
+  // Repintar el cursor en el buffer en CADA vuelta (aunque no se mueva): las
+  // animaciones y los borrados de pantalla pueden haberlo quitado. No vuelca.
+  restoreMenuCursor();
+
   unsigned long now = millis();
   if (now - lastPotRead < POT_READ_INTERVAL) {
     return;
@@ -1115,22 +1135,8 @@ void moveCursor() {
   cursorPos = sel;
   
   if (cursorX != menuCursorLastX) {
-    if (menuCursorLastX >= 0) {
-      display.fillTriangle(
-        menuCursorLastX, 49,
-        menuCursorLastX - 3, 55,
-        menuCursorLastX + 3, 55,
-        SH110X_BLACK
-      );
-    }
-
-    display.fillTriangle(
-      cursorX, 49,
-      cursorX - 3, 55,
-      cursorX + 3, 55,
-      SH110X_WHITE
-    );
-
+    if (menuCursorLastX >= 0) paintMenuCursor(menuCursorLastX, SH110X_BLACK);
+    paintMenuCursor(cursorX, SH110X_WHITE);
     display.display();
     menuCursorLastX = cursorX;
   }
@@ -1368,6 +1374,7 @@ void drawInstantMessagesMenu(int seleccion, bool force) {
       display.setTextColor(SH110X_WHITE);
       int textW = strlen(nombresMensajes[i]) * 6;
       int textX = x + (iconSize / 2) - (textW / 2);
+      textX = constrain(textX, 0, max(0, SCREEN_WIDTH - textW));   // sin cortar la etiqueta
       int textY = y + iconSize + 2;
       display.setCursor(textX, textY);
       display.print(nombresMensajes[i]);
@@ -1411,6 +1418,7 @@ void drawGamesMenu(int seleccion, bool force) {
       display.setTextColor(SH110X_WHITE);
       int textW = strlen(nombresJuegos[i]) * 6;
       int textX = x + (iconSize / 2) - (textW / 2);
+      textX = constrain(textX, 0, max(0, SCREEN_WIDTH - textW));   // "Tetris Coop" se cortaba por la izquierda
       int textY = y + iconSize + 2;
       display.setCursor(textX, textY);
       display.print(nombresJuegos[i]);
@@ -1442,7 +1450,7 @@ void updateHippoAnimation() {
 
     // LIMPIAR PANTALLA SI ES NECESARIO
     if (needsCleanup) {
-        display.fillRect(20, 50, 88, 75, SH110X_BLACK); // Área de animaciones
+        eraseKeepCursor(20, 50, 88, 75); // Área de animaciones
         display.display();
         needsCleanup = false;
         currentAnimation = ANIM_NORMAL;
@@ -1451,7 +1459,7 @@ void updateHippoAnimation() {
     // 1. Animaciones forzadas (máxima prioridad)
     if (forcedAnimation != ANIM_NONE) {
         // Limpiar antes de nueva animación
-        display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+        eraseKeepCursor(20, 50, 88, 75);
         display.display();
         
         currentAnimation = forcedAnimation;
@@ -1493,7 +1501,7 @@ void updateHippoAnimation() {
     if (inactiveTime > 20000) {
         if (!wasSleeping) {
             // Limpiar antes de sueño
-            display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+            eraseKeepCursor(20, 50, 88, 75);
             display.display();
             
             currentAnimation = ANIM_SLEEPY;
@@ -1504,6 +1512,7 @@ void updateHippoAnimation() {
         if (wasSleeping) {
             // Limpiar al salir del sueño
             display.clearDisplay();
+            restoreMenuCursor();
             display.display();
             
             currentAnimation = ANIM_NORMAL;
@@ -1530,7 +1539,7 @@ void updateHippoAnimation() {
 
 void triggerAnimation(HippoAnimation anim) {
     // Limpiar área de animación antes de nueva animación
-    display.fillRect(20, 50, 88, 75, SH110X_BLACK);
+    eraseKeepCursor(20, 50, 88, 75);
     display.display();
     
     forcedAnimation = anim;

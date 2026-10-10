@@ -14,14 +14,14 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 | Área | Funcionalidad |
 |---|---|
-| Menú | Menú principal (Enviar / Historial / Juegos) con el hipopótamo animado y dormido por inactividad |
+| Menú | Menú principal (Enviar / Historial / Juegos) con el hipopótamo animado y dormido por inactividad; el cursor se repinta en cada vuelta (no desaparece tras dormir/despertar ni tras las animaciones) y las etiquetas del menú de juegos no se cortan |
 | Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24) |
 | Mensajería | Identificador por equipo, cifrado AES-128 con IV aleatorio, confirmación "Entregado", 3 reintentos, cola de pendientes persistente y descarte de duplicados |
 | Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación |
 | Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 26 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 27 tests, multi-dispositivo y demos |
 
 ---
 
@@ -41,9 +41,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - Durante esas partidas no se envían balizas ni reintentos.
 - [ ] **Aviso de mensaje nuevo.** Solo hay una animación si estás en el menú principal. En suspensión no se avisa, y al despertar no hay indicador de "no leído".
 - [ ] **Varios equipos.** El firmware solo conoce un "compañero" (el último que oyó). Con 3 o más equipos, la presencia salta de uno a otro.
-- [ ] **Fallos de interfaz.**
-  - "Tetris Coop" se dibuja con la "T" cortada en el menú de juegos.
-  - El cursor del menú principal desaparece cuando el hipopótamo se duerme o tras despertar, y no vuelve hasta mover el potenciómetro.
 
 ---
 
@@ -96,7 +93,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 5. [ ] **Recepción dentro de los juegos** y el indicador de no leídos.
 6. [ ] **Dibujos:** persistentes, en el historial y con confirmación.
 7. [ ] **Seguridad:** emparejamiento y clave por pareja.
-8. [ ] **Pulido:** los fallos de interfaz y un manual de usuario.
+8. [ ] **Pulido:** un manual de usuario.
 
 ---
 
