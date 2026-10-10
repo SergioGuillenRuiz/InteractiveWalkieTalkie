@@ -1,0 +1,14 @@
+# ============================================================
+#  Autotest del MODELO DE RADIO: la libreria LoRa real (sin firmware) contra el chip SX1276
+#  simulado. Valida el tiempo en el aire con las cifras del roadmap (118 / 348 / 698 ms), el
+#  bloqueo de la CPU al transmitir y las reglas de recepcion: solo se oye lo que llega mientras se
+#  escucha (RX continuo, o RX unico dentro de su ventana de 102 ms), no en STDBY/SLEEP/TX, ni con otro
+#  SF o sincronismo; dos tramas solapadas se pierden; con CRC activo una trama corrupta se descarta
+#  y sin CRC llega alterada; una trama sin leer la pisa la siguiente.
+#  (La radio queda en un estado cualquiera: despues "reboot".)
+# ============================================================
+wait 300
+radio selftest
+reboot
+wait 300
+print Modelo de radio validado contra la libreria real

@@ -61,7 +61,25 @@ void air_init(const char *dir, const char *node, int rssi) {
 
 bool air_enabled() { return g_enabled; }
 
-void air_publish(const std::string &payloadHex) {
+static std::string toHex(const std::string &b) {
+    static const char *H = "0123456789abcdef";
+    std::string o; o.reserve(b.size() * 2);
+    for (unsigned char c : b) { o += H[c >> 4]; o += H[c & 15]; }
+    return o;
+}
+static bool fromHex(const std::string &h, std::string &out) {
+    if (h.size() % 2) return false;
+    out.clear();
+    for (size_t i = 0; i < h.size(); i += 2) {
+        auto v = [](char c) -> int { return c >= '0' && c <= '9' ? c - '0' : (c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1); };
+        int a = v(h[i]), b = v(h[i + 1]);
+        if (a < 0 || b < 0) return false;
+        out += (char)(a * 16 + b);
+    }
+    return true;
+}
+
+void air_publish(const AirFrame &fr) {
     if (!g_enabled) return;
 
     // Nombre unico y ordenable por tiempo: pkt_<ms>_<node>_<contador>.txt
@@ -74,7 +92,9 @@ void air_publish(const std::string &payloadHex) {
     fs::path fin = fs::path(g_dir) / name;
     {
         std::ofstream f(tmp, std::ios::binary);
-        f << g_node << " " << g_rssi << " " << payloadHex << "\n";
+        // nodo rssi freq sf bw cr preambulo crc sync payload(hex)
+        f << g_node << " " << g_rssi << " " << fr.freq << " " << fr.sf << " " << fr.bw << " " << fr.cr << " "
+          << fr.preamble << " " << (fr.crc ? 1 : 0) << " " << fr.sync << " " << toHex(fr.payload) << "\n";
     }
     std::error_code ec;
     fs::rename(tmp, fin, ec);   // rename atomico: nadie ve un fichero a medias
@@ -103,7 +123,7 @@ static void cleanup(uint64_t now) {
     }
 }
 
-void air_poll(std::vector<std::pair<std::string, int>> &out) {
+void air_poll(std::vector<AirFrame> &out) {
     if (!g_enabled) return;
 
     uint64_t now = nowMs();
@@ -132,10 +152,13 @@ void air_poll(std::vector<std::pair<std::string, int>> &out) {
     for (auto &fn : names) {
         g_seen.insert(fn);
         std::ifstream f(fs::path(g_dir) / fn, std::ios::binary);
-        std::string node, hex; int rssi = -50;
-        if (f >> node >> rssi >> hex) {
+        std::string node, hex; int rssi = -50, crc = 1;
+        AirFrame fr;
+        if (f >> node >> rssi >> fr.freq >> fr.sf >> fr.bw >> fr.cr >> fr.preamble >> crc >> fr.sync >> hex) {
             if (node == g_node) continue;    // half-duplex: no oigo lo que yo emito
-            out.push_back({hex, rssi});
+            if (!fromHex(hex, fr.payload)) continue;
+            fr.rssi = rssi; fr.crc = (crc != 0);
+            out.push_back(fr);
         }
     }
 }

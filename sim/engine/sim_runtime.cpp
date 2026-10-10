@@ -6,6 +6,7 @@
 #include <random>
 
 #include "sim_state.h"
+#include "sx127x.h"
 #include "Arduino.h"
 #include "Config.h"
 #include "EEPROM.h"
@@ -111,7 +112,7 @@ bool morseDown() { return g_morse; }
 bool finishDown() { return g_finish; }
 void setBatteryRaw(int raw) { g_battRaw = raw < 0 ? 0 : (raw > 1023 ? 1023 : raw); }
 int  getBatteryRaw() { return g_battRaw; }
-void resetClock() { g_now = 0; g_events.clear(); g_deadline = 0xFFFFFFFFu; }
+void resetClock() { g_now = 0; g_events.clear(); g_deadline = 0xFFFFFFFFu; sx::resetWorld(); }
 
 void serialPut(char c) { g_serial += c; }
 std::string serialLog() { return g_serial; }
@@ -132,10 +133,15 @@ void yield() { sim::applyDue(); }
 // E/S
 // ---------------------------------------------------------------------------
 void pinMode(uint8_t, uint8_t) {}
-void digitalWrite(uint8_t, uint8_t) {}
+void digitalWrite(uint8_t pin, uint8_t val) {
+    // Los pines del modulo LoRa los atiende el modelo del chip (NSS = chip select, RST = reinicio)
+    if (pin == PIN_LORA_NSS) sx::nssWrite(val != 0);
+    else if (pin == PIN_LORA_RST) sx::rstWrite(val != 0);
+}
 void analogWrite(uint8_t, int) {}
 
 int digitalRead(uint8_t pin) {
+    if (pin == PIN_LORA_DIO0) return sx::dio0Level() ? HIGH : LOW;
     if (pin == PIN_MORSE_BUTTON)  return g_morse  ? LOW : HIGH;  // INPUT_PULLUP: pulsado = LOW
     if (pin == PIN_FINISH_BUTTON) return g_finish ? LOW : HIGH;
     return HIGH;
@@ -167,6 +173,7 @@ size_t HardwareSerial::write(uint8_t c) { sim::serialPut((char)c); return 1; }
 HardwareSerial Serial;
 TwoWire Wire;
 SPIClass SPI;
+uint8_t SPIClass::transfer(uint8_t data) { return sx::spiTransfer(data); }
 
 // ---------------------------------------------------------------------------
 // EEPROM respaldada en fichero (persiste el historial entre ejecuciones)

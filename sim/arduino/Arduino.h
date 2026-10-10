@@ -35,6 +35,14 @@ typedef bool boolean;
 #define INPUT_PULLUP 0x02
 #define LSBFIRST 0
 #define MSBFIRST 1
+#define RISING  0x01
+#define FALLING 0x02
+#define CHANGE  0x03
+
+// Constantes binarias del core de Arduino que usa la libreria LoRa
+#define B111  7
+#define B1000 8
+#define bitWrite(value, bit, bitvalue) ((bitvalue) ? ((value) |= (1UL << (bit))) : ((value) &= ~(1UL << (bit))))
 
 // Pin analógico del potenciómetro (id de pin ficticio en el simulador)
 #define A0 17
@@ -112,6 +120,12 @@ int  digitalRead(uint8_t pin);
 void digitalWrite(uint8_t pin, uint8_t val);
 int  analogRead(uint8_t pin);
 void analogWrite(uint8_t pin, int val);
+
+// Interrupciones: el firmware no las usa (la libreria LoRa solo en onReceive/onTxDone, no usados)
+typedef void (*voidFuncPtr)(void);
+inline void attachInterrupt(uint8_t, voidFuncPtr, int) {}
+inline void detachInterrupt(uint8_t) {}
+#define digitalPinToInterrupt(p) (p)
 
 // ---------------------------------------------------------------------------
 // Aleatorios

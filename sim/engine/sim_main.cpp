@@ -24,6 +24,9 @@
 #include "sim_state.h"
 #include "framebuffer.h"
 #include "air_channel.h"
+#include "sx127x.h"
+#include <LoRa.h>              // la libreria real (sim/vendor/lora): el autotest del chip la usa directamente
+#include "MyLora.h"            // parametros de modulacion del proyecto (LORA_*)
 #include "EEPROM.h"
 #include "SimpleCrypto.h"      // String SimpleCrypto_encrypt/decrypt
 #include "Clock.h"             // Clock_set/Clock_now (comando settime)
@@ -186,6 +189,8 @@ static void check(bool ok, const std::string &desc) {
 // comprobaria nada y el test pasaria en silencio.
 static int g_lineNo = 0;
 static std::string g_curLine;
+static size_t g_markRx = 0, g_markTx = 0;       // "radio mark": los contadores de expect rx / expect tx parten de aqui
+static uint32_t g_markT = 0;
 static std::vector<uint32_t> g_waitSamples;   // instantes (ms) en que "waitfor" vio su texto: para "expect spread" 
 static void scriptError(const std::string &msg) {
     g_fail++;
@@ -213,6 +218,141 @@ static bool encryptedOk(const String &enc) {
     if (enc.length() > 0) return true;
     scriptError("el paquete supera el limite de 95 bytes que cifra el firmware: no se inyecta");
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Autotest del modelo del chip: la libreria LoRa REAL (sin firmware) contra el chip simulado.
+// Comprueba la formula del tiempo en el aire con los numeros del roadmap, el bloqueo al transmitir,
+// y las reglas de recepcion (escuchar, expirar, sorda en STDBY/SLEEP/TX, colision, parametros, CRC...).
+// Deja la radio en un estado cualquiera: despues hay que hacer "reboot" (setup() la reinicializa).
+// ---------------------------------------------------------------------------
+static void radioSelfTest() {
+    const bool wasIdeal = sx::ideal();
+    sx::setIdeal(false);
+    sx::peerFrame() = AirFrame();                                   // sf7 / 125 kHz / CR4-5 / 8 simbolos / CRC on / sync 0x12
+    sx::peerFrame().freq = (long)LORA_FREQUENCY;
+    auto radioInit = []() {
+        LoRa.setPins(PIN_LORA_NSS, PIN_LORA_RST, PIN_LORA_DIO0);
+        LoRa.begin((long)LORA_FREQUENCY);
+        LoRa.setSpreadingFactor(7); LoRa.setSignalBandwidth(125E3); LoRa.setTxPower(17);
+    };
+    auto payload = [](int n, char c) { std::string r; for (int i = 0; i < n; i++) r += (char)(c + (i % 7)); return r; };
+    auto txTime = [&](int n, int sf, bool crc) {                    // ms que BLOQUEA transmitir n bytes
+        radioInit(); LoRa.setSpreadingFactor(sf); if (crc) LoRa.enableCrc(); else LoRa.disableCrc();
+        String p(payload(n, 'A'));
+        uint32_t t0 = sim::now(); LoRa.beginPacket(); LoRa.print(p); LoRa.endPacket();
+        return (double)(sim::now() - t0);
+    };
+    // El chip pone al dia su estado de forma perezosa (en cada acceso por SPI/pin): se sincroniza antes de mirar.
+    auto lastOutcome = []() { sx::currentMode(); return sx::rxLog().empty() ? sx::RX_PENDING : sx::rxLog().back().outcome; };
+    auto near = [](double a, double b, double tol) { return std::fabs(a - b) <= tol; };
+    auto adv = [](double ms) { sim::advance((uint32_t)std::ceil(ms)); };
+
+    // --- 1) Tiempo en el aire y bloqueo de la CPU al transmitir (cifras del roadmap, CRC desactivado) ---
+    check(near(txTime(64, 7, false), 118.0, 1.5),  "TX de 64 B a SF7/125 kHz bloquea ~118 ms (ACK/mensaje corto en hexadecimal)");
+    check(near(txTime(224, 7, false), 348.4, 1.5), "TX de 224 B a SF7 bloquea ~348 ms (mensaje maximo en hexadecimal)");
+    check(near(txTime(64, 10, false), 698.4, 1.5), "TX de 64 B a SF10 bloquea ~698 ms (ping de HippoRadar)");
+    check(near(txTime(224, 7, true), 353.5, 1.5),  "con CRC activo el mismo paquete tarda ~5 ms mas (2 bytes de CRC)");
+    check(near(sx::airtimeMs(32, 7, 125000, 1, 8, true, false), 72.2, 0.5), "formula: 32 B a SF7 con CRC = 72,2 ms");
+
+    // --- 2) Recepcion continua: una trama se oye, con sus bytes y su RSSI ---
+    radioInit(); LoRa.receive();
+    std::string a = payload(48, 'a');
+    sx::inject(a, -63);
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, true, false) + 5);
+    check(digitalRead(PIN_LORA_DIO0) == HIGH, "DIO0 sube con RxDone");
+    int n = LoRa.parsePacket();
+    std::string got; while (LoRa.available()) got += (char)LoRa.read();
+    check(n == 48 && got == a, "RX continuo: se recibe la trama completa y sin errores");
+    check(LoRa.packetRssi() == -63, "RSSI del paquete = -63 dBm");
+    check(digitalRead(PIN_LORA_DIO0) == LOW, "DIO0 baja al borrar la bandera");
+
+    // --- 3) La libreria en modo sondeo (parsePacket repetido): RX unico con caducidad de 100 simbolos ---
+    radioInit(); LoRa.parsePacket();                                // arma RX unico (SymbTimeout = 100 simbolos = 102 ms)
+    check(sx::currentMode() == 6, "parsePacket() arma el RX unico");
+    adv(50);
+    sx::inject(a, -70);
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, true, false) + 5);
+    check(LoRa.parsePacket() == 48, "RX unico: trama que empieza DENTRO de la ventana de 102 ms: se oye");
+    radioInit(); LoRa.parsePacket();
+    adv(150);                                                       // la ventana expira: la radio vuelve a STDBY
+    check(sx::currentMode() == 1, "RX unico: pasados ~102 ms sin trama la radio vuelve a STDBY");
+    sx::inject(a, -70);
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, true, false) + 5);
+    bool lostTimeout = (lastOutcome() == sx::RX_LOST_RXTIMEOUT);
+    check(lostTimeout && LoRa.parsePacket() == 0, "RX unico expirado: la trama se PIERDE hasta el siguiente parsePacket()");
+
+    // --- 4) idle() entre sondeos deja la radio sorda (lo que hace handleIdle() en cada vuelta) ---
+    radioInit(); LoRa.parsePacket(); LoRa.idle();
+    sx::inject(a, -70);
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, true, false) + 5);
+    bool lostStandby = (lastOutcome() == sx::RX_LOST_STANDBY);
+    check(lostStandby && LoRa.parsePacket() == 0, "idle() tras armar la recepcion: la trama se pierde (radio sorda)");
+    // salir de recepcion a mitad de una trama la aborta
+    radioInit(); LoRa.receive();
+    sx::inject(a, -70);
+    adv(30); LoRa.idle(); adv(100);
+    check(lastOutcome() == sx::RX_LOST_ABORTED, "pasar a idle() a mitad de una trama la aborta");
+    // dormida
+    radioInit(); LoRa.sleep();
+    sx::inject(a, -70);
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, true, false) + 5);
+    check(lastOutcome() == sx::RX_LOST_SLEEP, "radio en sleep(): no oye nada");
+
+    // --- 5) Half-duplex: mientras se transmite no se oye ---
+    radioInit(); LoRa.beginPacket(); LoRa.print(String(payload(64, 'k'))); LoRa.endPacket(true);   // asincrono: vuelve ya
+    sx::inject(a, -70);
+    adv(300);
+    check(lastOutcome() == sx::RX_LOST_TX, "half-duplex: una trama que llega mientras se transmite se pierde");
+
+    // --- 6) Parametros de modulacion: otro SF no se demodula ---
+    radioInit(); LoRa.receive();
+    sx::peerFrame().sf = 10;
+    sx::inject(a, -70);
+    adv(sx::airtimeMs(48, 10, 125000, 1, 8, true, false) + 10);
+    check(lastOutcome() == sx::RX_LOST_MISMATCH, "trama a SF10 con el receptor a SF7: no se oye");
+    sx::peerFrame().sf = 7;
+    sx::peerFrame().sync = 0x34;
+    sx::inject(a, -70); adv(200);
+    check(lastOutcome() == sx::RX_LOST_MISMATCH, "otra palabra de sincronismo: no se oye");
+    sx::peerFrame().sync = 0x12;
+
+    // --- 7) Colision y CRC ---
+    radioInit(); LoRa.receive();
+    double air48 = sx::airtimeMs(48, 7, 125000, 1, 8, true, false);
+    sx::inject(a, -70); adv(20); sx::inject(a, -70);                // la 2a empieza con la 1a a medias
+    adv(air48 + 10);
+    sx::currentMode();
+    check(sx::rxLog()[sx::rxLog().size() - 2].outcome == sx::RX_CRC_ERROR && lastOutcome() == sx::RX_LOST_COLLISION,
+          "dos tramas solapadas: la 2a se pierde y la 1a llega con CRC erroneo");
+    check(LoRa.parsePacket() == 0, "con CRC erroneo la libreria descarta el paquete (parsePacket = 0)");
+    radioInit(); LoRa.receive();
+    sx::peerFrame().crc = false;
+    sx::inject(a, -70, true);                                       // trama corrupta SIN CRC: nadie se entera
+    adv(sx::airtimeMs(48, 7, 125000, 1, 8, false, false) + 5);
+    n = LoRa.parsePacket(); got.clear(); while (LoRa.available()) got += (char)LoRa.read();
+    check(n == 48 && got != a, "trama corrupta SIN CRC: llega y se entrega con datos alterados (el CRC existe por esto)");
+    sx::peerFrame().crc = true;
+
+    // --- 8) Dos tramas seguidas sin leer: la 2a pisa a la 1a ---
+    radioInit(); LoRa.receive();
+    std::string b = payload(40, 'p');
+    sx::inject(a, -70); adv(air48 + 2);
+    sx::inject(b, -70); adv(sx::airtimeMs(40, 7, 125000, 1, 8, true, false) + 2);
+    sx::currentMode();
+    check(sx::rxLog()[sx::rxLog().size() - 2].outcome == sx::RX_OVERRUN, "si el firmware no lee la 1a antes de que acabe la 2a, se pierde");
+    n = LoRa.parsePacket(); got.clear(); while (LoRa.available()) got += (char)LoRa.read();
+    check(n == 40 && got == b, "y lo que se lee es la ultima trama");
+
+    // --- 9) Tras transmitir hay que volver a escuchar (la libreria deja el chip en STDBY) ---
+    radioInit(); LoRa.receive();
+    LoRa.beginPacket(); LoRa.print(String(payload(20, 'x'))); LoRa.endPacket();
+    check(sx::currentMode() == 1 && !sx::listening(), "tras endPacket() el chip queda en STDBY: no escucha hasta llamar a receive()");
+    LoRa.receive();
+    check(sx::currentMode() == 5 && sx::listening(), "receive() vuelve al RX continuo");
+
+    sx::setIdeal(wasIdeal);
+    printf("  (autotest del chip hecho: la radio ha quedado en un estado cualquiera; usa \"reboot\" para continuar con el firmware)\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +445,34 @@ static void execLine(const std::string &raw) {
         if (bad == 0) snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms (%ld vueltas)", x, y, st.c_str(), (unsigned)ms, samples);
         else          snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms: falla en %ld de %ld vueltas (la 1a a los %u ms)", x, y, st.c_str(), (unsigned)ms, bad, samples, (unsigned)firstBad);
         check(bad == 0, b);
+    }
+    else if (cmd == "radio") {   // radio ideal on|off | peer <campo> <valor> | mark | report
+        std::string sub; is >> sub;
+        if (sub == "ideal") {
+            std::string v; is >> v;
+            if (v != "on" && v != "off") { scriptError("radio ideal necesita on|off"); return; }
+            sx::setIdeal(v == "on");
+            printf("  radio %s\n", v == "on" ? "IDEAL (siempre escucha, sin tiempo en el aire)" : "REALISTA (chip SX1276 + tiempo en el aire)");
+        } else if (sub == "peer") {      // parametros con que emiten los "otros equipos" que inyecta el guion
+            std::string f, v; is >> f >> v;
+            AirFrame &pf = sx::peerFrame();
+            if (f == "sf" && !v.empty()) pf.sf = atoi(v.c_str());
+            else if (f == "bw" && !v.empty()) pf.bw = (long)(atof(v.c_str()) * 1000.0);        // en kHz
+            else if (f == "crc" && (v == "on" || v == "off")) pf.crc = (v == "on");
+            else if (f == "preamble" && !v.empty()) pf.preamble = atoi(v.c_str());
+            else if (f == "sync" && !v.empty()) pf.sync = (int)strtol(v.c_str(), nullptr, 0);
+            else if (f == "freq" && !v.empty()) pf.freq = (long)(atof(v.c_str()) * 1e6);     // en MHz
+            else if (f == "reset") { pf.freq = (long)LORA_FREQUENCY; pf.sf = LORA_SPREADING; pf.bw = (long)LORA_BANDWIDTH; pf.cr = 1; pf.preamble = 8; pf.crc = true; pf.sync = 0x12; }
+            else { scriptError("radio peer necesita: sf <n> | bw <kHz> | crc on|off | preamble <n> | sync <hex> | freq <MHz> | reset"); return; }
+        } else if (sub == "mark") { g_markRx = sx::rxLog().size(); g_markTx = sx::txLog().size(); g_markT = sim::now(); }
+        else if (sub == "report") { printf("%s", sx::report().c_str()); }
+        else if (sub == "selftest") { radioSelfTest(); }
+        else if (sub == "log") {         // lista el destino de cada trama recibida desde la marca
+            auto &rl = sx::rxLog();
+            for (size_t i = g_markRx; i < rl.size(); i++)
+                printf("  rx t=%.0f..%.0f ms  %zu B  %s\n", rl[i].start, rl[i].end, rl[i].len, sx::outcomeName(rl[i].outcome));
+        }
+        else scriptError("subcomando radio desconocido \"" + sub + "\" (ideal|peer|mark|report|log|selftest)");
     }
     else if (cmd == "waitfor") {   // waitfor serial <minMs> <maxMs> <texto>: aparece en el log serie ENTRE minMs y maxMs
         // Ejecuta el firmware hasta que el texto aparezca en el log (solo lo nuevo, desde ahora) y
@@ -484,6 +652,56 @@ static void execLine(const std::string &raw) {
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
         }
+        else if (sub == "rx") {       // expect rx heard|lost|crc|<motivo> [=|>=|<=] <n>   (desde "radio mark")
+            std::string what, op = "=", nstr; is >> what >> nstr;
+            if (nstr == "=" || nstr == ">=" || nstr == "<=") { op = nstr; is >> nstr; }
+            if (what.empty() || nstr.empty()) { scriptError("expect rx necesita: heard|lost|crc|standby|sleep|tx|timeout|aborted|collision|mismatch|overrun [=|>=|<=] <n>"); return; }
+            int want = atoi(nstr.c_str());
+            auto &rl = sx::rxLog(); int n = 0;
+            for (size_t i = g_markRx; i < rl.size(); i++) {
+                sx::RxOutcome o = rl[i].outcome; bool hit = false;
+                if (what == "heard") hit = (o == sx::RX_HEARD);
+                else if (what == "crc") hit = (o == sx::RX_CRC_ERROR);
+                else if (what == "lost") hit = (o >= sx::RX_LOST_STANDBY);
+                else if (what == "standby") hit = (o == sx::RX_LOST_STANDBY);
+                else if (what == "sleep") hit = (o == sx::RX_LOST_SLEEP);
+                else if (what == "tx") hit = (o == sx::RX_LOST_TX);
+                else if (what == "timeout") hit = (o == sx::RX_LOST_RXTIMEOUT);
+                else if (what == "aborted") hit = (o == sx::RX_LOST_ABORTED);
+                else if (what == "collision") hit = (o == sx::RX_LOST_COLLISION);
+                else if (what == "mismatch") hit = (o == sx::RX_LOST_MISMATCH);
+                else if (what == "overrun") hit = (o == sx::RX_OVERRUN);
+                else { scriptError("expect rx: motivo desconocido \"" + what + "\""); return; }
+                if (hit) n++;
+            }
+            bool ok = (op == "=") ? (n == want) : (op == ">=") ? (n >= want) : (n <= want);
+            check(ok, "radio: tramas " + what + " desde la marca " + op + " " + std::to_string(want) + " (son " + std::to_string(n) + ")");
+        }
+        else if (sub == "tx") {        // expect tx <min> <max>: tramas emitidas desde "radio mark"
+            int mn = 0, mx = 0;
+            if (!(is >> mn >> mx)) { scriptError("expect tx necesita: <min> <max>"); return; }
+            int n = (int)(sx::txLog().size() - g_markTx);
+            check(n >= mn && n <= mx, "radio: tramas emitidas desde la marca entre " + std::to_string(mn) + " y " + std::to_string(mx) + " (son " + std::to_string(n) + ")");
+        }
+        else if (sub == "airtime") {   // expect airtime <maxPct> <ventanaMs>: ocupacion del canal por ESTE equipo en la ultima ventana
+            double maxPct = 0; uint32_t win = 0;
+            if (!(is >> maxPct >> win) || win == 0) { scriptError("expect airtime necesita: <maxPorcentaje> <ventanaMs>"); return; }
+            double t1 = (double)sim::now(), t0 = t1 - (double)win;
+            double pct = 100.0 * sx::txAirtimeBetween(t0, t1) / (double)win;
+            char b[160]; snprintf(b, sizeof(b), "ocupacion del canal por este equipo en los ultimos %u ms: %.1f %% (maximo %.1f %%)", (unsigned)win, pct, maxPct);
+            check(pct <= maxPct, b);
+        }
+        else if (sub == "listening") { // expect listening on|off: la radio esta en recepcion ahora mismo
+            std::string st; is >> st;
+            if (st != "on" && st != "off") { scriptError("expect listening necesita on|off"); return; }
+            check(sx::listening() == (st == "on"), std::string("radio escuchando = ") + st);
+        }
+        else if (sub == "radiomode") { // expect radiomode sleep|stdby|tx|rxcont|rxsingle
+            std::string m; is >> m; int want = -1;
+            if (m == "sleep") want = 0; else if (m == "stdby") want = 1; else if (m == "tx") want = 3; else if (m == "rxcont") want = 5; else if (m == "rxsingle") want = 6;
+            if (want < 0) { scriptError("expect radiomode necesita sleep|stdby|tx|rxcont|rxsingle"); return; }
+            check(sx::currentMode() == want, "modo de la radio = " + m);
+        }
         else if (sub == "spread") {   // expect spread <ms>: entre las esperas "waitfor" registradas, max-min >= ms
             uint32_t mn = 0;
             if (!(is >> mn)) { scriptError("expect spread necesita los ms"); return; }
@@ -528,7 +746,7 @@ static void execLine(const std::string &raw) {
             bool on = display.simPixel(x, y);
             check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st);
         }
-        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|panel|spread|pixel)");
+        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|panel|rx|tx|airtime|listening|radiomode|spread|pixel)");
     }
     else scriptError("comando desconocido \"" + cmd + "\"");
 }
@@ -860,7 +1078,7 @@ int main(int argc, char **argv) {
     int airRssi = -50;
 
     // Opciones que llevan valor: si falta, es un error de uso.
-    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi", "--pace" };
+    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi", "--pace", "--radio" };
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         for (const char *o : withValue)
@@ -890,6 +1108,12 @@ int main(int argc, char **argv) {
         else if (a == "--node") airNode = argv[++i];   // etiqueta unica del dispositivo
         else if (a == "--rssi") airRssi = atoi(argv[++i]); // dBm con que oyen los demas
         else if (a == "--pace") g_pace = atof(argv[++i]);  // tope de velocidad en modo --keys (multi-dispositivo)
+        else if (a == "--radio") {                          // modelo de radio: ideal (siempre escucha, sin tiempo en el aire) o realista
+            std::string m = argv[++i];
+            if (m == "ideal") sx::setIdeal(true);
+            else if (m == "real") sx::setIdeal(false);
+            else { fprintf(stderr, "[sim] --radio admite real|ideal (no %s)\n", m.c_str()); return 2; }
+        }
         else if (!a.empty() && a[0] != '-') {
             if (!scriptPath.empty()) { fprintf(stderr, "[sim] solo se admite un script (%s y %s)\n", scriptPath.c_str(), a.c_str()); return 2; }
             scriptPath = a;
@@ -916,6 +1140,11 @@ int main(int argc, char **argv) {
     if (fresh) { remove(eepromPath.c_str()); }
 
     sim::setInjectHook(injectDeferred);   // habilita "in <ms> chatack|chatmsg ..."
+    {   // los "otros equipos" que inyectan los guiones emiten con los mismos parametros que el proyecto
+        AirFrame &pf = sx::peerFrame();
+        pf.freq = (long)LORA_FREQUENCY; pf.sf = LORA_SPREADING; pf.bw = (long)LORA_BANDWIDTH;
+        pf.cr = 1; pf.preamble = 8; pf.crc = true; pf.sync = 0x12;
+    }
 
     // Arranque del firmware
     setup();

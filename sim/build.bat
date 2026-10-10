@@ -23,10 +23,10 @@ if errorlevel 1 goto :no_env
 if not exist "%SIM%out" mkdir "%SIM%out"
 pushd "%SIM%out"
 
-set INC=/I"%SIM%arduino" /I"%SIM%vendor\gfx" /I"%SIM%vendor\aes" /I"%SIM%engine" /I"%ROOT%\include"
+set INC=/I"%SIM%arduino" /I"%SIM%vendor\gfx" /I"%SIM%vendor\aes" /I"%SIM%vendor\lora" /I"%SIM%engine" /I"%ROOT%\include"
 
 echo [build] Compilando...
-cl /nologo /EHsc /std:c++17 /O2 /DARDUINO=100 /D_CRT_SECURE_NO_WARNINGS /DCBC=1 /DAES128=1 /wd4244 /wd4267 /wd4146 /wd4005 %INC% "%ROOT%\src\*.cpp" "%SIM%engine\sim_runtime.cpp" "%SIM%engine\lora_mock.cpp" "%SIM%engine\air_channel.cpp" "%SIM%engine\framebuffer.cpp" "%SIM%engine\console_win.cpp" "%SIM%engine\sim_main.cpp" "%SIM%vendor\gfx\Adafruit_GFX.cpp" "%SIM%vendor\aes\aes.c" /Fe"walkie_sim.exe"
+cl /nologo /EHsc /std:c++17 /O2 /DARDUINO=100 /D_CRT_SECURE_NO_WARNINGS /DCBC=1 /DAES128=1 /wd4244 /wd4267 /wd4146 /wd4005 %INC% "%ROOT%\src\*.cpp" "%SIM%engine\sim_runtime.cpp" "%SIM%engine\sx127x.cpp" "%SIM%engine\air_channel.cpp" "%SIM%engine\framebuffer.cpp" "%SIM%engine\console_win.cpp" "%SIM%engine\sim_main.cpp" "%SIM%vendor\gfx\Adafruit_GFX.cpp" "%SIM%vendor\lora\LoRa.cpp" "%SIM%vendor\aes\aes.c" /Fe"walkie_sim.exe"
 set "RC=%errorlevel%"
 popd
 if not "%RC%"=="0" goto :failed

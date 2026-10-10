@@ -23,7 +23,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Presencia | Baliza cada 30 s ±3 s (aleatoria, para que dos equipos encendidos a la vez no se tapen) y corazón en pantalla cuando hay algún compañero en alcance. Recuerda hasta 4 compañeros **por separado** (id, último oído, batería); a la izquierda del corazón se muestra el nivel de batería **más bajo** de los que están en alcance (y "!" si alguno avisa de batería baja), no el del último que emitió |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 34 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 35 tests, multi-dispositivo y demos. **Modelo de radio realista** (`--radio real`): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim` |
 
 ---
 
@@ -79,7 +79,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 ## Orden propuesto
 
-1. [ ] **Probar en la placa** la recepción en el menú principal, la suspensión y el consumo, y los dos modos de la tabla. Opcional: que el simulador modele el tiempo en el aire para detectar esto sin placa.
+1. [ ] **Probar en la placa** la recepción en el menú principal, la suspensión y el consumo, y los dos modos de la tabla. El simulador ya modela la radio (`--radio real`) y reproduce estos riesgos sin placa; falta confirmarlos en la placa.
 2. [ ] **Arreglar la radio:**
    - escuchar de forma continua;
    - enviar los paquetes en binario;
@@ -96,4 +96,4 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 - Cada vuelta de `loop()` cuesta mucho menos que en la placa (no se cuenta el envío de cada imagen a la pantalla por I²C): las animaciones que avanzan por vuelta, como las "Zzz", van más rápido.
 - `expect text` comprueba el texto dibujado desde el último borrado completo de la pantalla, aunque parte ya no se vea. Ningún test actual pasa por ese motivo.
-- No se modela el comportamiento real de la radio (modos de recepción, tiempo en el aire, colisiones).
+- El modelo de radio realista (`--radio real`) enfrenta UN equipo a tramas inyectadas; con varios procesos (`--air`) cada uno lleva su propio reloj y una trama se "recibe" cuando el receptor la ve (no hay colisión entre equipos). No se simula el RF físico (ruido, alcance) ni el tiempo real de los accesos SPI/I²C.

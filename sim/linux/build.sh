@@ -31,7 +31,7 @@ fi
 
 mkdir -p "$OBJ"
 
-INC=(-I"$LNX" -I"$SIM/arduino" -I"$SIM/vendor/gfx" -I"$SIM/vendor/aes" -I"$SIM/engine" -I"$ROOT/include")
+INC=(-I"$LNX" -I"$SIM/arduino" -I"$SIM/vendor/gfx" -I"$SIM/vendor/aes" -I"$SIM/vendor/lora" -I"$SIM/engine" -I"$ROOT/include")
 DEFS=(-DARDUINO=100 -DCBC=1 -DAES128=1)
 CXXFLAGS=(-std=c++17 -O2 -w "${DEFS[@]}" "${INC[@]}")
 CFLAGS=(-O2 -w "${DEFS[@]}" "${INC[@]}")
@@ -39,12 +39,13 @@ CFLAGS=(-O2 -w "${DEFS[@]}" "${INC[@]}")
 SRCS=(
   "$ROOT"/src/*.cpp
   "$SIM/engine/sim_runtime.cpp"
-  "$SIM/engine/lora_mock.cpp"
+  "$SIM/engine/sx127x.cpp"
   "$SIM/engine/air_channel.cpp"
   "$SIM/engine/framebuffer.cpp"
   "$SIM/engine/sim_main.cpp"
   "$LNX/console_linux.cpp"
   "$SIM/vendor/gfx/Adafruit_GFX.cpp"
+  "$SIM/vendor/lora/LoRa.cpp"
   "$SIM/vendor/aes/aes.c"
 )
 

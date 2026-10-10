@@ -133,6 +133,7 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `doodle.sim`       | Lienzo 24×24: dibujar y enviar; recibir y mostrar |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
+| `radio_model.sim`  | Autotest del modelo de radio: la librería LoRa real contra el chip simulado (tiempos en el aire del roadmap, bloqueo al transmitir, reglas de recepción) |
 | `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
 | `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
 | `peers.sim`        | Varios equipos: tabla de compañeros (presencia por equipo, batería mínima, tabla llena, mismo msgId de emisores distintos, dedup de 16, reactivar reintentos) |
@@ -255,6 +256,9 @@ walkie_sim.exe [script.sim] [opciones]
   --air <dir>       conecta este dispositivo al "aire" compartido (radio multi-dispositivo)
   --node <etiqueta> identidad única en el aire (para no oír lo propio)
   --rssi <dBm>      potencia con que los demás oyen sus transmisiones (por defecto -50)
+  --radio real|ideal  modelo de radio: real = chip SX1276 con tiempo en el aire (la radio solo oye
+                    lo que llega mientras escucha, y transmitir bloquea); ideal = siempre escucha y
+                    sin tiempo en el aire (comportamiento antiguo, por defecto por ahora)
   --pace <x>        con --keys: tope de velocidad del tiempo virtual (x ms virtuales por ms real;
                     0 = sin tope). Imprescindible con varios procesos en el aire compartido:
                     sin tope cada uno corre su tiempo casi instantáneo y deja de coincidir con
@@ -267,6 +271,41 @@ Para dar un id de equipo distinto a cada dispositivo, exporta `SIM_CHIPID` antes
 lanzarlo (`Device_id()` lo deriva de ahí en el simulador, y también siembra su aleatorio:
 cada equipo sortea distinto, como la placa con su RNG por hardware).
 
+## Modelo de radio (chip SX1276 + librería real)
+
+El firmware llama a la librería **LoRa real** (`vendor/lora`, arduino-LoRa 0.8.0, sin modificar) y por
+debajo hay un **modelo del chip SX1276 a nivel de registros** (`engine/sx127x.cpp`) enganchado al SPI y a
+los pines NSS/RST/DIO0. Reproduce lo que hace el silicio:
+
+- **modos** SLEEP / STDBY / TX / RX continuo / RX único (con su caducidad de 100 símbolos ≈ 102 ms a SF7),
+  banderas IRQ que se borran escribiendo 1, FIFO de 256 bytes;
+- **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC) y la
+  librería bloquea ese tiempo (`endPacket()` espera a TxDone): 64 B a SF7 = 118 ms, 224 B = 348 ms, un ping a
+  SF10 = 698 ms; mientras transmite **no escucha** (half-duplex);
+- **recibir**: una trama solo se oye si el chip está en un modo de recepción cuando se detecta su preámbulo y
+  sigue en él hasta que termina; en STDBY/SLEEP/TX se pierde, con otro SF/BW/frecuencia/sincronismo no se
+  demodula, dos tramas solapadas se pierden, con CRC activo una trama corrupta levanta `PayloadCrcError` (sin
+  CRC llega alterada) y una trama sin leer la pisa la siguiente;
+- **estadísticas**: tiempo emitiendo, destino de cada trama recibida y consumo estimado del chip por modo.
+
+Los comandos `lora rx`, `chatmsg`, `presence`... inyectan una trama que **empieza en ese instante** con los
+parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal` (por ahora el valor por defecto)
+mantiene el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
+
+```
+radio ideal on|off     cambia de modelo durante un guion
+radio peer sf|bw|crc|preamble|sync|freq <v>|reset   parámetros con que emiten los "otros equipos" inyectados
+radio mark             punto de partida de los contadores (expect rx / expect tx)
+radio report           resumen: tramas emitidas y su tiempo en el aire, destino de las recibidas, consumo
+radio log              destino de cada trama recibida desde la marca
+radio selftest         autotest del chip con la librería real (ver scripts/radio_model.sim)
+expect rx heard|lost|crc|standby|sleep|tx|timeout|aborted|collision|mismatch|overrun [=|>=|<=] <n>
+expect tx <min> <max>             tramas emitidas desde la marca
+expect airtime <max%> <ventanaMs> ocupación del canal por este equipo en la última ventana
+expect listening on|off           la radio está en recepción ahora mismo
+expect radiomode sleep|stdby|tx|rxcont|rxsingle
+```
+
 ## Fidelidad respecto al hardware real
 
 | Aspecto | Simulador |
@@ -277,7 +316,7 @@ cada equipo sortea distinto, como la placa con su RNG por hardware).
 | Historial / EEPROM | respaldado en fichero; persiste entre ejecuciones |
 | Botones (antirrebote) | reloj virtual; el antirrebote se ejerce de verdad |
 | Potenciómetro | valor 0–1023 controlable |
-| LoRa (SX1276) | mock: captura TX, inyecta RX, eco opcional; **aire compartido real entre varios procesos** (`--air`) |
+| LoRa (SX1276) | librería real + chip SX1276 simulado (ver "Modelo de radio"); **aire compartido real entre varios procesos** (`--air`) |
 | Tiempos | reloj virtual determinista (no en tiempo real, salvo modo interactivo) |
 
 Diferencias: no se simula el RF físico (ruido, alcance), ni el ruido del ADC, ni
@@ -289,8 +328,8 @@ la latencia exacta del bus I²C. Para eso haría falta el hardware real.
 sim/
   arduino/    capa mock del core de Arduino (Arduino.h, Wire, SPI, EEPROM, LoRa,
               Adafruit_SH110X host sobre GFX, String, Print, pgmspace)
-  vendor/     librerías reales vendorizadas (Adafruit_GFX, tiny-AES)
-  engine/     motor: reloj virtual, eventos de entrada, framebuffer, driver/main
+  vendor/     librerías reales vendorizadas (Adafruit_GFX, tiny-AES, arduino-LoRa)
+  engine/     motor: reloj virtual, eventos de entrada, framebuffer, modelo del chip SX1276, driver/main
   scripts/    scripts de prueba (.sim)
   out/        artefactos de compilación (ignorado por git)
   build.bat / run.bat / run_tests.bat
