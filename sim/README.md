@@ -109,7 +109,8 @@ powershell -ExecutionPolicy Bypass -File net_test.ps1     ::  Windows
 
 Escenas: difusión de 1 equipo a 2 (con los ACK de ambos), mensajes en los dos sentidos, **emisión
 simultánea** (las dos tramas se pisan y se recuperan por reintentos), hora puesta a mano que adopta
-otro equipo, tres equipos viéndose por las balizas y un **dibujo** de un equipo a otro (con su confirmación). Internamente cada equipo corre en modo `--keys`
+otro equipo, tres equipos viéndose por las balizas, un **dibujo** de un equipo a otro (con su confirmación) y
+**cuatro equipos** donde los tres receptores confirman el mismo mensaje (los ACK salen con retardo aleatorio y no se pisan). Internamente cada equipo corre en modo `--keys`
 (con guion de teclas) y comparte el aire con `--air <dir> --node <id>`; su salida serie y el resumen de
 radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
 y se comprueban.
@@ -120,7 +121,7 @@ Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan j
 milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
 oyen los demás desde el ms *t+1* con su instante de inicio exacto, de modo que los tiempos en el aire, el
 half-duplex y las **colisiones son los de la realidad** y el resultado es **determinista**: no depende de la
-velocidad de la máquina ni del azar del arranque (las 6 escenas tardan ~2 s). Sin `--nodes` cada proceso
+velocidad de la máquina ni del azar del arranque (las 7 escenas tardan ~2 s). Sin `--nodes` cada proceso
 lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
 (es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
 la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
@@ -147,7 +148,8 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
 | `doodle.sim`       | Lienzo 24×24: editor, envío con pantalla de resultado ("Enviado" → "Entregado!" / "(sin confirmar)"), reintentos, el dibujo enviado y el recibido en el Historial |
 | `ttt_rx.sim`       | Chat DENTRO de Tres en raya: mensaje guardado y confirmado sin interrumpir la partida, baliza, ACK ajeno y paquetes de otros juegos sin basura en el historial, balizas y reintentos durante la partida |
-| `tetris_rx.sim`    | Lo mismo dentro de Tetris Coop (cliente): lobby y partida |
+| `tetris_rx.sim`    | Lo mismo dentro de Tetris Coop (cliente): lobby y partida, con la ocupación del canal (~26 %) |
+| `tetris_host.sim`  | Tetris Coop como anfitrión: chat en el lobby y en la partida, entrada del invitado y ocupación del canal por debajo del 55 % (el estado sale cada 340 ms con paquetes de 118 ms) |
 | `hippo_rx.sim`     | HippoRadar (SF10) y el chat: pings por la cola de juego, el chat (SF7) no se oye durante el radar, sin balizas ni reintentos mientras dura, y al salir se anuncia y el chat vuelve |
 | `doodle_store.sim` | Dibujos persistentes: el lienzo vive en su registro del Historial (sobrevive a reinicios, sigue a su registro al desplazarse o borrarse, sin duplicados, outbox persistente con el mismo lienzo) |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
@@ -203,7 +205,9 @@ ff <ms>      avance rápido (para timeouts largos, p.ej. el sueño de 5 min)
 **LoRa**
 ```
 lora rx <texto>     inyecta un mensaje entrante (lo cifra con la clave del firmware)
-lora rxraw <hex>    inyecta bytes crudos
+lora rxraw <hex>    inyecta los bytes de un paquete tal cual viajan por el aire (hex)
+lora rxbin <hex>    inyecta un paquete cuyo texto PLANO son esos bytes (hex): lo cifra el firmware (p.ej. un paquete de
+                    Tetris: `lora rxbin 5453` + 38 bytes; deferido: `in <ms> lorabin <hex>`)
 lora loopback on|off  reenvía lo transmitido como recibido
 lora tx <texto>     el FIRMWARE emite ese mensaje por su capa de radio (escuchar antes de hablar, etc.)
 lora sent           muestra el último paquete transmitido (y su descifrado)
@@ -318,10 +322,11 @@ los pines NSS/RST/DIO0. Reproduce lo que hace el silicio:
 
 - **modos** SLEEP / STDBY / TX / RX continuo / RX único (con su caducidad de 100 símbolos ≈ 102 ms a SF7),
   banderas IRQ que se borran escribiendo 1, FIFO de 256 bytes;
-- **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC): 64 B a
-  SF7 = 118 ms, 224 B = 348 ms, un ping a SF10 = 698 ms. `endPacket()` de la librería bloquea ese tiempo; el
-  firmware emite en modo asíncrono (`endPacket(true)`) y sigue con su bucle. Mientras transmite **no escucha**
-  (half-duplex);
+- **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC). Los
+  paquetes del firmware van en **binario** (IV de 16 B + bloques AES de 16 B): un mensaje corto o una baliza son
+  32 B = 72 ms a SF7, el estado de Tetris 64 B = 118 ms, un dibujo 96 B = 164 ms, un mensaje largo 112 B = 190 ms
+  y un ping del radar a SF10 32 B = 453 ms. `endPacket()` de la librería bloquea ese tiempo; el firmware emite en
+  modo asíncrono (`endPacket(true)`) y sigue con su bucle. Mientras transmite **no escucha** (half-duplex);
 - **recibir**: una trama solo se oye si el chip está en un modo de recepción cuando se detecta su preámbulo y
   sigue en él hasta que termina; en STDBY/SLEEP/TX se pierde, con otro SF/BW/frecuencia/sincronismo no se
   demodula, dos tramas solapadas se pierden, con CRC activo una trama corrupta levanta `PayloadCrcError` (sin
@@ -333,8 +338,8 @@ parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal`
 da el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
 
 **Escribir tests con este modelo.** Una trama inyectada ocupa el canal lo que dura en el aire (un mensaje
-corto ~120 ms; uno largo ~300 ms; un dibujo ~300 ms) y el equipo contesta con su ACK, que sale entre 10 y 300 ms
-después de recibir y dura otros ~120 ms: dos inyecciones a la vez, o una que llegue mientras el equipo
+corto ~70 ms; uno largo ~190 ms; un dibujo ~160 ms) y el equipo contesta con su ACK, que sale entre 10 y 300 ms
+después de recibir y dura otros ~70 ms: dos inyecciones a la vez, o una que llegue mientras el equipo
 emite su ACK, se pisan y no se oye ninguna, igual que con la radio real. Por eso los guiones separan los
 mensajes (≥ 800 ms entre uno y el siguiente, con `in <ms> chatmsg|lora|presence ...` o con `run`) y, antes de inyectar
 tras un `ff` o justo tras el arranque, esperan a la baliza propia y a que acabe de emitirse
@@ -355,7 +360,7 @@ radio selftest         autotest del chip con la librería real (ver scripts/radi
 expect rx heard|lost|crc|standby|sleep|tx|timeout|aborted|collision|mismatch|overrun [=|>=|<=] <n>
 expect tx <min> <max>             tramas emitidas desde la marca
 expect txstart <min> <max>        la 1a emisión desde la marca empieza entre min y max ms después de ella
-expect airtime <max%> <ventanaMs> ocupación del canal por este equipo en la última ventana
+expect airtime <max%> <ventanaMs> ocupación del canal por este equipo en la última ventana (se puede diferir: in <ms> expect airtime ...)
 expect listening on|off           la radio está en recepción ahora mismo
 expect radiomode sleep|stdby|tx|rxcont|rxsingle
 ```
@@ -366,7 +371,7 @@ expect radiomode sleep|stdby|tx|rxcont|rxsingle
 |---|---|
 | Lógica del firmware | **idéntica** (compila `../src` sin cambios) |
 | Render OLED | **idéntico** (Adafruit_GFX + fuente reales, 128×128, 1 bpp) |
-| Cifrado de mensajes | **idéntico** (tiny-AES real, AES-128-CBC + PKCS7) |
+| Cifrado de mensajes | **idéntico** (tiny-AES real, AES-128-CBC + PKCS7; paquete binario IV + bloques) |
 | Historial / EEPROM | respaldado en fichero; persiste entre ejecuciones |
 | Botones (antirrebote) | reloj virtual; el antirrebote se ejerce de verdad |
 | Potenciómetro | valor 0–1023 controlable |

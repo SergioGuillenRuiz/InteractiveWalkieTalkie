@@ -340,10 +340,10 @@ static void drawGame() {
 static void resetBoard();
 static bool gameOverScreen();
 
-static const char *HX = "0123456789abcdef";
-static void putB(String &s, int v) { s += HX[(v >> 4) & 0xF]; s += HX[v & 0xF]; }
-static int  hxv(char c) { if (c >= '0' && c <= '9') return c - '0'; if (c >= 'a' && c <= 'f') return c - 'a' + 10; return 0; }
-static int  getB(const String &s, int &i) { int v = hxv(s[i]) * 16 + hxv(s[i + 1]); i += 2; return v; }
+// Los paquetes de Tetris viajan en BINARIO (un byte por campo): antes cada byte iba como dos caracteres
+// hexadecimales, el doble de tiempo en el aire. getB() fuera de rango devuelve 0 (String::operator[]).
+static void putB(String &s, int v) { s += (char)(v & 0xFF); }
+static int  getB(const String &s, int &i) { return (uint8_t)s[i++]; }
 
 static void tcSend(const String &m) { Lora_send(m); }
 static String tcRecv() {
@@ -437,7 +437,7 @@ static void clientGame() {
     if (!b && pb && now - bHold < 500) dropC++;
     if (b && now - bHold > 800) { tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
     pa = a; pb = b;
-    if (now - lastInput > 200) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
+    if (now - lastInput > TETRIS_INPUT_MS) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
 
     if (started) { drawGame(); if (over) { if (!gameOverScreen()) { mainState = STATE_IDLE; Display_clear(); return; } resetBoard(); over = false; started = false; } }
     else { display.clearDisplay(); centerPrint("Conectando...", 56, 1); display.display(); }
@@ -567,7 +567,7 @@ void startTetrisCoop() {
       if (P1.alive && now >= p1FallAt) { if (gravityStep(P1, &P2, over, 1)) botA.planned = false; p1FallAt = now + gravMs; }
       if (P2.alive && now >= p2FallAt) { if (gravityStep(P2, &P1, over, 5)) botB.planned = false; p2FallAt = now + gravMs; }
 
-      if (host && now - lastBcast > 280) { tcSend(encodeState(over)); lastBcast = now; }
+      if (host && now - lastBcast > TETRIS_STATE_MS) { tcSend(encodeState(over)); lastBcast = now; }
 
       // anti-atasco: si nada se mueve durante un rato, el tablero esta bloqueado
       if (lines != prevLines || P1.y != prevP1y || P2.y != prevP2y) {

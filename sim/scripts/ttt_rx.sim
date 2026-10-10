@@ -68,11 +68,12 @@ in 7500 shot ttt_rx_partida
 in 12500 expect serial Chat] Baliza
 in 12500 expect serial Reintento msg 1
 in 13000 chatack 137 1                        # llega el ACK de "kissy" (msgId 1) dentro de la partida
-in 14000 expect serial Entregado msg 1
+in 14000 chatack 137 1                        # (otra vez: el receptor confirma de nuevo cada reintento; si la 1a se pisara con una emision del juego, esta llega)
+in 14800 expect serial Entregado msg 1
 # Salir: mantener B
-in 15000 finish down
-in 16000 finish up
-run 17500
+in 15500 finish down
+in 16500 finish up
+run 18000
 expect text Env                               # de vuelta en el menu principal
 expect times 3 Historial] Guardado:           # solo el enviado (kissy) y los DOS mensajes de chat: sin basura de ACK, balizas ni paquetes del juego
 print Recibir en todo momento dentro de Tres en raya OK

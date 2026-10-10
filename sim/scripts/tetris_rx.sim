@@ -35,7 +35,7 @@ in 4000 presence 60 0 80
 in 4300 expect serial equipo #60 en alcance
 # 2) El anfitrion contesta: empieza la partida (cliente) y llega su estado
 in 4500 lora TH
-in 5500 lora TS0000000000000000000000000000000000000000000000000000000000000000000000000000
+in 5500 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
 in 7000 expect text PTS                        # el cliente pinta la partida (tablero, puntos...)
 # 3) Durante la partida: otro mensaje de chat. El cliente emite su entrada ('TI') cada ~225 ms; si el mensaje
 #    empezara en el MISMO instante que una de esas emisiones se pisarian (ventana fisica de unos ms), asi que, como
@@ -45,6 +45,7 @@ in 10600 chatmsg 50 2 mensaje durante la partida
 in 12300 expect serial Guardado: mensaje durante la partida
 in 12300 expect serial ACK a #50 msg 2
 in 12300 expect text PTS                       # la partida sigue
+in 12300 expect airtime 40 8000                # el cliente envia su entrada (72 ms) cada ~0,3 s: ~26 % del canal
 in 12300 shot tetris_rx_partida
 in 14000 expect serial Chat] Baliza            # y el equipo sigue emitiendo su baliza durante la partida
 # Salir: mantener B (>= 0,8 s)

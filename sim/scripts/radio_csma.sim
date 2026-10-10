@@ -18,14 +18,14 @@ waitfor txend                              # (la baliza sigue en el aire: la emi
 
 # --- A) el firmware quiere hablar con una trama en el aire: espera a que acabe ---
 radio mark
-lora rx hola                              # entra ahora una trama de 118 ms
+lora rx hola                              # entra ahora una trama de 72 ms (32 B en binario)
 blind 30                                  # (a los 30 ms el firmware quiere emitir)
 lora tx respuesta
 run 600
 expect rx heard 1                         # la trama NO se destruyo
 expect rx collision 0
 expect tx 1 1
-expect txstart 118 300                    # y solo emitio cuando acabo la otra (118 ms) mas una pausa aleatoria
+expect txstart 72 200                     # y solo emitio cuando acabo la otra (72 ms) mas una pausa aleatoria
 expect serial Guardado: hola
 print A) escuchar antes de hablar: espera a que acabe la trama ajena y no la pisa
 
@@ -42,9 +42,9 @@ print B) una trama recibida y sin leer no se destruye al emitir
 
 # --- C) leer una trama no aborta la siguiente, que ya esta enganchada ---
 radio mark
-lora rx primera                           # 118 ms
-in 120 lora segunda                       # empieza 2 ms despues de que acabe la primera
-blind 130                                 # (el firmware no ha leido aun la primera y la segunda ya esta enganchada)
+lora rx primera                           # 72 ms
+in 74 lora segunda                        # empieza 2 ms despues de que acabe la primera
+blind 90                                  # (el firmware no ha leido aun la primera y la segunda ya esta enganchada)
 run 500
 expect rx heard 2
 expect rx aborted 0
@@ -53,31 +53,31 @@ expect serial Guardado: segunda
 print C) dos tramas seguidas: se leen las dos (leer la primera no corta la segunda)
 
 # --- D) ACK con retardo aleatorio: entre 10 y 300 ms despues de recibir ---
-# (medido desde que entra el mensaje, hasta que el ACK EMPIEZA a emitirse: trama 118 ms + retardo 10..300 ms = 128..418 ms)
+# (medido desde que entra el mensaje, hasta que el ACK EMPIEZA a emitirse: trama 72 ms + retardo 10..300 ms = 82..372 ms)
 waitfor clear
 chatmsg 60 1 uno
-waitfor serial 100 460 ACK a #60 msg 1
+waitfor serial 60 420 ACK a #60 msg 1
 wait 800
 chatmsg 61 1 dos
-waitfor serial 100 460 ACK a #61 msg 1
+waitfor serial 60 420 ACK a #61 msg 1
 wait 800
 chatmsg 62 1 tres
-waitfor serial 100 460 ACK a #62 msg 1
+waitfor serial 60 420 ACK a #62 msg 1
 wait 800
 chatmsg 63 1 cuatro
-waitfor serial 100 460 ACK a #63 msg 1
+waitfor serial 60 420 ACK a #63 msg 1
 wait 800
 chatmsg 64 1 cinco
-waitfor serial 100 460 ACK a #64 msg 1
+waitfor serial 60 420 ACK a #64 msg 1
 wait 800
 chatmsg 65 1 seis
-waitfor serial 100 460 ACK a #65 msg 1
+waitfor serial 60 420 ACK a #65 msg 1
 wait 800
 chatmsg 66 1 siete
-waitfor serial 100 460 ACK a #66 msg 1
+waitfor serial 60 420 ACK a #66 msg 1
 wait 800
 chatmsg 67 1 ocho
-waitfor serial 100 460 ACK a #67 msg 1
+waitfor serial 60 420 ACK a #67 msg 1
 expect spread 80                          # no salen siempre al mismo tiempo: el retardo es aleatorio
 print D) los ACK salen entre 10 y 300 ms despues, con retardo distinto cada vez
 

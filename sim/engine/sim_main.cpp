@@ -250,12 +250,37 @@ static bool parseUpDown(const std::string &v, bool *down) {
     return false;
 }
 
-// Un paquete que el firmware no puede cifrar (texto > 95 bytes) se inyectaria
+// Un paquete que el firmware no puede cifrar (texto > 223 bytes) se inyectaria
 // VACIO y no llegaria nada: se avisa como error del guion.
 static bool encryptedOk(const String &enc) {
     if (enc.length() > 0) return true;
-    scriptError("el paquete supera el limite de 95 bytes que cifra el firmware: no se inyecta");
+    scriptError("el paquete supera el limite de 223 bytes que cifra el firmware: no se inyecta");
     return false;
+}
+
+// Bytes <-> hexadecimal (los paquetes cifrados son binarios: en el log y en "lora rxraw" van en hex).
+static std::string toHexStr(const std::string &b) {
+    static const char *H = "0123456789ABCDEF";
+    std::string o; o.reserve(b.size() * 2);
+    for (unsigned char c : b) { o += H[c >> 4]; o += H[c & 15]; }
+    return o;
+}
+static bool fromHexStr(const std::string &h, std::string &out) {
+    if (h.size() % 2) return false;
+    out.clear();
+    auto v = [](char c) -> int { if (c >= '0' && c <= '9') return c - '0'; if (c >= 'a' && c <= 'f') return c - 'a' + 10; if (c >= 'A' && c <= 'F') return c - 'A' + 10; return -1; };
+    for (size_t i = 0; i < h.size(); i += 2) {
+        int a = v(h[i]), b = v(h[i + 1]);
+        if (a < 0 || b < 0) return false;
+        out += (char)(a * 16 + b);
+    }
+    return true;
+}
+// Texto imprimible de un paquete descifrado (los sobres llevan bytes no imprimibles).
+static std::string printable(const String &s) {
+    std::string o;
+    for (unsigned i = 0; i < s.length(); i++) { char c = s[i]; o += (c >= 0x20 && c <= 0x7E) ? c : '.'; }
+    return o;
 }
 
 // ---------------------------------------------------------------------------
@@ -606,6 +631,13 @@ static void execLine(const std::string &raw) {
             if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
+        else if (what == "lorabin") {   // in <ms> lorabin <hex>: como "lora rxbin" (texto plano en hex), diferido
+            std::string hex, bytes; is >> hex;
+            if (!fromHexStr(hex, bytes) || bytes.empty()) { scriptError("in <ms> lorabin necesita los bytes del texto plano en hex"); return; }
+            String enc = SimpleCrypto_encrypt(String(bytes));
+            if (!encryptedOk(enc)) return;
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
+        }
         else if (what == "chatack") {   // ACK diferido: in <ms> chatack <destino> <msgId>
             int target = 0, mid = 0; is >> target >> mid;
             String p; p += (char)0x06; p += (char)target; p += (char)mid;
@@ -688,10 +720,16 @@ static void execLine(const std::string &raw) {
             if (!encryptedOk(enc)) return;
             sx::inject(std::string(enc.c_str(), enc.length()), -42, true);
             printf("  LoRa RX CORRUPTO inyectado: \"%s\"\n", txt.c_str());
+        } else if (sub == "rxbin") {      // paquete cuyo texto PLANO son esos bytes (hex): lo cifra el firmware y se inyecta
+            std::string hex, bytes;
+            if (!(is >> hex) || !fromHexStr(hex, bytes) || bytes.empty()) { scriptError("lora rxbin necesita los bytes del texto plano en hex"); return; }
+            String enc = SimpleCrypto_encrypt(String(bytes));
+            if (!encryptedOk(enc)) return;
+            simLoraInject(std::string(enc.c_str(), enc.length()));
         } else if (sub == "rxraw") {
-            std::string hex;
-            if (!(is >> hex)) { scriptError("lora rxraw necesita los bytes en hex"); return; }
-            simLoraInject(hex);
+            std::string hex, bytes;
+            if (!(is >> hex) || !fromHexStr(hex, bytes)) { scriptError("lora rxraw necesita los bytes del paquete en hex (par de digitos por byte)"); return; }
+            simLoraInject(bytes);
         } else if (sub == "loopback") {
             std::string s; is >> s;
             if (s != "on" && s != "off") { scriptError("lora loopback necesita on|off"); return; }
@@ -703,10 +741,10 @@ static void execLine(const std::string &raw) {
             printf("  LoRa TX del firmware: \"%s\" (%s)\n", txt.c_str(), ok ? "emitido" : "no emitido");
         } else if (sub == "sent") {
             std::string last = simLoraLastSent();
-            String dec = SimpleCrypto_decrypt(String(last.c_str()));
-            printf("  LoRa TX (hex)=%s  descifrado=\"%s\"\n", last.c_str(), dec.c_str());
+            String dec = SimpleCrypto_decrypt(String(last));
+            printf("  LoRa TX (%zu B, hex)=%s  descifrado=\"%s\"\n", last.size(), toHexStr(last).c_str(), printable(dec).c_str());
         }
-        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxbad|rxraw|loopback|tx|sent)");
+        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxbad|rxbin|rxraw|loopback|tx|sent)");
     }
     else if (cmd == "chatmsg") {   // inyecta un MENSAJE de chat de un peer: chatmsg <emisor> <msgId> <texto>
         int sender = 0, mid = 0; is >> sender >> mid;
@@ -745,7 +783,7 @@ static void execLine(const std::string &raw) {
             auto ring = simLoraSentRing();
             bool found = false;
             for (auto it = ring.rbegin(); it != ring.rend() && !found; ++it) {
-                String dec = SimpleCrypto_decrypt(String(it->c_str()));
+                String dec = SimpleCrypto_decrypt(String(*it));
                 if (contains(std::string(dec.c_str(), dec.length()), n)) found = true;
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
@@ -765,7 +803,7 @@ static void execLine(const std::string &raw) {
             auto ring = simLoraSentRing();
             bool found = false; int lastCount = -1;
             for (auto it = ring.rbegin(); it != ring.rend() && !found; ++it) {
-                String dec = SimpleCrypto_decrypt(String(it->c_str()));
+                String dec = SimpleCrypto_decrypt(String(*it));
                 if (dec.length() != 75 || dec[0] != 0x04 || (uint8_t)dec[2] != (uint8_t)mid) continue;
                 int cnt = 0;
                 for (int i = 3; i < 75; i++) cnt += __builtin_popcount((unsigned char)dec[i]);

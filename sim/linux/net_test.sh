@@ -249,7 +249,7 @@ check "ninguno se ve a si mismo"      "$(all1 "$(hasnot "$WORK/_d1.out" 'equipo 
 
 # ============================================================
 #  ESCENA F: dibujo entre dos equipos. #1 abre el editor de Dibujar, pinta un pixel y lo envia (mantener B);
-#  #2 lo recibe (302 ms en el aire), lo guarda en el Historial con su lienzo y lo confirma; #1 recibe el ACK
+#  #2 lo recibe (164 ms en el aire), lo guarda en el Historial con su lienzo y lo confirma; #1 recibe el ACK
 #  y su pantalla de resultado pasa a "Entregado!". Despues #2 abre el registro y lo ve.
 # ============================================================
 echo
@@ -298,7 +298,32 @@ check "#2 lo confirma con ACK a #101"              "$(has "$g2" 'ACK a #101 msg 
 check "#1 recibe la confirmacion"                  "$(has "$g1" 'Confirmado: entregado')"
 check "#1 saca el dibujo de la outbox"             "$(has "$g1" 'Entregado msg 1')"
 check "sin reintentos: la 1a emision basta"        "$(hasnot "$g1" 'Reintento')"
-check "#2 oye el dibujo entero (302 ms en el aire)" "$(has "$g2" 'rx t=[0-9]+\.\.[0-9]+ ms  192 B  oida')"
+check "#2 oye el dibujo entero (96 B: 164 ms en el aire)" "$(has "$g2" 'rx t=[0-9]+\.\.[0-9]+ ms  96 B  oida')"
+
+# ============================================================
+#  ESCENA G: CUATRO equipos. #1 envia un mensaje y los TRES receptores lo confirman (ACK). Cada ACK sale tras
+#  un retardo aleatorio de 10-300 ms y escuchando antes de hablar: antes los tres confirmaban en el mismo
+#  instante, los ACK se pisaban en el emisor y no oia ninguno (con 3 o mas equipos). #1 recibe las
+#  confirmaciones y no hace falta reintentar. (ids: chip 100 -> #101, 200 -> #201, 300 -> #47, 400 -> #?)
+# ============================================================
+echo
+echo "==== Escena G: cuatro equipos, tres confirmaciones (ACK) a la vez ===="
+AIR_G="$WORK/air_g"
+clear_air "$AIR_G"
+NODES=4
+
+start_node "$AIR_G" 1 100 "$(sender_keys 585 14000)" "_g1.txt" "$WORK/_g1.out"; g1p=$NODE_PID   # #1 envia "happy"
+start_node "$AIR_G" 2 200 "$(rx_keys net_rxg2)"      "_g2.txt" "$WORK/_g2.out"; g2p=$NODE_PID
+start_node "$AIR_G" 3 300 "$(rx_keys net_rxg3)"      "_g3.txt" "$WORK/_g3.out"; g3p=$NODE_PID
+start_node "$AIR_G" 4 400 "$(rx_keys net_rxg4)"      "_g4.txt" "$WORK/_g4.out"; g4p=$NODE_PID
+wait_all 60 "$g1p" "$g2p" "$g3p" "$g4p"
+
+for k in 2 3 4; do
+  check "receptor #$k recibe 'happy'"   "$(has "$WORK/_g${k}.out" 'Guardado: happy')"
+  check "receptor #$k confirma con ACK" "$(has "$WORK/_g${k}.out" 'ACK a #101 msg 1')"
+done
+check "#1 recibe la confirmacion"       "$(has "$WORK/_g1.out" 'Confirmado: entregado')"
+check "sin reintentos: los ACK no se pisan" "$(hasnot "$WORK/_g1.out" 'Reintento')"
 
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""
@@ -308,7 +333,7 @@ for n in net_rx2 net_rx3 net_doodle_tx net_doodle_rx; do
   if [[ -n "$conv" && -f "$WORK/$n.bmp" ]]; then "$conv" "$WORK/$n.bmp" "$WORK/$n.png" 2>/dev/null || true; fi
 done
 
-rm -f "$WORK"/_f1.txt "$WORK"/_f2.txt "$WORK"/_e1.txt "$WORK"/_e2.txt "$WORK"/_d1.txt "$WORK"/_d2.txt "$WORK"/_d3.txt "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
+rm -f "$WORK"/_g1.txt "$WORK"/_g2.txt "$WORK"/_g3.txt "$WORK"/_g4.txt "$WORK"/_f1.txt "$WORK"/_f2.txt "$WORK"/_e1.txt "$WORK"/_e2.txt "$WORK"/_d1.txt "$WORK"/_d2.txt "$WORK"/_d3.txt "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
 echo
 if (( fail == 0 )); then echo "MULTI-DISPOSITIVO OK: comunicacion real (difusion + bidireccional) verificada."
 else                     echo "$fail comprobacion(es) fallaron."; fi

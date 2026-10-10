@@ -64,6 +64,17 @@ static void sxWrite(uint8_t addr, uint8_t value) {
   digitalWrite(PIN_LORA_NSS, HIGH);
 }
 
+// Bytes en hexadecimal para el log (los paquetes cifrados son binarios).
+static String hexLog(const String &s) {
+  static const char *H = "0123456789ABCDEF";
+  String out = "";
+  for (uint16_t i = 0; i < s.length(); i++) {
+    uint8_t b = (uint8_t)s[i];
+    out += H[b >> 4]; out += H[b & 15];
+  }
+  return out;
+}
+
 // Versión "imprimible" de un paquete para el log: los sobres binarios (chat,
 // balizas) llevan bytes no imprimibles (incluido 0x00) que corromperían un log
 // volcado a fichero. Se sustituyen por '.'; el texto normal queda intacto.
@@ -258,14 +269,14 @@ bool Lora_send(const String &message) {
     return false;
   }
   Serial.print("[LoRa] Encriptado: ");
-  Serial.println(encrypted);
+  Serial.println(hexLog(encrypted));
 
   waitTxEnd();             // la emision anterior, si sigue en el aire
   waitChannelClear();      // escuchar antes de hablar (y guardar lo ya recibido: la FIFO es la misma)
   stashPending();
 
   LoRa.beginPacket();
-  LoRa.print(encrypted);
+  LoRa.write((const uint8_t *)encrypted.c_str(), encrypted.length());   // binario: IV + bloques cifrados
   LoRa.endPacket(true);    // asincrono: el chip emite solo; txBusy() vuelve a escuchar cuando acaba
   g_txActive = true;
   return true;
@@ -289,7 +300,7 @@ bool Lora_hasMessage() {
   g_rxq[g_rxqN] = "";
 
   Serial.print("[LoRa] Mensaje recibido (crudo): ");
-  Serial.println(lastReceived);
+  Serial.println(hexLog(lastReceived));
 
   String decrypted = SimpleCrypto_decrypt(lastReceived);
   if (decrypted.length() == 0) {

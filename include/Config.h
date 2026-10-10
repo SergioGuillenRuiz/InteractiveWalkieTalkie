@@ -67,8 +67,10 @@
 // Mensajería
 // ------------------------------------------------------------
 
-// Longitud máxima del texto de un mensaje enviable. El sobre de chat añade 3
-// bytes y el cifrado limita el texto plano a 95 (ver SimpleCrypto.cpp): 95-3 = 92.
+// Longitud máxima del texto de un mensaje enviable. El sobre de chat añade 3 bytes; el cifrado admite hasta
+// 223 bytes de texto plano (un paquete LoRa binario de 255 B, ver SimpleCrypto.cpp), pero el historial y la
+// outbox guardan 99 caracteres y un mensaje largo ocupa mucho el canal (95 B de texto = 112 B en el aire =
+// 190 ms a SF7), asi que el tope sigue en 92 + 3 = 95.
 // Quien componga mensajes (Morse, Rueda, Frasero) debe respetar este tope para
 // que el envío no falle silenciosamente al cifrar.
 #define MSG_MAX_TEXT_LEN   92
@@ -94,13 +96,20 @@
 // que lleva mas tiempo sin oirse.
 #define MAX_PEERS            4
 
-// --- HippoRadar ---
-// Un ping del radar (SF10, largo alcance) tarda ~700 ms en el aire: se envia uno cada RADAR_PING_MS +
-// 0..RADAR_PING_JITTER_MS (ocupa ~30-40 % del canal por equipo). Antes salia cada ~340 ms, mas rapido de lo
-// que tarda en emitirse: el equipo estaba SIEMPRE emitiendo (y por tanto sordo a los pings del otro) y el
-// bucle del radar quedaba colgado esperando a que acabase cada emision.
-#define RADAR_PING_MS         1800UL
-#define RADAR_PING_JITTER_MS  400UL
+// --- Ritmo de los juegos por radio ---
+// La radio es half-duplex y el canal es uno solo: un equipo que emite mas del ~50 % del tiempo no puede oir al
+// otro, y la ocupacion de los dos suma (el limite fisico es 100 %). Los paquetes viajan en binario (un paquete
+// corto = 32 B = 72 ms a SF7; el estado de Tetris = 64 B = 118 ms; un ping del radar a SF10 = 453 ms) y los
+// juegos emiten a un ritmo que deja el canal libre para el otro y para el chat:
+//  - HippoRadar: un ping cada RADAR_PING_MS + 0..RADAR_PING_JITTER_MS (453 ms en el aire: ~34 % por equipo).
+//    Antes salia cada ~340 ms con paquetes de 698 ms (205 %): el equipo estaba SIEMPRE emitiendo, sordo a los
+//    pings del otro y con el bucle colgado esperando a que acabase cada emision.
+//  - Tetris 2J: el anfitrion difunde el estado cada TETRIS_STATE_MS (118 ms: ~35 %) y el invitado envia su
+//    entrada cada TETRIS_INPUT_MS (72 ms: ~26 %). Antes 302 ms cada 280 ms (108 %) y 118 ms cada 200 ms.
+#define RADAR_PING_MS         1200UL
+#define RADAR_PING_JITTER_MS  300UL
+#define TETRIS_STATE_MS       340UL
+#define TETRIS_INPUT_MS       280UL
 
 // --- Acceso al canal ---
 // La radio es half-duplex y el canal es uno solo: lo que se emite mientras otro equipo emite se pierde

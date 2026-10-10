@@ -1,0 +1,52 @@
+# ============================================================
+#  Tetris Coop como ANFITRION ("2 Jug: Crear") con la radio realista: el estado ('TS', 64 B binarios = 118 ms)
+#  sale cada 340 ms (~35 % del canal; antes 302 ms cada 280 ms = 108 %: el equipo estaba siempre emitiendo,
+#  sordo al invitado y a los mensajes de chat, y no podia funcionar). Con el canal libre ~65 % del tiempo:
+#    - el chat llega durante el lobby y durante la partida (se guarda y se confirma);
+#    - la entrada del invitado ('TI' + 3 bytes) llega al juego por la cola de paquetes de juego;
+#    - la ocupacion del canal por este equipo se mantiene por debajo del 55 %.
+#  El juego es bloqueante: todo se programa con "in <ms> ..." dentro de un unico run.
+#  (Device_id del sim = 137.)
+# ============================================================
+wait 300
+
+# --- Entrar a Tetris y elegir "2 Jug: Crear" (opcion 1 de 0..2) ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down        # entrar al juego: seleccion de modo
+in 120 morse up
+in 400 pot 512         # opcion 1 = "2 Jug: Crear"
+in 700 expect text Crear
+in 1200 morse down     # A: elegir -> lobby de anfitrion
+in 1320 morse up
+in 1800 expect text Esperando
+# 1) En el LOBBY (esperando companero): llega un mensaje de chat
+in 2000 chatmsg 50 1 hola desde el lobby
+in 3000 chatmsg 50 1 hola desde el lobby       # (el emisor repite si no recibe el ACK)
+in 3500 expect serial Guardado: hola desde el lobby
+in 3500 expect serial ACK a #50 msg 1
+in 3500 expect text Esperando                  # sigue en el lobby
+# 2) El invitado se une ('TJ'): empieza la partida
+in 4000 lora TJ
+in 6000 expect text PTS                        # el anfitrion pinta la partida
+# 3) Durante la partida: entradas del invitado ('TI' + columna + rotaciones + caidas) y un mensaje de chat
+in 6200 lorabin 5449040000
+in 7000 lorabin 5449050100
+in 8000 chatmsg 50 2 mensaje durante la partida
+in 11000 chatmsg 50 2 mensaje durante la partida
+in 12800 expect serial Guardado: mensaje durante la partida
+in 12800 expect serial ACK a #50 msg 2
+in 12800 expect text PTS                       # la partida sigue
+in 12800 expect airtime 55 8000                # el anfitrion ocupa menos del 55 % del canal (estado ~35 % + ACK)
+in 12800 shot tetris_host_partida
+# Salir: mantener B (>= 0,8 s): avisa al invitado ('TQ') y vuelve al menu
+in 13000 finish down
+in 14000 finish up
+run 15500
+expect text Env
+expect times 2 Historial] Guardado:            # solo los dos mensajes de chat: sin basura de balizas, ACK ni paquetes del juego
+print Tetris Coop (anfitrion): chat en el lobby y en la partida, entrada del invitado y ocupacion del canal < 55 %

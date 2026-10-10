@@ -226,6 +226,10 @@ chatmsg 50 59 i
 run 800
 chatmsg 50 60 j
 run 800
+chatmsg 50 61 k                 # (dos mas por si alguno se pisara con una emision propia: hacen falta al menos 10)
+run 800
+chatmsg 50 62 l
+run 800
 expect pixel 72 13 on           # pastilla ancha (x=71..87)
 shot unread_9mas
 print Diez o mas sin leer: insignia 9+

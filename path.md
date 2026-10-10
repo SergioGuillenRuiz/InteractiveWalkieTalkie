@@ -23,8 +23,8 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Presencia | Baliza cada 30 s ±3 s (aleatoria, para que dos equipos encendidos a la vez no se tapen) y corazón en pantalla cuando hay algún compañero en alcance. Recuerda hasta 4 compañeros **por separado** (id, último oído, batería); a la izquierda del corazón se muestra el nivel de batería **más bajo** de los que están en alcance (y "!" si alguno avisa de batería baja), no el del último que emitió |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible. **El chat sigue funcionando durante las partidas** (Tres en raya, Tetris 2J, HippoRadar): `backgroundTick()` es el único que lee la radio, atiende el chat (mensajes al historial con su ACK, presencia, balizas, reintentos) y deja a cada juego solo sus paquetes. Excepción: en el radar de HippoRadar la radio va en SF10 y no oye ni emite el chat (ver "En espera de tu decisión") |
-| Radio | La emisión es **asíncrona** (el equipo sigue atendiendo botones y animaciones mientras la trama está en el aire). La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 41 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 6 escenas) es determinista y tarda ~2 s |
+| Radio | Los paquetes viajan en **binario** (IV + bloques AES: un mensaje corto o una baliza = 72 ms en el aire a SF7, la mitad que antes en hexadecimal) y los juegos emiten a un ritmo que cabe en el canal: Tetris 2J ~35 % el anfitrión y ~26 % el invitado (estado cada 340 ms, entrada cada 280 ms), radar ~34 % (un ping de 453 ms a SF10 cada 1,2-1,5 s); el chat normal ocupa ~0,3 %. La emisión es **asíncrona** (el equipo sigue atendiendo botones y animaciones mientras la trama está en el aire). La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 42 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 7 escenas) es determinista y tarda ~2 s |
 
 ---
 
@@ -49,25 +49,14 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 ## 🔴 Riesgos sin verificar en la placa
 
 - [ ] **Radio: comportamiento verificado solo en el simulador.** El simulador ejecuta la librería real sobre un modelo del chip, pero el modelo se escribió a partir del datasheet: en la placa hay que confirmar que (a) se oyen los mensajes en el menú principal y en las esperas, (b) `Lora_busy()` (registro `RegModemStat`) detecta de verdad una trama entrante para escuchar antes de hablar, (c) leer la FIFO por SPI sin salir de recepción no corrompe la trama siguiente, y (d) el consumo en suspensión (light sleep del ESP8266, radio siempre encendida ≈ 11 mA) es el esperado.
-- [ ] **Tetris 2J ocupa la radio más del 100 % del tiempo** (SF7/125 kHz salvo que se indique; tiempo en el aire calculado):
-
-  | Paquete | Tiempo en el aire | Se envía cada | Ocupación |
-  |---|---|---|---|
-  | Tetris 2J, estado del anfitrión | 302 ms | 280 ms | **108 %** |
-  | Tetris 2J, controles del invitado | 118 ms | 200 ms | 59 % |
-  | HippoRadar, ping (SF10) | 698 ms | 1,8-2,2 s | 35 % (arreglado: antes cada ~340 ms = 205 %) |
-  | Mensaje de chat máximo | 348 ms | puntual | — |
-
-  - El estado del anfitrión de Tetris 2J es físicamente imposible (más de 100 %). Además, la radio no puede escuchar mientras transmite, así que en la placa el anfitrión probablemente no funcione ni reciba mensajes durante la partida.
-  - En la UE, la banda de 868,0 MHz tiene un límite legal del 1 % de ocupación.
-  - Los paquetes van en hexadecimal, lo que duplica su tamaño. Enviarlos en binario reduciría el tiempo a la mitad.
 
 ---
 
 ## ⏸ En espera de tu decisión
 
-Nada de esto se ha cambiado hasta que lo decidas (el código está preparado en los dos casos):
+Nada de esto se ha cambiado hasta que lo decidas; en cada caso, lo que hay ahora es lo más sencillo y no te ata a ninguna opción:
 
+- [ ] **Límite legal de ocupación y potencia (UE, 868 MHz).** Según la normativa europea de dispositivos de corto alcance (EN 300 220; verifica la vigente), la sub-banda 868,0-868,6 MHz tiene un límite de ocupación del **1 %** (36 s de emisión por hora) y de **14 dBm de potencia radiada** (25 mW). El equipo emite en 868,0 MHz con 125 kHz de ancho (el borde inferior de esa sub-banda: parte de la señal cae por debajo), a **+17 dBm** (+20 dBm en el radar) y los juegos por radio ocupan el 25-35 % del canal: Tetris 2J y el radar **superan con mucho el 1 %** mientras se juega (el chat normal, ~0,3 %, cabe). Nada de esto se ha cambiado. Opciones: (a) dejarlo (uso privado o de prueba, bajo tu responsabilidad); (b) bajar la potencia a 14 dBm y mover la frecuencia a 868,1-868,5 MHz (un cambio de una línea en `include/MyLora.h`), manteniendo los juegos; (c) limitar la ocupación al 1 % con un contador en el firmware (los juegos por radio dejarían de ser viables); (d) usar la sub-banda de 869,4-869,65 MHz (10 % de ocupación, 500 mW) o escucha-antes-de-hablar con salto de frecuencia, que permiten más ocupación. ¿Qué prefieres?
 - [ ] **HippoRadar y el chat.** El radar usa largo alcance (SF10, +20 dBm) y la radio solo oye lo que llega con ese mismo SF: durante el radar el equipo **no recibe mensajes del chat** (van en SF7) ni los emite, y mientras tanto no saca balizas ni reintentos (al salir se anuncia y reintenta lo pendiente; los emisores reintentan solos). Alternativas: (a) dejarlo así (es lo que hay ahora; solo dura mientras se usa el radar); (b) alternar a SF7 unos instantes cada pocos segundos para seguir oyendo el chat (a costa de perder pings); (c) hacer el radar en SF7 (menos alcance, el chat sigue funcionando). ¿Cuál prefieres?
 - [ ] **Ahorro de energía de la radio en suspensión.** Hoy la radio **no se duerme nunca**: el equipo está siempre alcanzable y puede avisar con la pantalla apagada, a cambio de ~11 mA continuos. La alternativa está implementada y probada pero desactivada (`LORA_DEEP_SLEEP` en `include/Config.h`, o `Lora_setDeepSleepMs()` en marcha): tras N minutos sin oír nada en suspensión la radio se duerme del todo, el equipo dura más y deja de oír (y de avisar) hasta que lo despiertes con 3 pulsaciones. ¿Siempre alcanzable, dormir tras N minutos (¿cuántos?) o un ajuste en el menú?
 
@@ -76,12 +65,9 @@ Nada de esto se ha cambiado hasta que lo decidas (el código está preparado en 
 ## Orden propuesto
 
 1. [ ] **Probar en la placa** la recepción en el menú principal, la suspensión y el consumo, y los dos modos de la tabla. El simulador ya modela la radio (`--radio real`) y reproduce estos riesgos sin placa; falta confirmarlos en la placa.
-2. [ ] **Arreglar la radio** (la escucha continua, el acceso al canal y los ACK/reintentos ya están hechos):
-   - enviar los paquetes en binario;
-   - bajar el ritmo de Tetris 2J y HippoRadar a algo que quepa en el canal.
-3. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
-4. [ ] **Seguridad:** emparejamiento y clave por pareja.
-5. [ ] **Pulido:** un manual de usuario (y, si quieres, un aviso de "mensaje nuevo" dentro de los juegos: hoy el mensaje se guarda y se confirma pero solo se ve al salir al menú).
+2. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
+3. [ ] **Seguridad:** emparejamiento y clave por pareja.
+4. [ ] **Pulido:** un manual de usuario (y, si quieres, un aviso de "mensaje nuevo" dentro de los juegos: hoy el mensaje se guarda y se confirma pero solo se ve al salir al menú).
 
 ---
 

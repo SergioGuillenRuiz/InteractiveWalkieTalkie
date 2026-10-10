@@ -36,40 +36,6 @@ static void fillRandomIV(uint8_t *iv) {
 #endif
 }
 
-// Byte a hexadecimal
-static char toHex(uint8_t nibble) {
-    nibble &= 0x0F;
-    return nibble < 10 ? '0' + nibble : 'A' + (nibble - 10);
-}
-
-// Bytes a String hexadecimal
-static String toHexString(const uint8_t* data, uint16_t len) {
-    String result;
-    for (uint16_t i = 0; i < len; i++) {
-        result += toHex(data[i] >> 4);
-        result += toHex(data[i]);
-    }
-    return result;
-}
-
-// Hexadecimal a bytes
-static bool fromHexString(const String& hex, uint8_t* out, uint16_t maxLen) {
-    if (hex.length() % 2 != 0) return false;
-    
-    uint16_t byteCount = hex.length() / 2;
-    if (byteCount > maxLen) return false;
-    
-    for (uint16_t i = 0; i < byteCount; i++) {
-        char high = hex[i * 2];
-        char low = hex[i * 2 + 1];
-        
-        out[i] = (high <= '9' ? high - '0' : high - 'A' + 10) << 4 |
-                 (low <= '9' ? low - '0' : low - 'A' + 10);
-    }
-    
-    return true;
-}
-
 // Añadir padding PKCS7
 static uint16_t addPad(uint8_t* data, uint16_t len, uint16_t maxLen) {
     uint8_t pad = 16 - (len % 16);
@@ -100,22 +66,28 @@ static bool removePad(uint8_t* data, uint16_t* len) {
 
 // ============================================================
 // ÚNICAS 2 FUNCIONES PÚBLICAS
+//
+// Formato en el aire (BINARIO): IV(16) | bloques cifrados AES-128-CBC (N x 16). Antes viajaba en hexadecimal
+// (el doble de bytes y de tiempo en el aire: 32 B en vez de 64 B para un mensaje corto = 72 ms en vez de
+// 118 ms a SF7). Un paquete LoRa admite 255 B: 16 + 16*N <= 255 => texto plano de hasta 223 bytes.
 // ============================================================
+
+#define CRYPTO_MAX_PLAIN   223
+#define CRYPTO_MAX_BUF     224      // 14 bloques de 16: el relleno de un texto de <= 223 bytes no pasa de 224 (16 + 224 = 240 <= 255)
 
 String SimpleCrypto_encrypt(const String& text) {
     if (text.length() == 0) return "";
 
     uint16_t len = text.length();
-    // IV(16) + texto cifrado, en hex, debe caber en un paquete LoRa (<=255 bytes)
-    if (len > 95) return "";
+    if (len > CRYPTO_MAX_PLAIN) return "";
 
     uint8_t iv[16];
     fillRandomIV(iv);
 
-    uint8_t buffer[128];
+    uint8_t buffer[CRYPTO_MAX_BUF];
     memcpy(buffer, text.c_str(), len);
 
-    uint16_t paddedLen = addPad(buffer, len, 128);
+    uint16_t paddedLen = addPad(buffer, len, CRYPTO_MAX_BUF);
     if (paddedLen == 0) return "";
 
     struct AES_ctx ctx;
@@ -123,22 +95,22 @@ String SimpleCrypto_encrypt(const String& text) {
     AES_CBC_encrypt_buffer(&ctx, buffer, paddedLen);
 
     // El IV (en claro) precede al texto cifrado
-    return toHexString(iv, 16) + toHexString(buffer, paddedLen);
+    String out;
+    for (uint16_t i = 0; i < 16; i++) out += (char)iv[i];
+    for (uint16_t i = 0; i < paddedLen; i++) out += (char)buffer[i];
+    return out;
 }
 
-String SimpleCrypto_decrypt(const String& hex) {
-    // Formato: 32 hex (IV) + N*32 hex (bloques cifrados), al menos un bloque
-    if (hex.length() < 64 || hex.length() % 32 != 0) return "";
+String SimpleCrypto_decrypt(const String& data) {
+    // Formato: IV(16) + N bloques cifrados de 16 bytes (al menos uno)
+    if (data.length() < 32 || data.length() % 16 != 0 || data.length() > 16 + CRYPTO_MAX_BUF) return "";
 
     uint8_t iv[16];
-    if (!fromHexString(hex.substring(0, 32), iv, 16)) return "";
+    for (int i = 0; i < 16; i++) iv[i] = (uint8_t)data[i];
 
-    String ctHex = hex.substring(32);
-    uint16_t byteLen = ctHex.length() / 2;
-    if (byteLen > 128) return "";
-
-    uint8_t buffer[128];
-    if (!fromHexString(ctHex, buffer, 128)) return "";
+    uint16_t byteLen = data.length() - 16;
+    uint8_t buffer[CRYPTO_MAX_BUF];
+    for (uint16_t i = 0; i < byteLen; i++) buffer[i] = (uint8_t)data[16 + i];
 
     struct AES_ctx ctx;
     AES_init_ctx_iv(&ctx, KEY, iv);

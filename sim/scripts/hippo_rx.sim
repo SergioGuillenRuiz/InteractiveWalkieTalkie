@@ -77,6 +77,7 @@ in 37000 lora HR
 in 38000 expect times 1 Chat] Baliza           # solo la baliza de arranque (de antes del radar)
 in 38000 expect times 0 Reintento msg 1 (2)     # sin reintentos mientras dura el radar (el 1o pudo salir antes de entrar:
                                                 # cae a los 3,5-6,5 s del envio y el radar empieza a los ~4 s)
+in 38000 expect airtime 45 20000                # los pings (SF10, 453 ms) ocupan ~34 % del canal por equipo (antes 205 %: siempre emitiendo)
 in 38000 expect notext BUSCANDO                 # el enlace sigue vivo (los pings llegan por la cola de juego)
 in 38000 expect notext Jueg                     # y seguimos en el radar
 in 38000 shot hippo_rx_radar
