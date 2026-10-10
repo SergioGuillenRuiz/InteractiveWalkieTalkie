@@ -52,6 +52,13 @@ extern SendSubState sendSubState;
 // recibir mensajes en todo momento.
 void backgroundTick();
 
+// Paquetes de JUEGO (Tetris 'T..', Tres en raya 0x07, HippoRadar "HR"). backgroundTick() es el UNICO que lee
+// la radio: atiende ella los paquetes de chat (mensajes, ACK, balizas, dibujos) y deja aqui los de juego para
+// la partida en curso, que los recoge con Game_nextPacket(). Asi, durante una partida los mensajes siguen
+// llegando (al historial, con su ACK) y los ACK/balizas no se confunden con paquetes del juego.
+bool Game_nextPacket(String &out, int *rssi = nullptr);   // el siguiente paquete de juego ya descifrado (y su RSSI en dBm); false si no hay
+void Game_dropPackets();             // descarta los pendientes (al empezar una partida)
+
 bool handleIdle();
 bool handleSleep();
 bool handleSendMenu();

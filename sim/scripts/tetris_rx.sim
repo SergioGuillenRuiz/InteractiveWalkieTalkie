@@ -1,0 +1,56 @@
+# ============================================================
+#  Recibir EN TODO MOMENTO: dentro de Tetris Coop (2 jugadores). Antes el juego leia la radio directamente
+#  y descartaba todo lo que no empezaba por 'T': un mensaje de chat que llegaba en el lobby o durante la
+#  partida se perdia (sin ACK) y no se enviaban balizas ni reintentos. Ahora backgroundTick() atiende el chat y
+#  deja al juego solo sus paquetes ('TH', 'TJ', 'TS', 'TI', 'TQ').
+#  Aqui se juega como CLIENTE ("Unirse"): busca partida (envia 'TJ'), el anfitrion contesta 'TH' y empieza a
+#  mandar su estado ('TS'...); el cliente envia su entrada ('TI') cada 200 ms.
+#  (Los paquetes del anfitrion se inyectan con "in <ms> lora ..."; el juego es bloqueante: todo en un run.)
+#  (Device_id del sim = 137.)
+# ============================================================
+wait 300
+
+# --- Entrar a Tetris (idx 0 del menu de juegos) y elegir "2 Jug: Unirse" (opcion 2 de 0..2) ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down       # entrar al juego: seleccion de modo
+in 120 morse up
+in 400 pot 900        # opcion 2 = "2 Jug: Unirse" (el pote se estabiliza antes de pulsar A)
+in 700 expect text Unirse
+in 1200 morse down    # A: elegir
+in 1320 morse up
+in 1800 expect text Buscando
+# 1) En el LOBBY (buscando partida): llega un mensaje de chat y una baliza
+in 2000 chatmsg 50 1 hola desde el lobby
+in 3000 chatmsg 50 1 hola desde el lobby       # (el emisor repite si no recibe el ACK: si el 1o se pisara con una emision del lobby, este llega)
+in 3500 expect serial Guardado: hola desde el lobby
+in 3500 expect serial ACK a #50 msg 1
+in 3500 expect text Buscando                   # sigue en el lobby
+in 3700 presence 60 0 80
+in 4000 presence 60 0 80
+in 4300 expect serial equipo #60 en alcance
+# 2) El anfitrion contesta: empieza la partida (cliente) y llega su estado
+in 4500 lora TH
+in 5500 lora TS0000000000000000000000000000000000000000000000000000000000000000000000000000
+in 7000 expect text PTS                        # el cliente pinta la partida (tablero, puntos...)
+# 3) Durante la partida: otro mensaje de chat. El cliente emite su entrada ('TI') cada ~225 ms; si el mensaje
+#    empezara en el MISMO instante que una de esas emisiones se pisarian (ventana fisica de unos ms), asi que, como
+#    haria un emisor real al no recibir el ACK, se REPITE 3 s despues (mismo msgId: no se duplica en el historial).
+in 7600 chatmsg 50 2 mensaje durante la partida
+in 10600 chatmsg 50 2 mensaje durante la partida
+in 12300 expect serial Guardado: mensaje durante la partida
+in 12300 expect serial ACK a #50 msg 2
+in 12300 expect text PTS                       # la partida sigue
+in 12300 shot tetris_rx_partida
+in 14000 expect serial Chat] Baliza            # y el equipo sigue emitiendo su baliza durante la partida
+# Salir: mantener B (>= 0,8 s)
+in 14200 finish down
+in 15200 finish up
+run 16700
+expect text Env
+expect times 2 Historial] Guardado:            # solo los dos mensajes de chat (el repetido no se duplica): sin basura de balizas, ACK ni paquetes del juego
+print Recibir en todo momento dentro de Tetris Coop (cliente) OK

@@ -110,6 +110,10 @@ print Choose4Me sale limpio a IDLE
 # ============================================================
 print --- HIPPO RADAR ---
 
+# En el radar los dos equipos usan largo alcance (SF10): los pings "HR" del otro se inyectan en SF10 y
+# cada uno ocupa ~0,7 s en el aire (por eso van separados al menos 0,8 s).
+radio peer sf 10
+
 # Volver a entrar a JUEGOS desde IDLE (cursor alto) y elegir HippoRadar
 # (idx4 de 0..5 = raw [683..854); pot 768 es su centro). Ya NO es la ultima
 # opcion: la ultima es "3 en raya", asi que pot 1023 no sirve para ambos.
@@ -157,8 +161,8 @@ in 150 morse up
 in 600 morse down
 in 750 morse up
 in 900 lora HR
-in 1100 lora HR
-run 1500 150
+in 2700 lora HR
+run 3800 150
 expect text GIRA
 shot g10_hippo_04_gira
 print Companero oido (in <ms> lora HR): fase GIRA DESPACIO (frio/tibio/caliente)

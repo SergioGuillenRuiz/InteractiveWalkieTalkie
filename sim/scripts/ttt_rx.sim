@@ -1,0 +1,78 @@
+# ============================================================
+#  Recibir EN TODO MOMENTO: dentro de Tres en raya. Antes el juego leia la radio directamente y descartaba
+#  todo lo que no era suyo: un mensaje de chat que llegaba durante la partida se perdia (sin ACK, el emisor
+#  lo reintentaba) y no se enviaban balizas. Ahora backgroundTick() atiende el chat y deja al juego solo
+#  sus paquetes:
+#    - un MENSAJE de chat se guarda en el historial, se confirma (ACK) y no interrumpe la partida;
+#    - una BALIZA actualiza la presencia, un ACK ajeno y los paquetes de otros juegos no se guardan;
+#    - el equipo SIGUE emitiendo su baliza durante la partida;
+#    - un mensaje enviado y sin confirmar se reintenta y su ACK se procesa durante la partida.
+#  El juego es bloqueante: todo se programa con "in <ms> ..." dentro de un unico run.
+#  (Device_id del sim = 137; rival #200 > 137 => yo soy X y muevo primero.)
+# ============================================================
+wait 300
+
+# --- Un mensaje enviado ANTES de jugar y sin confirmar (para ver sus reintentos dentro de la partida) ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 300
+wait 200
+tap morse
+wait 250
+pot 460
+wait 250
+expect text kissy
+in 0 morse down
+in 120 morse up
+in 1100 finish down
+in 1220 finish up
+run 1700
+expect serial Enviando: kissy
+wait 300
+
+# --- Entrar a Tres en raya (idx 4 del menu de juegos) ---
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 700 expect text Buscando rival
+# 1) Buscando rival: llega un mensaje de chat, una baliza y un ACK ajeno
+in 800 chatmsg 50 1 hola desde el juego
+in 2200 expect serial Guardado: hola desde el juego
+in 2200 expect serial ACK a #50 msg 1
+in 2200 expect text Buscando rival            # la pantalla del juego sigue ahi
+in 2400 presence 60 0 80
+in 3000 expect serial equipo #60 en alcance
+in 3200 chatack 99 5                          # ACK para otro equipo: no es un mensaje
+in 3600 ttt hello 200                         # el rival (#200): empareja
+in 4400 expect serial emparejado con #200
+in 4400 expect serial soy X
+# 2) Ya en partida (mi turno): mover y recibir otro mensaje a mitad de partida
+in 4600 pot 0
+in 4900 morse down
+in 5020 morse up
+in 5600 expect serial juego casilla
+in 6000 chatmsg 50 2 mensaje a mitad de partida
+in 7500 expect serial Guardado: mensaje a mitad de partida
+in 7500 expect serial ACK a #50 msg 2
+in 7500 expect text Turno del rival           # sigue en el tablero, esperando al rival
+in 7500 shot ttt_rx_partida
+# 3) Durante la partida el equipo sigue emitiendo su baliza y reintentando lo pendiente
+in 12500 expect serial Chat] Baliza
+in 12500 expect serial Reintento msg 1
+in 13000 chatack 137 1                        # llega el ACK de "kissy" (msgId 1) dentro de la partida
+in 14000 expect serial Entregado msg 1
+# Salir: mantener B
+in 15000 finish down
+in 16000 finish up
+run 17500
+expect text Env                               # de vuelta en el menu principal
+expect times 3 Historial] Guardado:           # solo el enviado (kissy) y los DOS mensajes de chat: sin basura de ACK, balizas ni paquetes del juego
+print Recibir en todo momento dentro de Tres en raya OK

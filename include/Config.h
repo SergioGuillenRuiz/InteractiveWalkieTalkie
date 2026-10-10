@@ -94,6 +94,14 @@
 // que lleva mas tiempo sin oirse.
 #define MAX_PEERS            4
 
+// --- HippoRadar ---
+// Un ping del radar (SF10, largo alcance) tarda ~700 ms en el aire: se envia uno cada RADAR_PING_MS +
+// 0..RADAR_PING_JITTER_MS (ocupa ~30-40 % del canal por equipo). Antes salia cada ~340 ms, mas rapido de lo
+// que tarda en emitirse: el equipo estaba SIEMPRE emitiendo (y por tanto sordo a los pings del otro) y el
+// bucle del radar quedaba colgado esperando a que acabase cada emision.
+#define RADAR_PING_MS         1800UL
+#define RADAR_PING_JITTER_MS  400UL
+
 // --- Acceso al canal ---
 // La radio es half-duplex y el canal es uno solo: lo que se emite mientras otro equipo emite se pierde
 // (las dos tramas). Por eso:

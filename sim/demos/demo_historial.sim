@@ -26,11 +26,11 @@ wait 300
 # ------------------------------------------------------------
 print Paso 2: recibir dos mensajes de peers
 chatmsg 50 1 hola desde el cincuenta
-wait 400
+wait 800                       # (el ACK sale tras un retardo aleatorio de hasta 300 ms)
 expect serial Guardado: hola desde el cincuenta
 expect serial ACK a #50
 chatmsg 77 2 nos vemos luego
-wait 400
+wait 800
 expect serial Guardado: nos vemos luego
 
 print Paso 2b: enviar un mensaje (queda como ENVIADO en el historial)

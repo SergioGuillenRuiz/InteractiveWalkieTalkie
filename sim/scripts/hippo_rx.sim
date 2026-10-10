@@ -1,0 +1,100 @@
+# ============================================================
+#  HippoRadar y el chat. Durante el radar la radio va en LARGO ALCANCE (SF10, +20 dBm) y el chat, en SF7, no se
+#  oye en ninguno de los dos sentidos. Lo que se comprueba:
+#    - los pings "HR" del compañero (que tambien va en SF10) llegan al juego por la cola de paquetes de juego
+#      (ya no por una lectura directa que se comia los demas paquetes);
+#    - un mensaje de chat en SF7 no se oye durante el radar, y NADA entra en el Historial como basura;
+#    - mientras dura el radar el equipo no saca balizas ni reintentos (saldrian en SF10 y nadie del chat los oiria:
+#      solo ocuparian el canal), y al salir vuelve al chat: se anuncia con una baliza y reintenta lo pendiente;
+#    - ya fuera, el chat funciona como siempre (SF7).
+#  El radar es bloqueante: todo se programa con "in <ms> ..." dentro de un unico run.
+#  (Device_id del sim = 137.)
+# ============================================================
+radio ideal off                                # modelo realista: el radar y el chat van en SF distintos y no se oyen
+wait 300
+waitfor serial 0 6000 [Chat] Baliza            # la baliza de arranque fuera de en medio
+waitfor txend
+
+# --- Un mensaje enviado y sin confirmar (para ver que sus reintentos esperan al radar) ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 300
+wait 200
+tap morse
+wait 250
+pot 460
+wait 250
+expect text kissy
+in 0 morse down
+in 120 morse up
+in 1100 finish down
+in 1220 finish up
+run 1700
+expect serial Enviando: kissy
+wait 300
+
+# --- Entrar a HippoRadar (idx 4 del menu de juegos) y empezar ---
+pot 1023
+wait 350
+tap morse
+wait 300
+pot 768
+wait 350
+expect text HippoRadar
+radio peer sf 10                               # el otro equipo, en el radar, emite en SF10
+in 0 morse down
+in 150 morse up
+in 600 morse down                              # A: empezar -> radar (largo alcance)
+in 750 morse up
+in 1500 expect text BUSCANDO
+# 1) pings del companero (SF10, ~0,7 s en el aire): llega el enlace
+in 2000 lora HR
+in 4500 expect text GIRA
+# 2) un mensaje de chat en SF7 durante el radar: la radio (SF10) no lo oye
+in 5000 radio peer sf 7
+in 5010 chatmsg 50 1 hola desde fuera del radar
+in 5020 radio peer sf 10
+in 7000 expect times 0 Guardado: hola desde fuera
+in 7000 expect times 0 ACK a #50
+# 3) el radar dura mas de 35 s (con un ping del companero cada 2,5 s mantiene el enlace): ni una baliza ni un
+#    reintento mientras tanto
+in 4500 lora HR
+in 7000 lora HR
+in 9500 lora HR
+in 12000 lora HR
+in 14500 lora HR
+in 17000 lora HR
+in 19500 lora HR
+in 22000 lora HR
+in 24500 lora HR
+in 27000 lora HR
+in 29500 lora HR
+in 32000 lora HR
+in 34500 lora HR
+in 37000 lora HR
+in 38000 expect times 1 Chat] Baliza           # solo la baliza de arranque (de antes del radar)
+in 38000 expect times 0 Reintento msg 1 (2)     # sin reintentos mientras dura el radar (el 1o pudo salir antes de entrar:
+                                                # cae a los 3,5-6,5 s del envio y el radar empieza a los ~4 s)
+in 38000 expect notext BUSCANDO                 # el enlace sigue vivo (los pings llegan por la cola de juego)
+in 38000 expect notext Jueg                     # y seguimos en el radar
+in 38000 shot hippo_rx_radar
+# 4) salir (B): vuelve al chat, se anuncia y reintenta lo pendiente
+in 38500 finish down
+in 39000 finish up
+run 41000
+expect text Env
+expect times 0 Historial] Guardado: hola          # nada del chat llego ni se guardo durante el radar
+print HippoRadar: pings por la cola de juego, chat en pausa durante el radar y sin basura en el historial
+
+# --- Ya fuera: la baliza de anuncio, el reintento pendiente y el chat vuelven a funcionar ---
+radio peer sf 7
+waitfor serial 0 5000 Reintento msg 1
+waitfor txend
+chatmsg 50 2 ya estoy de vuelta
+run 1500
+expect serial Guardado: ya estoy de vuelta
+expect serial ACK a #50 msg 2
+expect times 2 Chat] Baliza                       # la de arranque y la de vuelta del radar
+print Tras el radar: baliza de anuncio, reintento pendiente y chat de nuevo en SF7

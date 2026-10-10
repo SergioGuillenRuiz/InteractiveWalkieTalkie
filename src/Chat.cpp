@@ -7,7 +7,6 @@
 #include "Doodle.h"
 #include "Config.h"
 #include "EepromMap.h"
-#include "States.h"        // mainState / STATE_IDLE / STATE_SLEEP (gating de baliza)
 #include <EEPROM.h>
 
 // Marcadores de protocolo (1er byte del texto plano, antes de cifrar).
@@ -460,8 +459,8 @@ void Chat_tick() {
   // corta. Lo que no cabe espera a la vuelta siguiente (unos ms despues, ya con los botones atendidos).
   bool txDone = false;
 
-  // ACK pendientes cuyo retardo ya paso.
-  if (!Lora_isAsleep()) {
+  // ACK pendientes cuyo retardo ya paso (en el radar de largo alcance, SF10, nadie del chat oye: esperan).
+  if (!Lora_isAsleep() && !Lora_rangeMode()) {
     for (int i = 0; i < ACK_QUEUE; i++) {
       if (!g_acks[i].used || (int32_t)(now - g_acks[i].dueAt) < 0) continue;
       g_acks[i].used = false;
@@ -471,13 +470,14 @@ void Chat_tick() {
     }
   }
 
-  // Baliza: solo en estados "ambientales" (IDLE/SLEEP) para no colisionar con los
-  // paquetes de juego ni ensuciar el ultimo TX durante un envio.
-  bool ambient = (mainState == STATE_IDLE || mainState == STATE_SLEEP);
-  bool radioOn = !Lora_isAsleep();    // con la radio dormida (suspension prolongada) no se emite ni se reintenta
+  // Balizas y reintentos salen en cualquier estado, tambien durante una partida (la emision es asincrona y
+  // escucha antes de hablar, asi que no cuelga el juego ni pisa sus paquetes). No salen con la radio dormida
+  // (ahorro opcional) ni en el radar de largo alcance (HippoRadar): ahi la radio va en SF10 y el chat, en SF7,
+  // no se oye en ninguno de los dos sentidos; al volver del radar se anuncia (Chat_beaconSoon) y reintenta.
+  bool radioOn = !Lora_isAsleep() && !Lora_rangeMode();
   // (Escuchar antes de hablar: si entra una trama o hay un paquete sin leer, la baliza espera unos ms
   //  en vez de destruirlo; g_beaconDue no se toca y se reintenta en la siguiente vuelta.)
-  if (ambient && radioOn && !txDone && (int32_t)(now - g_beaconDue) >= 0 && !Lora_busy()) {
+  if (radioOn && !txDone && (int32_t)(now - g_beaconDue) >= 0 && !Lora_busy()) {
     sendBeacon();
     g_beaconDue = now + nextBeaconDelay();
     txDone = true;

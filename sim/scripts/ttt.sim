@@ -20,7 +20,8 @@ in 0 morse down
 in 120 morse up
 in 600 ttt hello 50
 in 1200 ttt state 50 111000000 1
-run 2000
+in 2400 ttt state 50 111000000 1               # (el rival reenvia su estado cada ~2 s: si el 1o se pisara con una emision propia, este llega)
+run 3200
 expect serial emparejado con #50
 expect serial soy O
 expect text Pierdes

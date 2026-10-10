@@ -4,7 +4,7 @@
 #include "Inputs.h"
 #include "States.h"
 #include "MyLora.h"
-#include "Historial.h"
+#include "Chat.h"
 #include "Identity.h"
 #include "HippoRadar.h"
 
@@ -74,7 +74,7 @@ static void centerPrint(const String &s, int y, uint8_t size = 1) {
 // = mas distancia). Los dos equipos deben estar en el radar para oirse. Al salir
 // se restauran los parametros del chat (mas rapido).
 static void radioRangeMode() { Lora_setRangeMode(true); }
-static void radioRestore()   { Lora_setRangeMode(false); }
+static void radioRestore()   { Lora_setRangeMode(false); Chat_beaconSoon(); }   // de vuelta al chat: se anuncia
 
 static float estDistance(float rssi) {
   float d = powf(10.0f, (refRssi - rssi) / (10.0f * PLE));
@@ -92,21 +92,19 @@ static void sendPing() {
   Lora_send(p);
 }
 
-// Lee paquetes: los "HR" del companero actualizan la senal; el resto van al
-// historial (para no perder mensajes normales mientras usas el radar).
+// Lee los paquetes de juego: los "HR" del companero actualizan la senal. backgroundTick() atiende el resto
+// de la radio (el chat va en SF7 y en el radar, en SF10, no llega; pero lo que esperaba sigue su curso).
 static void rxTick() {
-  while (Lora_hasMessage()) {
-    String m = Lora_readMessage();
+  backgroundTick();
+  String m; int r = 0;
+  while (Game_nextPacket(m, &r)) {
     if (m.length() >= 2 && m[0] == 'H' && m[1] == 'R') {
       if (m.length() < 3 || (uint8_t)m[2] != ownId) {       // ping del companero
-        int r = Lora_lastRssi();
         if (rssiEMA < -190.0f) rssiEMA = (float)r;
         else                   rssiEMA += ((float)r - rssiEMA) * 0.40f;
         lastHeard = millis();
         haveLink = true;
       }
-    } else {
-      History_addMessage(m);
     }
   }
 }
@@ -224,6 +222,7 @@ void startHippoRadar() {
   if (!startScreen()) { mainState = STATE_IDLE; Display_clear(); return; }
   while (isMorsePressed()) { backgroundTick(); delay(10); }   // soltar la A de "empezar"
 
+  Game_dropPackets();                                         // paquetes de juego que quedaran de antes
   radioRangeMode();                                           // largo alcance mientras dure el radar
   rssiEMA = -200.0f; haveLink = false; lastHeard = 0;
   distM = 0; distRef = 0; distTrend = 0;
@@ -240,7 +239,7 @@ void startHippoRadar() {
     bool a = isMorsePressed();
 
     // radio: pings frecuentes para reaccionar al girar
-    if (now >= nextPing) { sendPing(); nextPing = now + 300 + (unsigned long)random(80); }
+    if (now >= nextPing) { sendPing(); nextPing = now + RADAR_PING_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1); }
     rxTick();
     if (now - lastHeard > 3500) haveLink = false;
     if (haveLink) distM = estDistance(rssiEMA);

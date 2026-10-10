@@ -146,6 +146,9 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `clock.sim`        | Reloj compartido: hora fijada/sincronizada, antigüedad real y persistencia tras reboot |
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
 | `doodle.sim`       | Lienzo 24×24: editor, envío con pantalla de resultado ("Enviado" → "Entregado!" / "(sin confirmar)"), reintentos, el dibujo enviado y el recibido en el Historial |
+| `ttt_rx.sim`       | Chat DENTRO de Tres en raya: mensaje guardado y confirmado sin interrumpir la partida, baliza, ACK ajeno y paquetes de otros juegos sin basura en el historial, balizas y reintentos durante la partida |
+| `tetris_rx.sim`    | Lo mismo dentro de Tetris Coop (cliente): lobby y partida |
+| `hippo_rx.sim`     | HippoRadar (SF10) y el chat: pings por la cola de juego, el chat (SF7) no se oye durante el radar, sin balizas ni reintentos mientras dura, y al salir se anuncia y el chat vuelve |
 | `doodle_store.sim` | Dibujos persistentes: el lienzo vive en su registro del Historial (sobrevive a reinicios, sigue a su registro al desplazarse o borrarse, sin duplicados, outbox persistente con el mismo lienzo) |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
@@ -216,7 +219,7 @@ doodle <peerId> [msgId] [heart|frame]   inyecta un DIBUJO 24x24 de un peer: "hea
 ttt hello <peerId>                 Tres en raya: inyecta el HELLO de emparejamiento de un peer
 ttt state <peerId> <9digitos> <fin>   Tres en raya: inyecta un ESTADO del tablero (0/1/2 por casilla)
 in <ms> doodle|ttt ...             variantes diferidas (durante el bucle bloqueante de un juego)
-in <ms> expect|shot|print ...      una COMPROBACIÓN, captura o nota diferida: se ejecuta en ese instante, también
+in <ms> expect|shot|print|radio ...   una COMPROBACIÓN, captura, nota o ajuste de radio diferido: se ejecuta en ese instante, también
                                    DENTRO de una espera bloqueante (un juego, una pantalla de resultado), donde
                                    un `expect` normal solo podría mirar al terminar el run
 ```

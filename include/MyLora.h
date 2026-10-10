@@ -45,6 +45,9 @@ uint32_t Lora_deepSleepMs();
 // escucha antes de hablar por su cuenta.
 bool Lora_busy();
 void Lora_setRangeMode(bool on);   // HippoRadar: SF10 y +20 dBm (largo alcance) / vuelta al chat
+// true mientras dura el modo de largo alcance (SF10): la radio solo oye y emite en SF10, asi que NO oye el
+// chat (SF7) ni lo emite; mientras tanto no se sacan balizas, ACK ni reintentos del chat.
+bool Lora_rangeMode();
 
 // Emite un mensaje (cifrado). ESCUCHA ANTES DE HABLAR: si entra una trama espera a que acabe (ver
 // CSMA_* en Config.h) y no pisa una trama ya recibida y aun sin leer (la guarda en una cola).

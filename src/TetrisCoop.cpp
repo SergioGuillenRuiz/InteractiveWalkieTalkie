@@ -333,8 +333,9 @@ static void drawGame() {
 }
 
 // ============================================================
-//  Red (2 jugadores por LoRa). Los paquetes de juego empiezan por 'T' y se leen
-//  directamente (sin backgroundTick) para no mezclarlos con los mensajes.
+//  Red (2 jugadores por LoRa). Los paquetes de juego empiezan por 'T'. backgroundTick() atiende la radio
+//  (los mensajes de chat, ACK y balizas siguen funcionando durante la partida) y deja aqui los paquetes de
+//  juego, que se recogen con Game_nextPacket().
 // ============================================================
 static void resetBoard();
 static bool gameOverScreen();
@@ -346,7 +347,9 @@ static int  getB(const String &s, int &i) { int v = hxv(s[i]) * 16 + hxv(s[i + 1
 
 static void tcSend(const String &m) { Lora_send(m); }
 static String tcRecv() {
-  if (Lora_hasMessage()) { String m = Lora_readMessage(); if (m.length() && m[0] == 'T') return m; }
+  backgroundTick();                                  // chat, ACK, balizas y reintentos tambien durante la partida
+  String m;
+  while (Game_nextPacket(m)) if (m.length() && m[0] == 'T') return m;
   return "";
 }
 
@@ -420,7 +423,7 @@ static void clientGame() {
   static bool pa = false, pb = false;
   uint8_t rotC = 0, dropC = 0;
   unsigned long bHold = 0;
-  while (isMorsePressed() || isFinishPressed()) { delay(10); }
+  while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
   while (true) {
     unsigned long now = millis();
     String m = tcRecv();
@@ -524,6 +527,7 @@ static int playerControl(unsigned long now) {
 
 void startTetrisCoop() {
   randomSeed(analogRead(A0) ^ micros());
+  Game_dropPackets();                                // paquetes de juego que quedaran de antes
 
   int mode = modeSelect();
   if (mode < 0) { mainState = STATE_IDLE; Display_clear(); return; }
@@ -550,7 +554,7 @@ void startTetrisCoop() {
     while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
 
     while (!over) {
-      if (host) { String m = tcRecv(); if (m.startsWith("TI")) decodeInput(m); }
+      if (host) { String m = tcRecv(); if (m.startsWith("TI")) decodeInput(m); }   // (tcRecv incluye backgroundTick)
       else backgroundTick();
       now = millis();
 

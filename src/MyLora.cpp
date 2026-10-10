@@ -16,6 +16,7 @@ static int lastRssi = -200;   // RSSI del último paquete recibido
 enum RadioPolicy { RP_LISTEN, RP_SLEEP };
 static RadioPolicy g_policy = RP_LISTEN;
 static uint32_t    g_deepSleepMs = LORA_DEEP_SLEEP;   // ver Lora_setDeepSleepMs()
+static bool        g_rangeMode = false;               // HippoRadar: SF10 / +20 dBm
 static uint32_t    g_lastWatch = 0;
 
 // Registros del SX127x que se consultan directamente (la librería LoRa no permite leer las banderas
@@ -182,6 +183,7 @@ void Lora_begin() {
   // Marcar como listo y empezar a escuchar
   g_rxqN = 0;
   g_txActive = false;
+  g_rangeMode = false;
   g_deepSleepMs = LORA_DEEP_SLEEP;
   loraReady = true;
   g_policy = RP_LISTEN;
@@ -224,9 +226,12 @@ bool Lora_isAsleep()    { return loraReady && g_policy == RP_SLEEP; }
 
 // HippoRadar: largo alcance (SF10 y +20 dBm) mientras dura el radar y vuelta a los parámetros del
 // chat. Se mantiene la política vigente (si escuchaba, sigue escuchando con los parámetros nuevos).
+bool Lora_rangeMode() { return g_rangeMode; }
+
 void Lora_setRangeMode(bool on) {
   if (!loraReady) return;
   waitTxEnd();
+  g_rangeMode = on;
   LoRa.idle();
   LoRa.setSpreadingFactor(on ? 10 : LORA_SPREADING);
   LoRa.setTxPower(on ? 20 : LORA_POWER);

@@ -55,10 +55,12 @@ static void sendState() {
   Lora_send(p);
 }
 // Devuelve 0 (nada), 'H' o 'S'; rellena 'sender'. Adopta el tablero si es 'S'.
+// backgroundTick() atiende el chat (mensajes, ACK, balizas) y deja aqui solo los paquetes de juego.
 static char recvPkt(uint8_t &sender) {
-  if (!Lora_hasMessage()) return 0;
-  String m = Lora_readMessage();
-  if (m.length() < 3 || m[0] != TTT_MARK) return 0;   // no es nuestro: descartar
+  backgroundTick();
+  String m;
+  if (!Game_nextPacket(m)) return 0;
+  if (m.length() < 3 || m[0] != TTT_MARK) return 0;   // no es de este juego: descartar
   char type = m[1];
   sender = (uint8_t)m[2];
   if (type == 'S' && m.length() >= 13) {
@@ -134,7 +136,8 @@ void startTresEnRaya() {
   bool mWas = false, fWas = false;
   unsigned long fStart = 0; bool fLong = false;
 
-  while (isMorsePressed()) { delay(10); }          // soltar la A de "entrar"
+  Game_dropPackets();                              // paquetes de juego que quedaran de antes
+  while (isMorsePressed()) { backgroundTick(); delay(10); }   // soltar la A de "entrar"
 
   while (true) {
     unsigned long now = millis();

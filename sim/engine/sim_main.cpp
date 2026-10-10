@@ -628,7 +628,7 @@ static void execLine(const std::string &raw) {
             int flags = (batt <= 15) ? 1 : 0;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags, gen)));
         }
-        else if (what == "expect" || what == "shot" || what == "print") {   // comprobacion / captura / mensaje DIFERIDO
+        else if (what == "expect" || what == "shot" || what == "print" || what == "radio") {   // comprobacion / captura / mensaje / ajuste de radio DIFERIDO
             g_deferredLines.push_back({ restAfter(line, 2), g_lineNo });
             sim::scheduleAt(t, sim::EV_INJECT, -(int)g_deferredLines.size());
         }

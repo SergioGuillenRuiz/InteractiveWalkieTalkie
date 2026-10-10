@@ -67,6 +67,38 @@ static void onNewIncoming(uint8_t sender, const String &preview) {
 }
 
 //=============================================================
+// PAQUETES DE JUEGO (ver States.h)
+//=============================================================
+#define GAME_PKT_QUEUE 4
+static String  g_gameQ[GAME_PKT_QUEUE];
+static int     g_gameQRssi[GAME_PKT_QUEUE];                 // RSSI de cada paquete (el radar lo necesita: Lora_lastRssi() es el del ultimo leido)
+static uint8_t g_gameQN = 0;
+
+static void gameQueuePush(const String &raw, int rssi) {
+    if (g_gameQN == GAME_PKT_QUEUE) {                       // llena: se pierde el mas antiguo (los juegos reenvian su estado)
+        for (int i = 1; i < GAME_PKT_QUEUE; i++) { g_gameQ[i - 1] = g_gameQ[i]; g_gameQRssi[i - 1] = g_gameQRssi[i]; }
+        g_gameQN--;
+    }
+    g_gameQ[g_gameQN] = raw;
+    g_gameQRssi[g_gameQN] = rssi;
+    g_gameQN++;
+}
+
+bool Game_nextPacket(String &out, int *rssi) {
+    if (g_gameQN == 0) return false;
+    out = g_gameQ[0];
+    if (rssi) *rssi = g_gameQRssi[0];
+    for (int i = 1; i < (int)g_gameQN; i++) { g_gameQ[i - 1] = g_gameQ[i]; g_gameQRssi[i - 1] = g_gameQRssi[i]; }
+    g_gameQ[--g_gameQN] = "";
+    return true;
+}
+
+void Game_dropPackets() {
+    for (int i = 0; i < GAME_PKT_QUEUE; i++) g_gameQ[i] = "";
+    g_gameQN = 0;
+}
+
+//=============================================================
 // SERVICIO DE FONDO
 //=============================================================
 
@@ -135,7 +167,8 @@ void backgroundTick() {
                  (raw[1] == 'S' || raw[1] == 'I' || raw[1] == 'H' ||
                   raw[1] == 'J' || raw[1] == 'Q')) ||
                 (raw.length() >= 2 && raw[0] == 'H' && raw[1] == 'R');
-            if (!gamePkt) {
+            if (gamePkt) gameQueuePush(raw, Lora_lastRssi());   // para la partida en curso (si no hay ninguna, se descarta al empezar la proxima)
+            else {
                 History_addIncoming(raw, 0);
                 onNewIncoming(0, raw);
             }
