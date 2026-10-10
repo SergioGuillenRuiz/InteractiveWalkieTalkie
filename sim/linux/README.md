@@ -12,7 +12,7 @@ y los lanzadores, que viven separados en esta carpeta:
 | `run.bat`                   | `run.sh`                       | Modo interactivo o un script |
 | `run_tests.bat`             | `run_tests.sh`                 | Toda la batería de tests |
 | `net.bat` + `net.ps1`       | `net.sh`                       | N dispositivos interactivos comunicados por radio |
-| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo |
+| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (7 escenas). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~2 s); `net_test.ps1` usa el modelo de radio ideal |
 | `engine/console_win.cpp`    | `console_linux.cpp`            | Ajuste de la consola para píxeles cuadrados |
 | `<conio.h>`, `<process.h>`  | `platform_linux.h`             | Teclado sin eco (termios), pid, ruta del ejecutable |
 
@@ -70,7 +70,11 @@ Las opciones son las mismas que las de `walkie_sim.exe` (ver `../README.md`):
 ```bash
 ../out/linux/walkie_sim --fresh ../scripts/history.sim
 SIM_CHIPID=200 ../out/linux/walkie_sim --interactive --color --air /tmp/aire --node 2
+SIM_SEED=7 ../out/linux/walkie_sim --fresh ../scripts/peers.sim   # otra secuencia aleatoria (retardos de ACK, jitter...)
 ```
+
+Para descubrir tests que solo pasan con una combinación afortunada de tiempos, ejecútalos con muchas semillas:
+`for s in $(seq 1 50); do SIM_SEED=$s ../out/linux/walkie_sim --fresh ../scripts/x.sim; done`.
 
 ## Notas de implementación
 

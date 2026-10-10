@@ -1,6 +1,6 @@
 # Hoja de ruta del proyecto
 
-Estado de las funcionalidades a fecha **2026-10-06** (commit `017463c`).
+Estado de las funcionalidades a fecha **2026-10-10** (commit `3f167da`).
 
 > Todo lo "terminado" está verificado **solo en el simulador**: desde junio no hay
 > pruebas en la placa real. El simulador no modela dos cosas que en la placa pueden
@@ -24,7 +24,8 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible. **El chat sigue funcionando durante las partidas** (Tres en raya, Tetris 2J, HippoRadar): `backgroundTick()` es el único que lee la radio, atiende el chat (mensajes al historial con su ACK, presencia, balizas, reintentos) y deja a cada juego solo sus paquetes. Excepción: en el radar de HippoRadar la radio va en SF10 y no oye ni emite el chat (ver "En espera de tu decisión") |
 | Radio | Los paquetes viajan en **binario** (IV + bloques AES: un mensaje corto o una baliza = 72 ms en el aire a SF7, la mitad que antes en hexadecimal) y los juegos emiten a un ritmo que cabe en el canal: Tetris 2J ~35 % el anfitrión y ~26 % el invitado (estado cada 340 ms, entrada cada 280 ms), radar ~34 % (un ping de 453 ms a SF10 cada 1,2-1,5 s); el chat normal ocupa ~0,3 %. La emisión es **asíncrona** (el equipo sigue atendiendo botones y animaciones mientras la trama está en el aire). La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 42 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 7 escenas) es determinista y tarda ~2 s |
+| Manual | El `README.md` incluye el manual de usuario (conexiones, compilación, controles, enviar, historial, avisos, hora, juegos, radio y solución de problemas) |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 42 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`; los guiones se ejecutan también con varias secuencias aleatorias (`SIM_SEED`). **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 7 escenas) es determinista y tarda ~2 s |
 
 ---
 
@@ -41,8 +42,8 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - La clave AES está fija en el código y es la misma para todos los equipos.
   - No hay autenticación de mensajes (cualquiera con el firmware podría suplantar a otro equipo).
   - No hay protección contra reenvíos de paquetes antiguos.
-- [ ] Manual de usuario: el README solo tiene la lista de componentes y el simulador.
 - [ ] Zumbador o vibración (opcional; no está en la lista de componentes).
+- [ ] **Identificador de equipo de 1 byte.** El número de equipo (1..254) sale del chip (`ESP.getChipId() % 254 + 1`): dos equipos pueden coincidir (≈ 0,4 % con 2 equipos, ≈ 2,3 % con 4) y entonces uno ignora los mensajes del otro (los toma por eco propio). Ampliarlo a 2 bytes cambia el formato de los paquetes.
 
 ---
 
@@ -67,7 +68,7 @@ Nada de esto se ha cambiado hasta que lo decidas; en cada caso, lo que hay ahora
 1. [ ] **Probar en la placa** la recepción en el menú principal, la suspensión y el consumo, y los dos modos de la tabla. El simulador ya modela la radio (`--radio real`) y reproduce estos riesgos sin placa; falta confirmarlos en la placa.
 2. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
 3. [ ] **Seguridad:** emparejamiento y clave por pareja.
-4. [ ] **Pulido:** un manual de usuario (y, si quieres, un aviso de "mensaje nuevo" dentro de los juegos: hoy el mensaje se guarda y se confirma pero solo se ve al salir al menú).
+4. [ ] **Pulido:** un aviso de "mensaje nuevo" dentro de los juegos (hoy el mensaje se guarda y se confirma pero solo se ve al salir al menú) y revisar el manual con el equipo real en la mano.
 
 ---
 

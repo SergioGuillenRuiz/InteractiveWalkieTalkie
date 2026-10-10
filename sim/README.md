@@ -389,7 +389,8 @@ sim/
               Adafruit_SH110X host sobre GFX, String, Print, pgmspace)
   vendor/     librerías reales vendorizadas (Adafruit_GFX, tiny-AES, arduino-LoRa)
   engine/     motor: reloj virtual, eventos de entrada, framebuffer, modelo del chip SX1276, driver/main
-  scripts/    scripts de prueba (.sim)
+  scripts/    scripts de prueba (.sim): la batería de tests
+  demos/      guiones de demostración que recorren cada pantalla y la capturan
   out/        artefactos de compilación (ignorado por git)
   build.bat / run.bat / run_tests.bat
   linux/      versión Linux (GNOME): build.sh, run.sh, run_tests.sh, net.sh,
@@ -401,3 +402,15 @@ sim/
 1. Crea `scripts/mi_test.sim` con comandos + `expect ...`.
 2. `run.bat scripts\mi_test.sim` para depurarlo (usa `screen`/`shot`/`text`).
 3. Quedará incluido automáticamente en `run_tests.bat`.
+
+Consejos para que no sea frágil (la radio es realista: ver "Modelo de radio"):
+
+- **Separa los mensajes inyectados ≥ 800 ms** y no inyectes justo tras el arranque ni tras un `ff`: espera antes a la baliza
+  propia (`waitfor serial 0 40000 [Chat] Baliza` + `waitfor txend`).
+- Los **juegos y las pantallas de resultado son bloqueantes**: programa todo con `in <ms> ...` dentro de un único `run`
+  (incluidas las comprobaciones: `in <ms> expect ...`). Con `run <ms> <margen>` y un margen pequeño se corta la espera enseguida.
+- Si un paquete que llega **justo cuando el equipo empieza a emitir** (una ventana de unos ms) rompería el test, **repítelo** como
+  haría un emisor real que no recibe el ACK (mismo `msgId`: no se duplica).
+- Para las ocupaciones del canal usa `expect airtime <max%> <ventanaMs>`.
+- **Pruébalo con varias semillas** (`SIM_SEED=1..50`) antes de darlo por bueno.
+- `demos/` contiene guiones de demostración (capturas de cada pantalla); no forman parte de la batería.
