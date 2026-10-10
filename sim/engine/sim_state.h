@@ -19,6 +19,7 @@ enum EvKind { EV_POT = 0, EV_MORSE = 1, EV_FINISH = 2, EV_INJECT = 3, EV_BATTERY
 
 // --- Reloj virtual ---
 uint32_t now();                 // millis() virtuales
+long long lockMs();             // reloj comun del modo sincronizado (ms completados desde el arranque; no se reinicia con reboot-cold)
 void advance(uint32_t ms);      // avanza el reloj (lo usa delay()); aplica eventos
 void setDeadline(uint32_t absMs);
 void clearDeadline();

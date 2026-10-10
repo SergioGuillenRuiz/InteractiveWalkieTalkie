@@ -14,9 +14,19 @@
 //  Los paquetes caducan a los pocos segundos y se borran del directorio.
 //
 //  Cada proceso = un dispositivo real e independiente (firmware + EEPROM propios).
-//  Cada proceso lleva su PROPIO reloj virtual: lo que se comparte son las tramas (bytes
-//  + parametros de modulacion); el modelo del chip receptor (sx127x.cpp) decide si las
-//  oye segun si escucha en ese momento y con que parametros.
+//  Lo que se comparte son las tramas (bytes + parametros de modulacion); el modelo del chip
+//  receptor (sx127x.cpp) decide si las oye segun si escucha en ese momento y con que parametros.
+//
+//  Dos modos de tiempo:
+//   - LIBRE (por defecto): cada proceso lleva su PROPIO reloj virtual, anclado al reloj de pared
+//     con --pace. Los relojes quedan desfasados decenas de ms, asi que dos tramas que en la
+//     realidad se pisarian (o no) dependen del azar del arranque: sirve para ver la comunicacion
+//     funcionando, no para medir colisiones.
+//   - SINCRONIZADO (--nodes N, solo POSIX): los N procesos comparten el MISMO tiempo virtual y
+//     avanzan juntos milisegundo a milisegundo (barrera en memoria compartida). Lo emitido en el
+//     ms t lo oyen los demas desde el ms t+1 con su instante de inicio exacto, asi que las
+//     colisiones, el half-duplex y los tiempos en el aire son los de la realidad y el resultado es
+//     DETERMINISTA (no depende de la velocidad de la maquina ni del azar del arranque).
 // ============================================================
 
 #include <string>
@@ -34,6 +44,7 @@ struct AirFrame {
     int  preamble = 8;        // simbolos
     bool crc = true;
     int  sync = 0x12;
+    double startMs = -1;      // modo sincronizado: instante (reloj comun) en que empezo a emitirse; <0 = ahora
 };
 
 // Activa el aire para este proceso. dir = directorio compartido; node = etiqueta
@@ -48,5 +59,15 @@ void air_publish(const AirFrame &frame);
 
 // Recoge las tramas nuevas de OTROS nodos.
 void air_poll(std::vector<AirFrame> &out);
+
+// ---- Modo sincronizado ----
+// Activa el modo sincronizado para 'nodes' procesos (cada uno lo llama con el mismo valor) y espera a que
+// arranquen todos. Devuelve false si no esta disponible (Windows) o no se pudo.
+bool air_lockstep_enable(int nodes);
+bool air_lockstep();                         // activo en este proceso
+// El proceso acaba de completar el ms 'doneMs' del reloj comun (cuenta ms desde el arranque): espera
+// a que los demas hayan completado tambien el suyo.
+void air_lockstep_tick(long long doneMs);
+void air_lockstep_bye();                     // este proceso termina: los demas dejan de esperarle
 
 #endif

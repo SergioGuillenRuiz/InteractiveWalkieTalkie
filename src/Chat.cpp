@@ -46,6 +46,10 @@ static bool     g_wasOnline  = false; // agregado: habia alguien en alcance
 // --- Baliza periodica (con jitter) ---
 static uint32_t g_beaconDue = 0;      // millis() en que toca la proxima baliza
 
+// --- ACK pendientes de enviar (cada uno sale tras un retardo aleatorio, ver Config.h) ---
+struct PendingAck { bool used; uint8_t target; uint8_t msgId; uint32_t dueAt; };
+static PendingAck g_acks[ACK_QUEUE];
+
 // --- Outbox (mensajes enviados sin confirmar) ---
 struct OutItem { uint8_t state; uint8_t msgId; uint8_t target; String text; uint8_t retries; uint32_t nextAt; };
 static OutItem g_out[OB_SLOTS];
@@ -67,6 +71,11 @@ static bool txMessage(uint8_t mid, const String &text) {
   p += (char)mid;
   p += text;
   return Lora_send(p);
+}
+
+// Tiempo hasta el siguiente reintento de un mensaje: MSG_RETRY_MS +-MSG_RETRY_JITTER_MS.
+static uint32_t nextRetryDelay() {
+  return MSG_RETRY_MS - MSG_RETRY_JITTER_MS + (uint32_t)random(2 * MSG_RETRY_JITTER_MS + 1);
 }
 
 // Intervalo hasta la proxima baliza: BEACON_INTERVAL_MS +-BEACON_JITTER_MS.
@@ -125,7 +134,7 @@ static void outboxAdd(uint8_t mid, const String &text) {
   g_out[slot].target  = Device_id();
   g_out[slot].text    = text;
   g_out[slot].retries = 0;
-  g_out[slot].nextAt  = millis() + MSG_RETRY_MS;
+  g_out[slot].nextAt  = millis() + nextRetryDelay();
   obSaveAll();
 }
 
@@ -156,6 +165,7 @@ void Chat_load() {
   g_awaiting = false; g_delivered = false; g_lastSentId = 0;
   for (int i = 0; i < MAX_PEERS; i++) g_peers[i].id = 0;
   g_lastPeerId = 0; g_wasOnline = false;
+  for (int i = 0; i < ACK_QUEUE; i++) g_acks[i].used = false;
   g_beaconDue = millis() + 2000 + (uint32_t)random(2000);   // 1a baliza a los 2-4 s del arranque
   g_seenHead = 0;
   for (int i = 0; i < SEEN_N; i++) { g_seenS[i] = 0; g_seenM[i] = 0; }
@@ -267,6 +277,24 @@ void Chat_sendAck(uint8_t targetId, uint8_t msgId) {
   Lora_send(packet);
   Serial.print("[Chat] ACK a #"); Serial.print(targetId);
   Serial.print(" msg "); Serial.println(msgId);
+}
+
+// El ACK no sale al instante: si varios equipos reciben el mismo mensaje, sus ACK saldrian a la vez y se
+// pisarian en el emisor (que no oiria ninguno). Cada uno espera un retardo aleatorio; ver Chat_tick().
+void Chat_queueAck(uint8_t targetId, uint8_t msgId) {
+  for (int i = 0; i < ACK_QUEUE; i++)
+    if (g_acks[i].used && g_acks[i].target == targetId && g_acks[i].msgId == msgId) return;   // ya en camino
+  int slot = -1;
+  for (int i = 0; i < ACK_QUEUE; i++) if (!g_acks[i].used) { slot = i; break; }
+  if (slot < 0) {                                  // cola llena: sale ya el mas antiguo para hacer sitio
+    slot = 0;
+    for (int i = 1; i < ACK_QUEUE; i++) if ((int32_t)(g_acks[i].dueAt - g_acks[slot].dueAt) < 0) slot = i;
+    Chat_sendAck(g_acks[slot].target, g_acks[slot].msgId);
+  }
+  g_acks[slot].used   = true;
+  g_acks[slot].target = targetId;
+  g_acks[slot].msgId  = msgId;
+  g_acks[slot].dueAt  = millis() + ACK_DELAY_MIN_MS + (uint32_t)random(ACK_DELAY_MAX_MS - ACK_DELAY_MIN_MS + 1);
 }
 
 void Chat_sendDoodle(const uint8_t *buf32) {
@@ -402,10 +430,23 @@ void Chat_tick() {
   uint32_t now = millis();
   Clock_tickPersist();
 
+  // ACK pendientes cuyo retardo ya paso (uno por vuelta: cada emision bloquea el tiempo en el aire).
+  if (!Lora_isAsleep()) {
+    for (int i = 0; i < ACK_QUEUE; i++) {
+      if (!g_acks[i].used || (int32_t)(now - g_acks[i].dueAt) < 0) continue;
+      g_acks[i].used = false;
+      Chat_sendAck(g_acks[i].target, g_acks[i].msgId);
+      break;
+    }
+  }
+
   // Baliza: solo en estados "ambientales" (IDLE/SLEEP) para no colisionar con los
   // paquetes de juego ni ensuciar el ultimo TX durante un envio.
   bool ambient = (mainState == STATE_IDLE || mainState == STATE_SLEEP);
-  if (ambient && (int32_t)(now - g_beaconDue) >= 0) {
+  bool radioOn = !Lora_isAsleep();    // con la radio dormida (suspension prolongada) no se emite ni se reintenta
+  // (Escuchar antes de hablar: si entra una trama o hay un paquete sin leer, la baliza espera unos ms
+  //  en vez de destruirlo; g_beaconDue no se toca y se reintenta en la siguiente vuelta.)
+  if (ambient && radioOn && (int32_t)(now - g_beaconDue) >= 0 && !Lora_busy()) {
     sendBeacon();
     g_beaconDue = now + nextBeaconDelay();
   }
@@ -433,12 +474,13 @@ void Chat_tick() {
 
   // Reintentos de los mensajes sin confirmar.
   for (int i = 0; i < OB_SLOTS; i++) {
-    if (g_out[i].state != 1) continue;
+    if (g_out[i].state != 1 || !radioOn) continue;
     if (now < g_out[i].nextAt) continue;
+    if (Lora_busy()) break;               // entra algo: el reintento espera (se vuelve a mirar en la siguiente vuelta)
     if (g_out[i].retries < MSG_RETRY_MAX) {
       txMessage(g_out[i].msgId, g_out[i].text);
       g_out[i].retries++;
-      g_out[i].nextAt = now + MSG_RETRY_MS;
+      g_out[i].nextAt = now + nextRetryDelay();
       Serial.print("[Chat] Reintento msg "); Serial.print(g_out[i].msgId);
       Serial.print(" ("); Serial.print(g_out[i].retries); Serial.println(")");
     }

@@ -7,6 +7,7 @@
 
 #include "sim_state.h"
 #include "sx127x.h"
+#include "air_channel.h"
 #include "Arduino.h"
 #include "Config.h"
 #include "EEPROM.h"
@@ -26,6 +27,7 @@ namespace {
 struct Ev { uint32_t t; int kind; int value; };
 
 uint32_t g_now = 0;
+long long g_lock = 0;      // reloj comun del modo sincronizado (varios procesos): ms completados
 uint32_t g_deadline = 0xFFFFFFFFu;
 int  g_pot = 512;
 int  g_battRaw = 1023;     // batería "llena" por defecto (canal PIN_VBAT)
@@ -58,6 +60,7 @@ void applyEvent(const Ev &e) {
 namespace sim {
 
 uint32_t now() { return g_now; }
+long long lockMs() { return g_lock; }
 void setDeadline(uint32_t absMs) { g_deadline = absMs; }
 void clearDeadline() { g_deadline = 0xFFFFFFFFu; }
 void setPumpHook(void (*fn)(uint32_t)) { g_pump = fn; }
@@ -86,6 +89,13 @@ void applyDue() {
     }
 }
 
+// Mueve el reloj hasta t. En modo sincronizado (varios procesos con el mismo tiempo virtual) lo hace ms a ms y
+// en cada uno espera a que los demas procesos hayan llegado tambien (ver air_channel.h).
+static void moveClock(uint32_t t) {
+    if (!air_lockstep()) { g_now = t; return; }
+    while (g_now < t) { g_now++; air_lockstep_tick(++g_lock); }
+}
+
 void advance(uint32_t ms) {
     uint32_t target = g_now + ms;
     while (true) {
@@ -93,12 +103,12 @@ void advance(uint32_t ms) {
         for (size_t i = 0; i < g_events.size(); ++i)
             if (idx < 0 || g_events[i].t < best) { best = g_events[i].t; idx = (int)i; }
         if (idx < 0 || best > target) break;
-        g_now = (best < g_now) ? g_now : best;     // los eventos pasados se aplican ya
+        moveClock((best < g_now) ? g_now : best);     // los eventos pasados se aplican ya
         applyEvent(g_events[idx]);
         g_events.erase(g_events.begin() + idx);
         if (g_now > g_deadline) throw Timeout();
     }
-    g_now = target;
+    moveClock(target);
     applyDue();
     if (g_now > g_deadline) throw Timeout();
     if (g_pump) g_pump(ms);   // modo interactivo: sondea teclado, redibuja y marca el ritmo

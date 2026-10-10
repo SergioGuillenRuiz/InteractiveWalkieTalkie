@@ -23,7 +23,8 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Presencia | Baliza cada 30 s ±3 s (aleatoria, para que dos equipos encendidos a la vez no se tapen) y corazón en pantalla cuando hay algún compañero en alcance. Recuerda hasta 4 compañeros **por separado** (id, último oído, batería); a la izquierda del corazón se muestra el nivel de batería **más bajo** de los que están en alcance (y "!" si alguno avisa de batería baja), no el del último que emitió |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 35 tests, multi-dispositivo y demos. **Modelo de radio realista** (`--radio real`): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim` |
+| Radio | La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 37 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 5 escenas) es determinista y tarda ~2 s |
 
 ---
 
@@ -56,12 +57,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 ## 🔴 Riesgos sin verificar en la placa
 
-- [ ] **La radio puede no escuchar en el menú principal.**
-  - `handleIdle()` llama a `LoRa.idle()` en cada vuelta (`src/States.cpp:320`).
-  - La librería LoRa solo recibe mientras está en modo "recepción única", que activa `parsePacket()`. Si cada vuelta la pasa a reposo, la radio estaría casi siempre sorda y podría perder mensajes. Deducido del código de la librería; no comprobado.
-  - En el simulador `idle()` no hace nada, así que no lo detecta.
-  - Por la misma razón, `LoRa.sleep()` en suspensión probablemente se deshace al instante, y el ahorro de energía (light sleep, despertar por GPIO, consumo) también está sin medir.
-- [ ] **ACK simultáneos.** Con 3 o más equipos, todos los receptores confirman un mensaje a la vez (sin escucha previa ni espera aleatoria) y los ACK pueden taparse entre sí. Hace falta un retardo aleatorio corto antes de cada ACK (y el simulador de radio realista para comprobarlo).
+- [ ] **Radio: comportamiento verificado solo en el simulador.** El simulador ejecuta la librería real sobre un modelo del chip, pero el modelo se escribió a partir del datasheet: en la placa hay que confirmar que (a) se oyen los mensajes en el menú principal y en las esperas, (b) `Lora_busy()` (registro `RegModemStat`) detecta de verdad una trama entrante para escuchar antes de hablar, (c) leer la FIFO por SPI sin salir de recepción no corrompe la trama siguiente, y (d) el consumo en suspensión (light sleep del ESP8266, radio siempre encendida ≈ 11 mA) es el esperado.
 - [ ] **Algunos modos ocupan la radio más del 100 % del tiempo** (SF7/125 kHz salvo que se indique; tiempo en el aire calculado):
 
   | Paquete | Tiempo en el aire | Se envía cada | Ocupación |
@@ -77,11 +73,18 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 ---
 
+## ⏸ En espera de tu decisión
+
+Nada de esto se ha cambiado hasta que lo decidas (el código está preparado en los dos casos):
+
+- [ ] **Ahorro de energía de la radio en suspensión.** Hoy la radio **no se duerme nunca**: el equipo está siempre alcanzable y puede avisar con la pantalla apagada, a cambio de ~11 mA continuos. La alternativa está implementada y probada pero desactivada (`LORA_DEEP_SLEEP` en `include/Config.h`, o `Lora_setDeepSleepMs()` en marcha): tras N minutos sin oír nada en suspensión la radio se duerme del todo, el equipo dura más y deja de oír (y de avisar) hasta que lo despiertes con 3 pulsaciones. ¿Siempre alcanzable, dormir tras N minutos (¿cuántos?) o un ajuste en el menú?
+
+---
+
 ## Orden propuesto
 
 1. [ ] **Probar en la placa** la recepción en el menú principal, la suspensión y el consumo, y los dos modos de la tabla. El simulador ya modela la radio (`--radio real`) y reproduce estos riesgos sin placa; falta confirmarlos en la placa.
-2. [ ] **Arreglar la radio:**
-   - escuchar de forma continua;
+2. [ ] **Arreglar la radio** (la escucha continua, el acceso al canal y los ACK/reintentos ya están hechos):
    - enviar los paquetes en binario;
    - bajar el ritmo de Tetris 2J y HippoRadar a algo que quepa en el canal.
 3. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
@@ -96,4 +99,5 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 
 - Cada vuelta de `loop()` cuesta mucho menos que en la placa (no se cuenta el envío de cada imagen a la pantalla por I²C): las animaciones que avanzan por vuelta, como las "Zzz", van más rápido.
 - `expect text` comprueba el texto dibujado desde el último borrado completo de la pantalla, aunque parte ya no se vea. Ningún test actual pasa por ese motivo.
-- El modelo de radio realista (`--radio real`) enfrenta UN equipo a tramas inyectadas; con varios procesos (`--air`) cada uno lleva su propio reloj y una trama se "recibe" cuando el receptor la ve (no hay colisión entre equipos). No se simula el RF físico (ruido, alcance) ni el tiempo real de los accesos SPI/I²C.
+- El modelo de radio realista enfrenta UN equipo a tramas inyectadas por el guion; con varios procesos (`--air`) hay colisiones reales entre equipos solo si se usa `--nodes N` (Linux/macOS, ver `sim/README.md`): sin él cada proceso lleva su propio reloj y el resultado depende del azar del arranque. En Windows `net_test.ps1` usa `--radio ideal` (sin tiempo en el aire). No se simula el RF físico (ruido, alcance, captura de la trama más fuerte) ni el tiempo real de los accesos SPI/I²C.
+- `net_test.ps1` y `build.bat` (Windows) no se han probado desde que se añadió el modelo de radio realista: el entorno de desarrollo es Linux.

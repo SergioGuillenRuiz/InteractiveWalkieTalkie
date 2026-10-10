@@ -29,11 +29,15 @@ function Clear-Air($dir) {
 
 # --pace 20: tope de velocidad del tiempo virtual (20 ms virtuales por ms real). Sin tope cada
 # proceso corre su tiempo casi instantaneo y los equipos dejan de coincidir en el aire.
+# --radio ideal: en Windows no esta el modo sincronizado (--nodes, solo Linux/macOS), y con los relojes
+# de los procesos desfasados decenas de ms el modelo realista (tiempo en el aire, colisiones) daria
+# colisiones espurias: aqui se usa el modelo sin tiempo en el aire. Las colisiones reales se prueban en
+# Linux con net_test.sh.
 function Start-Node($air, $node, $chip, $keysText, $keysFile, $log) {
     Set-Content "$work\$keysFile" $keysText -Encoding ASCII
     $env:SIM_CHIPID = "$chip"
     $p = Start-Process -FilePath $sim -PassThru -NoNewWindow -RedirectStandardOutput $log `
-        -ArgumentList @("--keys","$work\$keysFile","--air",$air,"--node","$node","--pace","20",
+        -ArgumentList @("--keys","$work\$keysFile","--air",$air,"--node","$node","--pace","20","--radio","ideal",
                         "--eeprom","$work\net_$node.bin","--fresh","--shots",$work)
     Remove-Item Env:\SIM_CHIPID -ErrorAction SilentlyContinue
     return $p

@@ -72,6 +72,8 @@ double txAirtimeBetween(double t0, double t1);     // ms emitiendo dentro de [t0
 std::string lastSent();                            // ultima trama transmitida (bytes)
 std::vector<std::string> sentRing(size_t n = 16);  // ultimas n tramas transmitidas
 std::string report();                              // resumen legible: TX, RX, tiempo por modo, energia estimada
+void sync();                                       // pone al dia el estado del chip hasta el instante actual (se hace solo en cada acceso)
+void forceMode(int mode);                          // FALLO simulado: el chip cae a SLEEP/STDBY sin que el firmware lo pida
 int  currentMode();                                // 0 SLEEP, 1 STDBY, 3 TX, 5 RX continuo, 6 RX unico
 bool listening();                                  // RX continuo o RX unico vigente
 

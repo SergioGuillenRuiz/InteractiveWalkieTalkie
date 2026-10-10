@@ -44,7 +44,10 @@ void Chat_load();                              // setup(): carga la outbox de EE
 bool Chat_send(const String &text);
 
 // Envia un ACK por un mensaje recibido (destino = emisor original).
-void Chat_sendAck(uint8_t targetId, uint8_t msgId);
+void Chat_sendAck(uint8_t targetId, uint8_t msgId);       // inmediato
+// Confirma un mensaje recibido tras un retardo aleatorio (evita que los ACK de varios equipos se pisen);
+// lo envia Chat_tick(). Es la que usa la recepcion.
+void Chat_queueAck(uint8_t targetId, uint8_t msgId);
 
 // Envia un dibujo (lienzo cuadrado, MSB primero), fire-and-forget.
 void Chat_sendDoodle(const uint8_t *buf32);

@@ -8,6 +8,9 @@
 #    - tabla llena: se olvida al que lleva mas tiempo sin oirse;
 #    - dedup con ventana de 16 mensajes y los mensajes de cada emisor se guardan y confirman por
 #      separado. (El jitter de las balizas esta en beacon_jitter.sim.)
+#  El canal es half-duplex y las tramas ocupan ~120 ms: lo que llega mientras el equipo emite su propia
+#  baliza (o a la vez que otra trama) se pierde. Por eso los companeros emiten de uno en uno y cada tramo
+#  empieza esperando a la baliza propia (justo despues el canal queda libre unos 27 s).
 #  Pixeles: icono de bateria del peer con contorno en (102,1) y relleno x=103..110 (0..8 px,
 #  redondeado: 12%->1 px, 55%->4 px, 80%->6 px); "!" del peer: pixel (96,2); corazon lleno (121,4).
 #  (Device_id del sim = 137.)
@@ -16,6 +19,7 @@
 wait 600
 pot 80
 wait 300
+waitfor serial 0 6000 [Chat] Baliza       # (la baliza de arranque sale a los 2-4 s)
 
 # --- Tres equipos a la vez; el ULTIMO en oirse (#50, 80 %) no manda en la pantalla ---
 presence 60 0 12              # bateria baja (flag)
@@ -35,23 +39,27 @@ expect pixel 96 2 on          # "!": #60 avisa de bateria baja (aunque el ultimo
 shot peers_tres
 print Tres equipos: se muestra el nivel mas bajo (12 %) y el aviso, no el del ultimo en emitir
 
-# --- #60 deja de emitir; #50 y #70 siguen: sigue habiendo alguien, y la bateria sube a 55 % ---
-ff 30000
+# --- #60 deja de emitir; #50 y #70 siguen (cada ~30 s): sigue habiendo alguien, y la bateria sube a 55 % ---
+waitfor serial 0 40000 [Chat] Baliza
 presence 50 0 80
+run 300
 presence 70 0 55
-run 500
-ff 30000
+run 400
+waitfor serial 0 40000 [Chat] Baliza
 presence 50 0 80
+run 300
 presence 70 0 55
-run 500
-ff 30000
+run 400
+waitfor serial 0 40000 [Chat] Baliza
 presence 50 0 80
+run 300
 presence 70 0 55
-run 500
-ff 10000
+run 400
+waitfor serial 0 40000 [Chat] Baliza
 presence 50 0 80
+run 300
 presence 70 0 55
-run 500
+run 400
 expect serial equipo #60 fuera de alcance
 expect pixel 121 4 on         # el corazon sigue lleno
 expect pixel 105 3 on         # 55 % -> 4 px
@@ -79,6 +87,7 @@ pot 80
 wait 200
 
 # --- Una baliza sin nivel de bateria (0xFF) no tapa a las que si lo comunican ---
+waitfor serial 0 40000 [Chat] Baliza
 presence 50 0 255
 run 400
 presence 60 0 40
@@ -102,9 +111,9 @@ print Tabla llena: se sustituye al mas antiguo (#50)
 
 # --- Mensajes de varios equipos: cada uno con su ACK, mismo msgId de emisores distintos no choca ---
 chatmsg 60 1 desde sesenta
-run 400
+run 800                       # (el ACK sale tras un retardo aleatorio de hasta 300 ms: la siguiente trama no debe pisarlo)
 chatmsg 70 1 desde setenta
-run 400
+run 800
 expect serial Guardado: desde sesenta
 expect serial Guardado: desde setenta
 expect serial ACK a #60 msg 1
@@ -112,28 +121,29 @@ expect serial ACK a #70 msg 1
 print Mensajes de #60 y #70 con el mismo msgId: los dos se guardan y se confirman
 
 # --- Dedup con ventana de 16: tras 12 mensajes distintos, un reintento del primero se descarta ---
+waitfor serial 0 40000 [Chat] Baliza
 chatmsg 80 5 primero
-run 400
+run 800
 chatmsg 80 6 m6
-run 400
+run 800
 chatmsg 80 7 m7
-run 400
+run 800
 chatmsg 80 8 m8
-run 400
+run 800
 chatmsg 80 9 m9
-run 400
+run 800
 chatmsg 80 10 m10
-run 400
+run 800
 chatmsg 80 11 m11
-run 400
+run 800
 chatmsg 80 12 m12
-run 400
+run 800
 chatmsg 80 13 m13
-run 400
+run 800
 chatmsg 80 14 m14
-run 400
+run 800
 chatmsg 80 5 primero
-run 400
+run 800
 expect serial Duplicado descartado de #80 msg 5
 print Dedup: ventana de 16 (antes 8): un reintento tardio no se vuelve a guardar
 
@@ -157,6 +167,7 @@ in 150 finish up
 run 700
 pot 80
 ff 25000
+waitfor serial 0 40000 [Chat] Baliza
 presence 100 0 70             # un equipo que no habiamos visto
 waitfor serial 0 1500 Reintento msg
 print Un equipo nuevo en alcance reactiva el reenvio de los mensajes sin confirmar

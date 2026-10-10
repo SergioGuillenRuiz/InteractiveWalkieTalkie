@@ -34,7 +34,15 @@
 // Tiempos generales (ms)
 // ------------------------------------------------------------
 
-#define LORA_DEEP_SLEEP    900000   // sin recibir nada -> dormir la radio
+// AHORRO DE ENERGÍA OPCIONAL (en suspensión). Si no se oye NADA (ni mensajes ni balizas del compañero)
+// durante este tiempo, la radio se duerme del todo: ahorra ~11 mA, pero el equipo deja de oír y de avisar
+// hasta que lo despiertes (con 3 pulsaciones; al despertar emite una baliza y el compañero le reenvía lo
+// pendiente). 0 = no dormir nunca la radio: siempre alcanzable (lo que necesita el aviso con la pantalla
+// apagada), a cambio de ~11 mA continuos. Es el valor inicial: se puede cambiar en marcha con
+// Lora_setDeepSleepMs() (p.ej. desde un futuro ajuste de "ahorro de energía"). Qué política es la buena
+// depende del uso (alcanzable siempre / más autonomía) y queda pendiente de decidir; por defecto, la radio
+// no se duerme nunca.
+#define LORA_DEEP_SLEEP    0
 #define SLEEP_TIMEOUT      300000   // inactividad -> suspender (5 min)
 
 // Despertar desde SLEEP: nº de pulsaciones y ventana de tiempo
@@ -85,6 +93,23 @@
 // Companeros que se recuerdan a la vez (presencia, bateria): con mas, se sustituye el
 // que lleva mas tiempo sin oirse.
 #define MAX_PEERS            4
+
+// --- Acceso al canal ---
+// La radio es half-duplex y el canal es uno solo: lo que se emite mientras otro equipo emite se pierde
+// (las dos tramas). Por eso:
+//  - ESCUCHAR ANTES DE HABLAR: antes de emitir se mira si entra una trama; si el canal esta ocupado se espera a
+//    que acabe y luego una pausa aleatoria 1..CSMA_BACKOFF_MS (dos equipos que esperaban lo mismo no deben
+//    salir a la vez). Pasados CSMA_MAX_WAIT_MS se emite igualmente.
+//  - Varios equipos que reciben el MISMO mensaje lo confirman (ACK) en el mismo instante y los ACK se pisarian
+//    en el emisor: cada ACK sale tras un retardo aleatorio ACK_DELAY_MIN_MS..ACK_DELAY_MAX_MS.
+//  - Los reintentos se reparten +-MSG_RETRY_JITTER_MS: dos equipos que perdieron su mensaje a la vez
+//    (colision) no deben reintentarlo otra vez a la vez.
+#define CSMA_MAX_WAIT_MS     1500UL
+#define CSMA_BACKOFF_MS      80UL
+#define ACK_DELAY_MIN_MS     10UL
+#define ACK_DELAY_MAX_MS     300UL
+#define ACK_QUEUE            4          // ACK pendientes de enviar a la vez
+#define MSG_RETRY_JITTER_MS  1500UL
 
 // ------------------------------------------------------------
 // Batería

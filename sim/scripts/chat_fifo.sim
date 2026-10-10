@@ -3,19 +3,26 @@
 #  se descarta y los metadatos del resto se conservan.
 # ============================================================
 wait 300
+# La baliza de arranque (a los 2-4 s) ocupa el canal ~120 ms y el equipo no oye mientras emite: si
+# coincidiera con una trama que llega, esa se perderia. Se espera a que salga (la siguiente tarda ~30 s).
+waitfor serial 0 6000 [Chat] Baliza
 
-chatmsg 60 1 uno
-chatmsg 60 2 dos
-chatmsg 60 3 tres
-chatmsg 60 4 cuatro
-chatmsg 60 5 cinco
-chatmsg 60 6 seis
-chatmsg 60 7 siete
-chatmsg 60 8 ocho
-chatmsg 60 9 nueve
-chatmsg 60 10 diez
-chatmsg 60 11 once
-wait 800
+# Una trama por turno: cada mensaje ocupa ~120 ms en el aire y el equipo contesta con su ACK (tras un
+# retardo aleatorio de hasta 300 ms y otros ~120 ms de emision); si llegara otra trama mientras tanto, o varias
+# a la vez, se pisarian en el canal y no se oiria ninguna.
+in 0 chatmsg 60 1 uno
+in 800 chatmsg 60 2 dos
+in 1600 chatmsg 60 3 tres
+in 2400 chatmsg 60 4 cuatro
+in 3200 chatmsg 60 5 cinco
+in 4000 chatmsg 60 6 seis
+in 4800 chatmsg 60 7 siete
+in 5600 chatmsg 60 8 ocho
+in 6400 chatmsg 60 9 nueve
+in 7200 chatmsg 60 10 diez
+in 8000 chatmsg 60 11 once
+run 9000
+expect serial Guardado: once
 
 pot 512
 wait 200

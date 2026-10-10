@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <math.h>
-#include <LoRa.h>
 #include "Display.h"
 #include "Inputs.h"
 #include "States.h"
@@ -74,8 +73,8 @@ static void centerPrint(const String &s, int y, uint8_t size = 1) {
 // Radio en modo LARGO ALCANCE solo durante el radar (mas sensibilidad y potencia
 // = mas distancia). Los dos equipos deben estar en el radar para oirse. Al salir
 // se restauran los parametros del chat (mas rapido).
-static void radioRangeMode() { LoRa.idle(); LoRa.setSpreadingFactor(10); LoRa.setTxPower(20); }
-static void radioRestore()   { LoRa.idle(); LoRa.setSpreadingFactor(LORA_SPREADING); LoRa.setTxPower(LORA_POWER); }
+static void radioRangeMode() { Lora_setRangeMode(true); }
+static void radioRestore()   { Lora_setRangeMode(false); }
 
 static float estDistance(float rssi) {
   float d = powf(10.0f, (refRssi - rssi) / (10.0f * PLE));

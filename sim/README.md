@@ -97,19 +97,34 @@ el emisor cuando otro equipo lo recibe.
 
 ### Automatizado — para testear futuras funciones de comunicación
 
-`net_test.ps1` lanza varios dispositivos en paralelo (sin teclado), conduce un
-intercambio y comprueba aserciones sobre lo que cada uno recibió. Es la **plantilla
+`net_test.sh` (Linux) / `net_test.ps1` (Windows) lanza varios dispositivos en paralelo (sin teclado),
+conducen un intercambio y comprueban aserciones sobre lo que cada uno recibió. Son la **plantilla
 para probar futuras funciones** que impliquen a más de un equipo:
 
 ```bat
 cd sim
-powershell -ExecutionPolicy Bypass -File net_test.ps1
+powershell -ExecutionPolicy Bypass -File net_test.ps1     ::  Windows
+./linux/net_test.sh                                       #   Linux
 ```
 
-Lanza 3 equipos reales; el #1 difunde un mensaje y se verifica que #2 y #3 lo
-reciben y que el #1 recibe el ACK de ambos. Internamente cada equipo corre en modo
-`--keys` (tiempo real, con guion de teclas) y comparte el aire con
-`--air <dir> --node <id>`; su salida serie se vuelca a un fichero y se comprueba.
+Escenas: difusión de 1 equipo a 2 (con los ACK de ambos), mensajes en los dos sentidos, **emisión
+simultánea** (las dos tramas se pisan y se recuperan por reintentos), hora puesta a mano que adopta
+otro equipo y tres equipos viéndose por las balizas. Internamente cada equipo corre en modo `--keys`
+(con guion de teclas) y comparte el aire con `--air <dir> --node <id>`; su salida serie y el resumen de
+radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
+y se comprueban.
+
+#### Tiempo sincronizado entre procesos (`--nodes N`, Linux/macOS)
+
+Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan juntos milisegundo a
+milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
+oyen los demás desde el ms *t+1* con su instante de inicio exacto, de modo que los tiempos en el aire, el
+half-duplex y las **colisiones son los de la realidad** y el resultado es **determinista**: no depende de la
+velocidad de la máquina ni del azar del arranque (las 5 escenas tardan ~2 s). Sin `--nodes` cada proceso
+lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
+(es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
+la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
+(`net_test.ps1` usa el modelo `--radio ideal`, sin tiempo en el aire, con `--pace`).
 
 ## Tests automatizados
 
@@ -134,6 +149,8 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
 | `radio_model.sim`  | Autotest del modelo de radio: la librería LoRa real contra el chip simulado (tiempos en el aire del roadmap, bloqueo al transmitir, reglas de recepción) |
+| `radio_rx.sim`     | La radio escucha SIEMPRE (menú, juegos, esperas bloqueantes, tras emitir), vigilancia que re-arma un chip caído, sueño de la radio solo en suspensión prolongada y consumo |
+| `radio_csma.sim`   | Acceso al canal: escuchar antes de hablar, no destruir una trama sin leer al emitir, leer una trama sin abortar la siguiente, ACK con retardo aleatorio y reintentos con dispersión |
 | `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
 | `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
 | `peers.sim`        | Varios equipos: tabla de compañeros (presencia por equipo, batería mínima, tabla llena, mismo msgId de emisores distintos, dedup de 16, reactivar reintentos) |
@@ -175,6 +192,7 @@ in <ms> pot <v>                 programa un cambio de potenciómetro
 ```
 wait <ms>    avanza ejecutando el firmware
 run <ms>     alias de wait (estilo timeline)
+blind <ms>   el reloj avanza pero el firmware NO corre (como si estuviera ocupado en otra cosa)
 ff <ms>      avance rápido (para timeouts largos, p.ej. el sueño de 5 min)
 ```
 
@@ -183,7 +201,10 @@ ff <ms>      avance rápido (para timeouts largos, p.ej. el sueño de 5 min)
 lora rx <texto>     inyecta un mensaje entrante (lo cifra con la clave del firmware)
 lora rxraw <hex>    inyecta bytes crudos
 lora loopback on|off  reenvía lo transmitido como recibido
+lora tx <texto>     el FIRMWARE emite ese mensaje por su capa de radio (escuchar antes de hablar, etc.)
 lora sent           muestra el último paquete transmitido (y su descifrado)
+in <ms> lora <texto>  /  in <ms> chatmsg <emisor> <msgId> <texto>  /  in <ms> chatack <destino> <msgId>
+                    el mismo paquete, entregado dentro de <ms> (también durante esperas bloqueantes)
 chatmsg <emisor> <msgId> <texto>   inyecta un MENSAJE de chat de un peer (con sobre)
 chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de entrega)
 presence <peerId> [epoch] [batt] [gen]   inyecta una BALIZA de presencia de un peer
@@ -256,13 +277,15 @@ walkie_sim.exe [script.sim] [opciones]
   --air <dir>       conecta este dispositivo al "aire" compartido (radio multi-dispositivo)
   --node <etiqueta> identidad única en el aire (para no oír lo propio)
   --rssi <dBm>      potencia con que los demás oyen sus transmisiones (por defecto -50)
-  --radio real|ideal  modelo de radio: real = chip SX1276 con tiempo en el aire (la radio solo oye
-                    lo que llega mientras escucha, y transmitir bloquea); ideal = siempre escucha y
-                    sin tiempo en el aire (comportamiento antiguo, por defecto por ahora)
-  --pace <x>        con --keys: tope de velocidad del tiempo virtual (x ms virtuales por ms real;
-                    0 = sin tope). Imprescindible con varios procesos en el aire compartido:
-                    sin tope cada uno corre su tiempo casi instantáneo y deja de coincidir con
-                    los demás (net_test usa 20)
+  --radio real|ideal  modelo de radio: real (por defecto) = chip SX1276 con tiempo en el aire (la
+                    radio solo oye lo que llega mientras escucha, y transmitir bloquea); ideal =
+                    siempre escucha y sin tiempo en el aire (comportamiento antiguo)
+  --nodes <N>       modo sincronizado (Linux/macOS): los N procesos que comparten --air avanzan
+                    juntos el mismo tiempo virtual (ver "Tiempo sincronizado entre procesos")
+  --pace <x>        con --keys y sin --nodes: tope de velocidad del tiempo virtual (x ms virtuales
+                    por ms real; 0 = sin tope). Con varios procesos en el aire compartido y sin
+                    --nodes hace falta: sin tope cada uno corre su tiempo casi instantáneo y deja de
+                    coincidir con los demás
 ```
 Sin script y sin `--interactive`, lee comandos por la entrada estándar.
 Una opción desconocida o sin su valor, o un guion de teclas que no existe, termina
@@ -289,18 +312,27 @@ los pines NSS/RST/DIO0. Reproduce lo que hace el silicio:
 - **estadísticas**: tiempo emitiendo, destino de cada trama recibida y consumo estimado del chip por modo.
 
 Los comandos `lora rx`, `chatmsg`, `presence`... inyectan una trama que **empieza en ese instante** con los
-parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal` (por ahora el valor por defecto)
-mantiene el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
+parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal`
+da el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
+
+**Escribir tests con este modelo.** Una trama inyectada ocupa el canal lo que dura en el aire (un mensaje
+corto ~120 ms; uno largo ~300 ms) y el equipo contesta con su ACK (otros ~120 ms): dos inyecciones a la vez,
+o una que coincida con la baliza propia o con un ACK, se pisan y no se oye ninguna, igual que con la radio
+real. Por eso los guiones separan las tramas (`in <ms> chatmsg|lora|presence ...`, una por turno) y, cuando
+inyectan tras un `ff`, esperan antes a la baliza propia con `waitfor serial 0 40000 [Chat] Baliza`
+(justo después el canal queda libre unos 27 s).
 
 ```
 radio ideal on|off     cambia de modelo durante un guion
 radio peer sf|bw|crc|preamble|sync|freq <v>|reset   parámetros con que emiten los "otros equipos" inyectados
+radio deepsleep <ms>   ahorro opcional (Lora_setDeepSleepMs): la radio se duerme tras <ms> sin oír nada en suspensión (0 = nunca, el valor por defecto)
 radio mark             punto de partida de los contadores (expect rx / expect tx)
 radio report           resumen: tramas emitidas y su tiempo en el aire, destino de las recibidas, consumo
 radio log              destino de cada trama recibida desde la marca
 radio selftest         autotest del chip con la librería real (ver scripts/radio_model.sim)
 expect rx heard|lost|crc|standby|sleep|tx|timeout|aborted|collision|mismatch|overrun [=|>=|<=] <n>
 expect tx <min> <max>             tramas emitidas desde la marca
+expect txstart <min> <max>        la 1a emisión desde la marca empieza entre min y max ms después de ella
 expect airtime <max%> <ventanaMs> ocupación del canal por este equipo en la última ventana
 expect listening on|off           la radio está en recepción ahora mismo
 expect radiomode sleep|stdby|tx|rxcont|rxsingle

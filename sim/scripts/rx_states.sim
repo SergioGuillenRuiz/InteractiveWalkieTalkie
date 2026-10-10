@@ -56,10 +56,11 @@ tap finish
 wait 250
 
 # --- VARIOS de golpe: la cola se vacia entera ---
-lora rx cinco
-lora rx seis
-lora rx siete
-wait 800
+# (tramas seguidas, una detras de otra: a la vez se pisarian en el canal)
+in 0 lora cinco
+in 300 lora seis
+in 600 lora siete
+run 1000
 expect serial Guardado: cinco
 expect serial Guardado: seis
 expect serial Guardado: siete

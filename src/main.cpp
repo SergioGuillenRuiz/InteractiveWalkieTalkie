@@ -38,7 +38,7 @@ void setup() {
   mainState        = STATE_IDLE;
   sendSubState     = SEND_WAIT;
   lastInteraction  = millis();
-  lastTimeReceived = 0;
+  lastTimeReceived = millis();   // (para LORA_DEEP_SLEEP: "tiempo sin oir nada" cuenta desde el arranque)
   cursorPos        = 0;
   buttonPressCount = 0;
   firstPressTime   = 0;

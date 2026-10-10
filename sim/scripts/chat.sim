@@ -9,7 +9,7 @@ expect serial Equipo #137
 
 # --- Recibir un mensaje de un peer #50: se guarda y se auto-confirma (ACK) ---
 chatmsg 50 7 hola amigo
-wait 400
+wait 800                    # trama ~120 ms + ACK tras un retardo aleatorio de hasta 300 ms + ~120 ms de emision
 expect serial Guardado: hola amigo
 expect serial ACK a #50
 

@@ -24,7 +24,7 @@ run 400
 
 # --- Emisor #50: se guarda con su id; abrir el detalle (es el mas reciente) ---
 chatmsg 50 1 desde cincuenta
-wait 300
+wait 800                    # trama ~120 ms + ACK tras un retardo aleatorio de hasta 300 ms + ~120 ms de emision
 expect serial ACK a #50
 pot 400                     # "Historial" en IDLE y, dentro, el mas reciente (#50)
 wait 200
@@ -45,7 +45,7 @@ run 400
 
 # --- Emisor #77 con mensaje LARGO: id distinto y texto completo (no truncado) ---
 chatmsg 77 2 mensaje larguisimo para comprobar el ajuste de linea correcto
-wait 300
+wait 1000                   # trama larga ~300 ms + ACK tras un retardo aleatorio de hasta 300 ms + ~120 ms de emision
 expect serial ACK a #77
 pot 400                     # "Historial" en IDLE y, dentro, el mas reciente (#77, el largo)
 wait 200

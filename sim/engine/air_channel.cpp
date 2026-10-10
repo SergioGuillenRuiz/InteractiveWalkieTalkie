@@ -8,6 +8,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
+#include <atomic>
+#include <cerrno>
+#include <cstring>
+#include <thread>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sched.h>
+#include <signal.h>
+#include <sys/file.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -79,8 +93,174 @@ static bool fromHex(const std::string &h, std::string &out) {
     return true;
 }
 
+#ifndef _WIN32
+// =====================================================================
+//  Modo sincronizado: tablero en memoria compartida (fichero con mmap) con el reloj de cada proceso y un
+//  anillo de tramas. Ver la cabecera.
+// =====================================================================
+namespace {
+const uint32_t LS_MAGIC = 0x4C53544Bu;       // "LSTK"
+const int      LS_MAXN  = 8;                 // procesos
+const int      LS_RING  = 1024;              // tramas en vuelo (los procesos van a 1 ms unos de otros: sobra)
+
+struct alignas(64) LsSlot {
+    std::atomic<long long> t;                // ms del reloj comun COMPLETADOS por el proceso
+    std::atomic<int>       state;            // 0 libre, 1 activo, 2 terminado
+    int                    pid;
+    char                   node[32];
+};
+struct LsEntry {
+    std::atomic<unsigned long long> seq;     // indice+1 cuando la entrada esta completa
+    int    from;
+    int    rssi, sf, cr, preamble, crc, sync;
+    long   freq, bw;
+    double startMs;
+    unsigned len;
+    unsigned char data[256];
+};
+struct LsBoard {
+    std::atomic<unsigned> magic;
+    std::atomic<unsigned long long> nframes;
+    LsSlot  slot[LS_MAXN];
+    LsEntry ring[LS_RING];
+};
+
+LsBoard *g_ls = nullptr;
+int      g_lsMe = -1;
+unsigned long long g_lsCursor = 0;           // proxima trama del anillo por leer
+std::vector<int> g_lsPeers;                  // ranuras de los demas
+
+bool pidAlive(int pid) { return pid > 0 && (kill(pid, 0) == 0 || errno == EPERM); }
+}  // namespace
+
+bool air_lockstep() { return g_ls != nullptr; }
+
+bool air_lockstep_enable(int nodes) {
+    if (!g_enabled || nodes < 1 || nodes > LS_MAXN) return false;
+    std::string path = g_dir + "/board.bin";
+    int fd = open(path.c_str(), O_RDWR | O_CREAT, 0666);
+    if (fd < 0) return false;
+    flock(fd, LOCK_EX);                       // el registro de ranuras es exclusivo (varios procesos arrancan a la vez)
+    struct stat st;
+    fstat(fd, &st);
+    if ((size_t)st.st_size < sizeof(LsBoard) && ftruncate(fd, sizeof(LsBoard)) != 0) { flock(fd, LOCK_UN); close(fd); return false; }
+    void *m = mmap(nullptr, sizeof(LsBoard), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (m == MAP_FAILED) { flock(fd, LOCK_UN); close(fd); return false; }
+    LsBoard *b = (LsBoard *)m;
+    // Tablero de una ejecucion anterior (ninguna ranura viva): se reinicia entero.
+    bool anyAlive = false;
+    for (int i = 0; i < LS_MAXN; i++)
+        if (b->slot[i].state.load() == 1 && pidAlive(b->slot[i].pid)) anyAlive = true;
+    if (b->magic.load() != LS_MAGIC || !anyAlive) {
+        memset((void *)b, 0, sizeof(LsBoard));
+        b->magic.store(LS_MAGIC);
+    }
+    int me = -1;
+    for (int i = 0; i < LS_MAXN && me < 0; i++)
+        if (b->slot[i].state.load() == 0) me = i;
+    if (me < 0) { flock(fd, LOCK_UN); close(fd); munmap(m, sizeof(LsBoard)); return false; }
+    LsSlot &s = b->slot[me];
+    s.t.store(0); s.pid = (int)getpid();
+    snprintf(s.node, sizeof(s.node), "%s", g_node.c_str());
+    s.state.store(1);
+    flock(fd, LOCK_UN);
+    close(fd);                                // el mapeo sigue valido
+    g_ls = b; g_lsMe = me;
+    g_lsCursor = b->nframes.load();           // solo lo emitido a partir de ahora
+    // Esperar a que arranquen los N procesos (hasta 20 s de reloj real).
+    auto t0 = std::chrono::steady_clock::now();
+    while (true) {
+        int n = 0;
+        for (int i = 0; i < LS_MAXN; i++) if (b->slot[i].state.load() != 0) n++;
+        if (n >= nodes) break;
+        if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(20)) {
+            fprintf(stderr, "[air] modo sincronizado: solo %d de %d procesos han arrancado\n", n, nodes);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    g_lsPeers.clear();
+    for (int i = 0; i < LS_MAXN; i++) if (i != me && b->slot[i].state.load() != 0) g_lsPeers.push_back(i);
+    return true;
+}
+
+void air_lockstep_tick(long long doneMs) {
+    if (!g_ls) return;
+    LsSlot &me = g_ls->slot[g_lsMe];
+    me.t.store(doneMs, std::memory_order_release);
+    for (int j : g_lsPeers) {
+        LsSlot &o = g_ls->slot[j];
+        unsigned spins = 0;
+        auto t0 = std::chrono::steady_clock::now();
+        while (o.t.load(std::memory_order_acquire) < doneMs && o.state.load(std::memory_order_acquire) == 1) {
+            if (++spins >= 256) sched_yield();       // (primero espera activa breve, luego cede la CPU)
+            if ((spins & 0xFFFF) == 0) {
+                // El otro proceso murio sin avisar (kill) o esta colgado: no bloquear a todos para siempre.
+                if (!pidAlive(o.pid)) { o.state.store(2); break; }
+                if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(60)) {
+                    fprintf(stderr, "[air] el proceso '%s' no avanza desde hace 60 s: se deja de esperarle\n", o.node);
+                    o.state.store(2);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void air_lockstep_bye() {
+    if (!g_ls) return;
+    g_ls->slot[g_lsMe].state.store(2, std::memory_order_release);
+}
+
+static void lsPublish(const AirFrame &fr) {
+    unsigned long long idx = g_ls->nframes.fetch_add(1);
+    LsEntry &e = g_ls->ring[idx % LS_RING];
+    e.seq.store(0, std::memory_order_release);        // entrada en escritura (si el anillo da la vuelta)
+    e.from = g_lsMe; e.rssi = g_rssi; e.sf = fr.sf; e.cr = fr.cr; e.preamble = fr.preamble;
+    e.crc = fr.crc ? 1 : 0; e.sync = fr.sync; e.freq = fr.freq; e.bw = fr.bw; e.startMs = fr.startMs;
+    e.len = (unsigned)std::min<size_t>(fr.payload.size(), sizeof(e.data));
+    memcpy(e.data, fr.payload.data(), e.len);
+    e.seq.store(idx + 1, std::memory_order_release);  // completa
+}
+
+static void lsPoll(std::vector<AirFrame> &out) {
+    unsigned long long n = g_ls->nframes.load(std::memory_order_acquire);
+    if (n - g_lsCursor > (unsigned long long)LS_RING) g_lsCursor = n - LS_RING;   // el anillo dio la vuelta: se perdieron las mas viejas
+    std::vector<AirFrame> got;
+    std::vector<int> from;
+    while (g_lsCursor < n) {
+        LsEntry &e = g_ls->ring[g_lsCursor % LS_RING];
+        if (e.seq.load(std::memory_order_acquire) != g_lsCursor + 1) break;       // aun escribiendose: se vera en la siguiente consulta
+        if (e.from != g_lsMe) {
+            AirFrame f;
+            f.payload.assign((const char *)e.data, e.len);
+            f.rssi = e.rssi; f.sf = e.sf; f.cr = e.cr; f.preamble = e.preamble; f.crc = e.crc != 0;
+            f.sync = e.sync; f.freq = e.freq; f.bw = e.bw; f.startMs = e.startMs;
+            got.push_back(f); from.push_back(e.from);
+        }
+        g_lsCursor++;
+    }
+    // Orden determinista (los procesos escriben en el anillo en un orden que depende de la planificacion del SO)
+    std::vector<size_t> idx(got.size());
+    for (size_t i = 0; i < idx.size(); i++) idx[i] = i;
+    std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        if (got[a].startMs != got[b].startMs) return got[a].startMs < got[b].startMs;
+        return from[a] < from[b];
+    });
+    for (size_t i : idx) out.push_back(got[i]);
+}
+#else
+bool air_lockstep_enable(int) { return false; }
+bool air_lockstep() { return false; }
+void air_lockstep_tick(long long) {}
+void air_lockstep_bye() {}
+#endif
+
 void air_publish(const AirFrame &fr) {
     if (!g_enabled) return;
+#ifndef _WIN32
+    if (g_ls) { lsPublish(fr); return; }
+#endif
 
     // Nombre unico y ordenable por tiempo: pkt_<ms>_<node>_<contador>.txt
     char name[256];
@@ -125,6 +305,9 @@ static void cleanup(uint64_t now) {
 
 void air_poll(std::vector<AirFrame> &out) {
     if (!g_enabled) return;
+#ifndef _WIN32
+    if (g_ls) { lsPoll(out); return; }
+#endif
 
     uint64_t now = nowMs();
     cleanup(now);

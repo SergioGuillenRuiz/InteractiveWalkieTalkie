@@ -73,7 +73,7 @@ Chip c;
 std::deque<Frame> frames;
 std::vector<sx::TxRecord> g_tx;
 std::vector<sx::RxRecord> g_rx;
-bool g_ideal = true;             // por defecto el comportamiento antiguo; --radio real / "radio ideal off" activan el realista
+bool g_ideal = false;            // por defecto el modelo realista; --radio ideal / "radio ideal on" dan el comportamiento antiguo
 bool g_loopback = false;
 AirFrame g_peer;                 // parametros por defecto de las tramas inyectadas
 double g_lastAirPoll = -1;
@@ -153,6 +153,7 @@ void startTx(double now) {
     f.freq = curFreq(); f.sf = curSf(); f.bw = curBw(); f.cr = curCr(); f.preamble = curPreamble();
     f.crc = curCrc(); f.sync = c.reg[R_SYNC_WORD];
     double air = g_ideal ? 0.0 : sx::airtimeMs(len, f.sf, f.bw, f.cr, f.preamble, f.crc, curImplicit());
+    f.startMs = air_lockstep() ? (double)sim::lockMs() : -1.0;   // modo sincronizado: instante comun de inicio
     c.txStart = now;
     c.txEnd = now + air;
     sx::TxRecord t; t.start = now; t.end = c.txEnd; t.payload = payload; t.p = f;
@@ -217,7 +218,13 @@ void pollAir(double now) {
     g_lastAirPoll = now;
     std::vector<AirFrame> in;
     air_poll(in);
-    for (auto &a : in) frames.push_back(mkFrame(a, now, false));   // llega "ahora" (cada proceso lleva su reloj)
+    for (auto &a : in) {
+        // Modo libre: llega "ahora" (cada proceso lleva su reloj). Modo sincronizado: con su instante de
+        // inicio exacto (como mucho 1 ms antes de ahora, porque los procesos avanzan a la par).
+        double st = now;
+        if (a.startMs >= 0) st = std::min(now, now - ((double)sim::lockMs() - a.startMs));
+        frames.push_back(mkFrame(a, st, false));
+    }
 }
 
 // Modo ideal: el firmware recibe UN paquete por consulta de las banderas (como el mock antiguo,
@@ -299,6 +306,7 @@ uint8_t readReg(uint8_t a) {
         case R_FIFO: { uint8_t v = (g_ideal ? c.fifoRx : c.fifo)[c.reg[R_FIFO_ADDR_PTR]]; c.reg[R_FIFO_ADDR_PTR]++; return v; }
         case R_OPMODE: return (uint8_t)((c.lora ? 0x80 : 0x00) | c.mode);
         case R_IRQ_FLAGS: idealDeliver(nowMs()); return c.irq;
+        case 0x18: return c.locked ? 0x0F : 0x10;       // RegModemStat: recibiendo una trama (senal+sincronismo+RX en curso+cabecera) / modem libre
         case R_VERSION: return 0x12;
         case R_RSSI: return (uint8_t)(-110 + 157);
         default: return c.reg[a];
@@ -448,6 +456,13 @@ std::vector<std::string> sentRing(size_t n) {
     size_t from = g_tx.size() > n ? g_tx.size() - n : 0;
     for (size_t i = from; i < g_tx.size(); i++) out.push_back(g_tx[i].payload);
     return out;
+}
+
+void sync() { advanceTo(nowMs()); }
+
+void forceMode(int mode) {
+    advanceTo(nowMs());
+    setMode(mode & 7, c.lora, nowMs());
 }
 
 int currentMode() { advanceTo(nowMs()); return c.mode; }

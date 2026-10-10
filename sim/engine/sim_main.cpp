@@ -464,15 +464,27 @@ static void execLine(const std::string &raw) {
             else if (f == "freq" && !v.empty()) pf.freq = (long)(atof(v.c_str()) * 1e6);     // en MHz
             else if (f == "reset") { pf.freq = (long)LORA_FREQUENCY; pf.sf = LORA_SPREADING; pf.bw = (long)LORA_BANDWIDTH; pf.cr = 1; pf.preamble = 8; pf.crc = true; pf.sync = 0x12; }
             else { scriptError("radio peer necesita: sf <n> | bw <kHz> | crc on|off | preamble <n> | sync <hex> | freq <MHz> | reset"); return; }
+        } else if (sub == "deepsleep") {   // radio deepsleep <ms>: ahorro opcional (Lora_setDeepSleepMs); 0 = no dormir nunca
+            long ms = -1;
+            if (!(is >> ms) || ms < 0) { scriptError("radio deepsleep necesita los ms (0 = nunca)"); return; }
+            Lora_setDeepSleepMs((uint32_t)ms);
+            printf("  la radio se dormira tras %ld ms sin oir nada en suspension%s\n", ms, ms == 0 ? " (nunca)" : "");
         } else if (sub == "mark") { g_markRx = sx::rxLog().size(); g_markTx = sx::txLog().size(); g_markT = sim::now(); }
-        else if (sub == "report") { printf("%s", sx::report().c_str()); }
+        else if (sub == "report") { sx::sync(); printf("%s", sx::report().c_str()); }
         else if (sub == "selftest") { radioSelfTest(); }
+        else if (sub == "kick") {        // la radio cae de recepcion sin que el firmware lo pida (brown-out, reinicio del chip...)
+            std::string m; is >> m;
+            if (m == "stdby") sx::forceMode(1); else if (m == "sleep") sx::forceMode(0);
+            else { scriptError("radio kick necesita stdby|sleep"); return; }
+            printf("  radio forzada a %s\n", m.c_str());
+        }
         else if (sub == "log") {         // lista el destino de cada trama recibida desde la marca
+            sx::sync();
             auto &rl = sx::rxLog();
             for (size_t i = g_markRx; i < rl.size(); i++)
                 printf("  rx t=%.0f..%.0f ms  %zu B  %s\n", rl[i].start, rl[i].end, rl[i].len, sx::outcomeName(rl[i].outcome));
         }
-        else scriptError("subcomando radio desconocido \"" + sub + "\" (ideal|peer|mark|report|log|selftest)");
+        else scriptError("subcomando radio desconocido \"" + sub + "\" (ideal|peer|deepsleep|mark|report|log|selftest|kick)");
     }
     else if (cmd == "waitfor") {   // waitfor serial <minMs> <maxMs> <texto>: aparece en el log serie ENTRE minMs y maxMs
         // Ejecuta el firmware hasta que el texto aparezca en el log (solo lo nuevo, desde ahora) y
@@ -503,6 +515,11 @@ static void execLine(const std::string &raw) {
         else        snprintf(b, sizeof(b), "\"%s\" aparece a los %u ms (cota %u..%u)", txt.c_str(), (unsigned)tFound, (unsigned)mn, (unsigned)mx);
         check(found && tFound >= mn && tFound <= mx, b);
         if (found) g_waitSamples.push_back(tFound);
+    }
+    else if (cmd == "blind") {   // blind <ms>: el reloj avanza pero el firmware NO corre (esta ocupado en otra cosa)
+        uint32_t ms = 0;
+        if (!(is >> ms)) { scriptError("blind necesita los ms a avanzar"); return; }
+        sim::advance(ms);
     }
     else if (cmd == "ff") { uint32_t ms = 0; if (!(is >> ms)) { scriptError("ff necesita los ms a avanzar"); return; } fastForward(ms); }
     else if (cmd == "in") {
@@ -595,6 +612,12 @@ static void execLine(const std::string &raw) {
             if (!encryptedOk(enc)) return;
             simLoraInject(std::string(enc.c_str(), enc.length()));
             printf("  LoRa RX inyectado: \"%s\"\n", txt.c_str());
+        } else if (sub == "rxbad") {      // como rx, pero la trama llega CORRUPTA (ruido en el canal)
+            std::string txt = restAfter(line, 2);
+            String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            if (!encryptedOk(enc)) return;
+            sx::inject(std::string(enc.c_str(), enc.length()), -42, true);
+            printf("  LoRa RX CORRUPTO inyectado: \"%s\"\n", txt.c_str());
         } else if (sub == "rxraw") {
             std::string hex;
             if (!(is >> hex)) { scriptError("lora rxraw necesita los bytes en hex"); return; }
@@ -603,12 +626,17 @@ static void execLine(const std::string &raw) {
             std::string s; is >> s;
             if (s != "on" && s != "off") { scriptError("lora loopback necesita on|off"); return; }
             simLoraSetLoopback(s == "on");
+        } else if (sub == "tx") {        // el FIRMWARE emite este mensaje por su capa de radio (escucha antes de hablar, etc.)
+            std::string txt = restAfter(line, 2);
+            if (txt.empty()) { scriptError("lora tx necesita el texto a emitir"); return; }
+            bool ok = Lora_send(String(txt.c_str()));
+            printf("  LoRa TX del firmware: \"%s\" (%s)\n", txt.c_str(), ok ? "emitido" : "no emitido");
         } else if (sub == "sent") {
             std::string last = simLoraLastSent();
             String dec = SimpleCrypto_decrypt(String(last.c_str()));
             printf("  LoRa TX (hex)=%s  descifrado=\"%s\"\n", last.c_str(), dec.c_str());
         }
-        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxraw|loopback|sent)");
+        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxbad|rxraw|loopback|tx|sent)");
     }
     else if (cmd == "chatmsg") {   // inyecta un MENSAJE de chat de un peer: chatmsg <emisor> <msgId> <texto>
         int sender = 0, mid = 0; is >> sender >> mid;
@@ -657,6 +685,7 @@ static void execLine(const std::string &raw) {
             if (nstr == "=" || nstr == ">=" || nstr == "<=") { op = nstr; is >> nstr; }
             if (what.empty() || nstr.empty()) { scriptError("expect rx necesita: heard|lost|crc|standby|sleep|tx|timeout|aborted|collision|mismatch|overrun [=|>=|<=] <n>"); return; }
             int want = atoi(nstr.c_str());
+            sx::sync();                    // las tramas se resuelven al acceder al chip: ponerlo al dia
             auto &rl = sx::rxLog(); int n = 0;
             for (size_t i = g_markRx; i < rl.size(); i++) {
                 sx::RxOutcome o = rl[i].outcome; bool hit = false;
@@ -682,6 +711,14 @@ static void execLine(const std::string &raw) {
             if (!(is >> mn >> mx)) { scriptError("expect tx necesita: <min> <max>"); return; }
             int n = (int)(sx::txLog().size() - g_markTx);
             check(n >= mn && n <= mx, "radio: tramas emitidas desde la marca entre " + std::to_string(mn) + " y " + std::to_string(mx) + " (son " + std::to_string(n) + ")");
+        }
+        else if (sub == "txstart") {   // expect txstart <min> <max>: la 1a emision desde "radio mark" empieza entre min y max ms despues de la marca
+            int mn = 0, mx = 0;
+            if (!(is >> mn >> mx)) { scriptError("expect txstart necesita: <min> <max>"); return; }
+            if (sx::txLog().size() <= g_markTx) { check(false, "radio: ninguna emision desde la marca (se esperaba una entre " + std::to_string(mn) + " y " + std::to_string(mx) + " ms)"); return; }
+            double dt = sx::txLog()[g_markTx].start - (double)g_markT;
+            char b[160]; snprintf(b, sizeof(b), "radio: la 1a emision empieza %.0f ms despues de la marca (cota %d..%d)", dt, mn, mx);
+            check(dt >= mn && dt <= mx, b);
         }
         else if (sub == "airtime") {   // expect airtime <maxPct> <ventanaMs>: ocupacion del canal por ESTE equipo en la ultima ventana
             double maxPct = 0; uint32_t win = 0;
@@ -944,7 +981,7 @@ static void interactivePump(uint32_t ms) {
     iHandleKeys();
     if (g_keysScripted) {                                  // modo prueba: rapido
         fireScriptedKeys();
-        if (g_pace > 0.0) {
+        if (g_pace > 0.0 && !air_lockstep()) {
             // Con varios procesos en el "aire" compartido el tiempo virtual de cada uno debe
             // avanzar a un ritmo comparable: en modo rapido uno arranca unas decenas de ms
             // despues y ya ha pasado "toda su vida" (y la radio apagada no oye lo emitido).
@@ -1043,7 +1080,15 @@ static void interactive() {
     sim::clearDeadline();
     if (!g_keysScripted) timeEndPeriod(1);
     if (!g_keysScripted) printf("\x1b[?25h");   // restaurar cursor
-    if (g_keysScripted) printf("\n[serial]\n%s\n", sim::serialLog().c_str());
+    if (g_keysScripted) {
+        printf("\n[serial]\n%s\n", sim::serialLog().c_str());
+        // Radio: que emitio este equipo y que le llego (y por que se perdio lo que no oyo). Es lo primero que
+        // hay que mirar cuando una prueba con varios equipos falla.
+        sx::sync();
+        printf("\n[radio]\n%s", sx::report().c_str());
+        for (auto &t : sx::txLog()) printf("  tx t=%.0f..%.0f ms  %zu B\n", t.start, t.end, t.payload.size());
+        for (auto &r : sx::rxLog()) printf("  rx t=%.0f..%.0f ms  %zu B  %s\n", r.start, r.end, r.len, sx::outcomeName(r.outcome));
+    }
     printf("\n");
 }
 
@@ -1076,9 +1121,10 @@ int main(int argc, char **argv) {
     bool interactiveMode = false, fresh = false;
     std::string airDir, airNode;
     int airRssi = -50;
+    int airNodes = 0;           // --nodes N: modo sincronizado con N procesos
 
     // Opciones que llevan valor: si falta, es un error de uso.
-    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi", "--pace", "--radio" };
+    static const char *withValue[] = { "--keys", "--eeprom", "--shots", "--scale", "--air", "--node", "--rssi", "--pace", "--radio", "--nodes" };
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         for (const char *o : withValue)
@@ -1108,6 +1154,7 @@ int main(int argc, char **argv) {
         else if (a == "--node") airNode = argv[++i];   // etiqueta unica del dispositivo
         else if (a == "--rssi") airRssi = atoi(argv[++i]); // dBm con que oyen los demas
         else if (a == "--pace") g_pace = atof(argv[++i]);  // tope de velocidad en modo --keys (multi-dispositivo)
+        else if (a == "--nodes") airNodes = atoi(argv[++i]);   // modo sincronizado: numero de procesos que comparten el tiempo
         else if (a == "--radio") {                          // modelo de radio: ideal (siempre escucha, sin tiempo en el aire) o realista
             std::string m = argv[++i];
             if (m == "ideal") sx::setIdeal(true);
@@ -1134,7 +1181,14 @@ int main(int argc, char **argv) {
     if (!airDir.empty()) {
         if (airNode.empty()) airNode = "p" + std::to_string(_getpid());
         air_init(airDir.c_str(), airNode.c_str(), airRssi);
-    }
+        if (airNodes > 0) {
+            if (!air_lockstep_enable(airNodes)) {
+                fprintf(stderr, "[sim] --nodes %d: el modo sincronizado no esta disponible (solo Linux/macOS, 1..8 procesos)\n", airNodes);
+                return 2;
+            }
+            atexit(air_lockstep_bye);                  // al terminar, los demas dejan de esperarnos
+        }
+    } else if (airNodes > 0) { fprintf(stderr, "[sim] --nodes necesita --air <directorio>\n"); return 2; }
 
     EEPROM.setBackingFile(eepromPath.c_str());
     if (fresh) { remove(eepromPath.c_str()); }

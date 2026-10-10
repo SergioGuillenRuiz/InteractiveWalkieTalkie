@@ -19,7 +19,6 @@
 #include "Doodle.h"
 #include "TresEnRaya.h"
 #include "ClockSetup.h"
-#include <LoRa.h>
 
 #if defined(ESP8266)
 extern "C" {
@@ -79,6 +78,7 @@ void backgroundTick() {
     Lora_update();
 
     if (Lora_hasMessage()) {
+        lastTimeReceived = millis();         // se oye al compañero: no hace falta dormir la radio
         String raw = Lora_readMessage();
         String text; uint8_t sender = 0, msgId = 0;
         ChatKind kind = Chat_parse(raw, text, sender, msgId);
@@ -109,7 +109,7 @@ void backgroundTick() {
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
                 Chat_noteHeard(sender);
-                Chat_sendAck(sender, msgId);    // confirmar recepcion SIEMPRE (aunque sea repetido)
+                Chat_queueAck(sender, msgId);   // confirmar recepcion SIEMPRE (aunque sea repetido); sale con retardo aleatorio
                 if (!Chat_seenBefore(sender, msgId)) {   // dedup: solo guardar la 1a vez
                     History_addIncoming(text, sender);
                     onNewIncoming(sender, text);
@@ -341,7 +341,7 @@ bool handleIdle() {
     // Un dibujo recibido NO interrumpe: se trata como un mensaje mas (queda en el
     // Historial y se abre/ve desde alli, igual que el texto).
 
-    LoRa.idle();
+    // (La radio escucha en recepción continua: no se toca aquí.)
 
     // El menú se redibuja en el buffer cada iteración (así se repara lo que
     // pinten las animaciones), pero el volcado a pantalla está limitado por
@@ -395,7 +395,6 @@ bool handleIdle() {
         justEnteredIdle = true;
         Display_clear();
         Display_setPower(false);   // apagar el panel OLED para ahorrar batería
-        LoRa.idle();
         menuTransitionDelay();
         return true;
     }
@@ -440,8 +439,11 @@ static void drawSleepAlert() {
 // ==================== STATE_SLEEP ====================
 bool handleSleep() {
 
-    if (millis() - lastTimeReceived > LORA_DEEP_SLEEP) {
-        LoRa.sleep();
+    // Ahorro opcional (Lora_setDeepSleepMs, por defecto desactivado): sin oír NADA durante ese tiempo y estando en
+    // suspensión, la radio se duerme de verdad.
+    if (Lora_deepSleepMs() > 0 && !Lora_isAsleep() && millis() - lastTimeReceived > Lora_deepSleepMs()) {
+        Lora_sleep();
+        Serial.println("[LoRa] Radio dormida (suspension prolongada sin oir nada)");
     }
 
     // --- Aviso de mensaje nuevo con la pantalla apagada ---
@@ -503,7 +505,8 @@ bool handleSleep() {
                 buttonPressCount = 0;
                 mainState = STATE_IDLE;
                 lastInteraction = now;
-                LoRa.idle();              // reactivar la radio
+                Lora_listen();            // reactivar la radio (si dormia)
+                Chat_beaconSoon();        // anunciarse: el compañero reenvía lo que dejó pendiente
                 Display_setPower(true);   // reactivar el panel OLED
                 Display_clear();
                 menuTransitionDelay();

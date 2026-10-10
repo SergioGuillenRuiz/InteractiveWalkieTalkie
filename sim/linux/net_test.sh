@@ -25,10 +25,10 @@ LNX="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIM="$(dirname "$LNX")"
 WORK="$SIM/out/linux"
 EXE="$WORK/walkie_sim"
-# Tope de velocidad del tiempo virtual (ms virtuales por ms real). Sin tope cada proceso
-# corre su tiempo casi instantaneo y los equipos dejan de coincidir en el aire (el que
-# arranca unas decenas de ms despues se pierde lo ya emitido). 20 -> 14 s virtuales = 0,7 s.
-PACE="${PACE:-20}"
+# Modo sincronizado (--nodes N): los N procesos de cada escena comparten el MISMO tiempo virtual y avanzan
+# juntos ms a ms, asi la radio (tiempos en el aire, colisiones, half-duplex) es la de la realidad y el
+# resultado es determinista: no depende de la velocidad de la maquina. NODES lo fija cada escena.
+NODES=1
 
 # --- Compilar ---
 "$LNX/build.sh" >/dev/null || { echo "build fallo"; exit 1; }
@@ -38,7 +38,7 @@ clear_air() { mkdir -p "$1"; rm -f "$1"/* 2>/dev/null || true; }
 # start_node <air> <node> <chip> <keysText> <keysFile> <log>  -> deja el PID en $NODE_PID
 start_node() {
   printf '%s\n' "$4" > "$WORK/$5"
-  SIM_CHIPID="$3" "$EXE" --keys "$WORK/$5" --air "$1" --node "$2" --pace "$PACE" \
+  SIM_CHIPID="$3" "$EXE" --keys "$WORK/$5" --air "$1" --node "$2" --nodes "$NODES" \
       --eeprom "$WORK/net_$2.bin" --fresh --shots "$WORK" </dev/null >"$6" 2>&1 &
   NODE_PID=$!
 }
@@ -65,20 +65,22 @@ all1()   { for v in "$@"; do [[ "$v" == "1" ]] || { echo 0; return; }; done; ech
 hasnot() { grep -qE "$2" "$1" && echo 0 || echo 1; }
 
 # Guion: navegar IDLE -> Enviar -> Instant -> mensaje <potIdx> -> enviar; seguir vivo.
+# sender_keys <potIdx> <ms de salida> [desfase ms]; el mensaje sale a los 5000 ms + desfase.
 # pot 80   -> "Enviar"  (idx0 de 3 en IDLE).
 # pot 384  -> modo "Instant" (idx1 de 4: Morse/Instant/Rueda/Frase).
 # potIdx   -> mensaje del grid Instant (8 opciones): 585->"happy", 460->"kissy".
 sender_keys() {
+  local o=${3:-0}
   cat <<EOF
 0 pot 80
-3000 mdown
-3120 mup
-3600 pot 384
-4000 mdown
-4120 mup
-4600 pot $1
-5000 mdown
-5120 mup
+$((3000 + o)) mdown
+$((3120 + o)) mup
+$((3600 + o)) pot 384
+$((4000 + o)) mdown
+$((4120 + o)) mup
+$((4600 + o)) pot $1
+$((5000 + o)) mdown
+$((5120 + o)) mup
 $2 q
 EOF
 }
@@ -101,6 +103,7 @@ echo
 echo "==== Escena A: difusion 3 equipos (#1 -> #2,#3) ===="
 AIR_A="$WORK/air_a"
 clear_air "$AIR_A"
+NODES=3
 
 start_node "$AIR_A" 1 100 "$(sender_keys 585 10500)" "_a1.txt" "$WORK/_a1.out"; a1=$NODE_PID   # #1 envia "happy"
 start_node "$AIR_A" 2 200 "$(rx_keys net_rx2)"        "_a2.txt" "$WORK/_a2.out"; a2=$NODE_PID
@@ -117,15 +120,17 @@ check "#1 recibe la confirmacion (ACK)"      "$(has "$o1" 'Confirmado: entregado
 check "half-duplex: #1 NO se oye a si mismo" "$(hasnot "$o1" 'ACK a #101')"
 
 # ============================================================
-#  ESCENA B: bidireccional 1 <-> 2 (cada uno emisor y receptor)
+#  ESCENA B: bidireccional 1 <-> 2 (cada uno emisor y receptor), sin coincidir en el aire:
+#  #1 envia a los 5 s y #2 a los 7 s. Con la radio realista nada se pierde.
 # ============================================================
 echo
 echo "==== Escena B: bidireccional 2 equipos (#1 <-> #2) ===="
 AIR_B="$WORK/air_b"
 clear_air "$AIR_B"
+NODES=2
 
-start_node "$AIR_B" 1 100 "$(sender_keys 585 14000)" "_b1.txt" "$WORK/_b1.out"; b1=$NODE_PID   # #1 envia "happy"
-start_node "$AIR_B" 2 200 "$(sender_keys 460 14000)" "_b2.txt" "$WORK/_b2.out"; b2=$NODE_PID   # #2 envia "kissy"
+start_node "$AIR_B" 1 100 "$(sender_keys 585 14000)"      "_b1.txt" "$WORK/_b1.out"; b1=$NODE_PID   # #1 envia "happy"
+start_node "$AIR_B" 2 200 "$(sender_keys 460 14000 2000)" "_b2.txt" "$WORK/_b2.out"; b2=$NODE_PID   # #2 envia "kissy"
 wait_all 60 "$b1" "$b2"
 
 q1="$WORK/_b1.out"; q2="$WORK/_b2.out"
@@ -139,6 +144,32 @@ check "#1 confirma su envio (ACK de #2)"     "$(has "$q1" 'Confirmado: entregado
 check "#2 confirma su envio (ACK de #1)"     "$(has "$q2" 'Confirmado: entregado')"
 check "half-duplex: #1 NO recibe su 'happy'" "$(hasnot "$q1" 'ACK a #101')"
 check "half-duplex: #2 NO recibe su 'kissy'" "$(hasnot "$q2" 'ACK a #201')"
+check "sin colisiones: ninguna trama perdida" "$(all1 "$(hasnot "$q1" 'PERDIDA|CRC erroneo')" "$(hasnot "$q2" 'PERDIDA|CRC erroneo')")"
+check "sin reintentos: la 1a emision se confirma" "$(all1 "$(hasnot "$q1" 'Reintento')" "$(hasnot "$q2" 'Reintento')")"
+
+# ============================================================
+#  ESCENA E: los dos equipos pulsan ENVIAR en el mismo milisegundo (las dos emisiones se pisan: la radio
+#  es half-duplex y ninguno oye al otro). Cada uno, al no recibir el ACK, reintenta pasados 3,5-6,5 s con
+#  dispersion aleatoria, asi que no vuelven a coincidir y los dos mensajes acaban entregados y confirmados.
+# ============================================================
+echo
+echo "==== Escena E: emision simultanea (colision) y recuperacion por reintentos ===="
+AIR_E="$WORK/air_e"
+clear_air "$AIR_E"
+NODES=2
+
+start_node "$AIR_E" 1 100 "$(sender_keys 585 16000)" "_e1.txt" "$WORK/_e1.out"; e1=$NODE_PID   # #1 envia "happy"
+start_node "$AIR_E" 2 200 "$(sender_keys 460 16000)" "_e2.txt" "$WORK/_e2.out"; e2=$NODE_PID   # #2 envia "kissy" A LA VEZ
+wait_all 60 "$e1" "$e2"
+
+x1="$WORK/_e1.out"; x2="$WORK/_e2.out"
+check "las dos emisiones simultaneas se pisan"      "$(all1 "$(has "$x1" 'PERDIDA: la radio estaba transmitiendo')" "$(has "$x2" 'PERDIDA: la radio estaba transmitiendo')")"
+check "#1 reintenta"                                "$(has "$x1" 'Reintento msg 1')"
+check "#2 reintenta"                                "$(has "$x2" 'Reintento msg 1')"
+check "#1 acaba recibiendo 'kissy'"                 "$(has "$x1" 'Guardado: kissy')"
+check "#2 acaba recibiendo 'happy'"                 "$(has "$x2" 'Guardado: happy')"
+check "#1 acaba con su envio confirmado"            "$(has "$x1" 'Confirmado: entregado')"
+check "#2 acaba con su envio confirmado"            "$(has "$x2" 'Confirmado: entregado')"
 
 # ============================================================
 #  ESCENA C: la hora puesta a mano en un equipo la adopta el otro (#1 -> #2).
@@ -152,6 +183,7 @@ echo
 echo "==== Escena C: hora puesta a mano en #1 -> adoptada por #2 ===="
 AIR_C="$WORK/air_c"
 clear_air "$AIR_C"
+NODES=2
 
 keys_c1=$(cat <<EOF
 0 pot 0
@@ -202,6 +234,7 @@ echo
 echo "==== Escena D: tres equipos se ven por las balizas ===="
 AIR_D="$WORK/air_d"
 clear_air "$AIR_D"
+NODES=3
 start_node "$AIR_D" 1 100 "0 pot 512
 60000 q" "_d1.txt" "$WORK/_d1.out"; d1=$NODE_PID
 start_node "$AIR_D" 2 200 "0 pot 512

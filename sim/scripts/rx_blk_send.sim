@@ -1,8 +1,13 @@
 # ============================================================
 #  Fix 3 (d): recepcion DENTRO de la espera tras enviar (pantalla
 #  "Enviado", waitAfterResult -> waitButtonMorseOrFinish)
+#  'alfa' llega con el menu en pantalla; el equipo envia 'kissy' (emite ~120 ms, sordo mientras tanto)
+#  y 'bravo' llega ya con la pantalla "Enviado" en espera bloqueante. Una trama por turno.
 # ============================================================
 wait 300
+# La baliza de arranque (a los 2-4 s) ocupa el canal ~120 ms y el equipo no oye mientras emite: se espera
+# a que salga para que lo que sigue no dependa de esa coincidencia (la siguiente tarda ~30 s).
+waitfor serial 0 6000 [Chat] Baliza
 pot 80
 wait 200
 tap morse
@@ -14,11 +19,12 @@ wait 250
 pot 460
 wait 250
 expect text kissy
-lora rx alfa
-lora rx bravo
-in 0 morse down
-in 120 morse up
-run 900
+in 0 lora alfa
+in 400 morse down
+in 520 morse up
+in 1900 lora bravo
+run 2800
+expect text Enviado                     # sigue en la espera bloqueante: 'bravo' se leyo ahi dentro
 expect serial Enviando: kissy
 expect serial Guardado: alfa
 expect serial Guardado: bravo

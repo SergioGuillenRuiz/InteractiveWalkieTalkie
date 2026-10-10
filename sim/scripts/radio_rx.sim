@@ -1,0 +1,139 @@
+# ============================================================
+#  La radio tiene que ESCUCHAR siempre (modelo de radio realista).
+#  Con la libreria LoRa real, parsePacket() solo deja la radio en "recepcion unica" (caduca a los
+#  ~102 ms) y el firmware llamaba a LoRa.idle() en cada vuelta del menu principal: la radio estaba
+#  sorda casi todo el tiempo y no entraba ningun mensaje. Aqui se comprueba, con tramas que llegan
+#  en instantes irregulares y con el tiempo en el aire REAL (118 ms cada mensaje corto y cada ACK):
+#    - en el menu principal no se pierde ninguna trama;
+#    - tras transmitir (ACK, baliza) se vuelve a escuchar de inmediato;
+#    - una trama corrupta (CRC) no deja la radio fuera de recepcion;
+#    - si el chip cae de recepcion (brown-out...) se re-arma solo;
+#    - en suspension se sigue escuchando y avisando, sin limite de tiempo (por defecto la radio no se
+#      duerme nunca); con el ahorro opcional activado (Lora_setDeepSleepMs) la radio se duerme de verdad
+#      tras ese tiempo sin oir nada y al despertar vuelve a escuchar y avisa con una baliza.
+#  (Device_id del sim = 137.)
+# ============================================================
+radio ideal off
+waitfor serial 0 5000 [Chat] Baliza        # la 1a baliza (2-4 s): a partir de aqui hay ~27 s sin otra
+wait 400
+expect radiomode rxcont
+print Tras el arranque y la 1a baliza la radio escucha en continuo
+
+# --- 1) Quince mensajes de dos equipos en instantes irregulares, en el MENU PRINCIPAL ---
+radio mark
+in 500 chatmsg 50 1 m1
+in 1800 chatmsg 50 2 m2
+in 2400 chatmsg 60 1 m3
+in 4000 chatmsg 50 3 m4
+in 5000 chatmsg 50 4 m5
+in 5700 chatmsg 60 2 m6
+in 7300 chatmsg 50 5 m7
+in 8800 chatmsg 50 6 m8
+in 9300 chatmsg 60 3 m9
+in 11000 chatmsg 50 7 m10
+in 12500 chatmsg 50 8 m11
+in 13100 chatmsg 60 4 m12
+in 15000 chatmsg 50 9 m13
+in 16200 chatmsg 50 10 m14
+in 17900 chatmsg 60 5 m15
+run 21000
+expect rx lost = 0
+expect rx heard >= 15
+expect serial Guardado: m15
+expect serial Guardado: m8
+expect tx 15 30                           # un ACK por mensaje (+ alguna baliza)
+expect radiomode rxcont
+radio report
+print 15 mensajes en el menu principal: ninguno se pierde, todos confirmados
+
+# --- 2) Justo despues de transmitir el ACK se vuelve a escuchar ---
+waitfor serial 0 33000 [Chat] Baliza       # espera a que pase la siguiente baliza (para no coincidir con ella)
+wait 500
+radio mark
+chatmsg 50 20 primero
+in 800 chatmsg 50 21 segundo                # llega ~100 ms despues de acabar de enviar el ACK del 1o
+run 2500
+expect rx lost = 0
+expect serial Guardado: primero
+expect serial Guardado: segundo
+print Tras emitir un ACK la radio vuelve a escuchar enseguida
+
+# --- 3) Una trama CORRUPTA (CRC) se descarta y la radio sigue escuchando ---
+wait 800
+radio mark
+lora rxbad ruido en el canal
+run 700
+expect rx crc = 1
+expect radiomode rxcont
+chatmsg 50 22 tras el ruido
+run 1500
+expect serial Guardado: tras el ruido
+print Una trama con CRC erroneo se descarta y no deja la radio sorda
+
+# --- 4) Si el chip cae de recepcion, el firmware lo detecta y lo re-arma ---
+radio kick stdby
+wait 1500
+expect radiomode rxcont
+radio mark
+chatmsg 50 23 tras la caida
+run 1500
+expect serial Guardado: tras la caida
+radio kick sleep
+wait 1500
+expect radiomode rxcont
+print Si la radio cae a STDBY/SLEEP se re-arma sola (vigilancia)
+
+# --- 5) En suspension se sigue escuchando (por defecto la radio NO se duerme nunca) ---
+wait 800
+ff 305000                                  # a SLEEP (pantalla apagada)
+expect panel off
+expect radiomode rxcont
+radio mark
+chatmsg 50 30 avisa en suspension
+run 1500
+expect panel on                            # el aviso de mensaje nuevo
+expect rx lost = 0
+expect serial Guardado: avisa en suspension
+print En suspension se oye y se avisa
+run 9000
+expect panel off
+ff 950000                                  # 15 min y pico sin oir NADA
+wait 500
+expect radiomode rxcont                    # por defecto (LORA_DEEP_SLEEP = 0) la radio NO se duerme: sigue alcanzable
+radio mark
+chatmsg 50 33 sigo oyendo tras mucho rato
+run 1500
+expect serial Guardado: sigo oyendo tras mucho rato
+expect rx lost = 0
+expect panel on                            # y avisa
+run 9000
+expect panel off
+print Por defecto la radio no se duerme nunca: sigue oyendo y avisando tras 15 min de silencio
+
+# --- 5b) Ahorro de energia OPCIONAL (Lora_setDeepSleepMs): tras ese tiempo sin oir nada la radio duerme ---
+radio deepsleep 900000
+ff 950000                                  # 15 min y pico sin oir NADA: la radio se duerme
+wait 500
+expect radiomode sleep
+radio mark
+chatmsg 50 31 con la radio dormida
+run 1500
+expect rx sleep = 1
+expect panel off
+print Con el ahorro activado la radio duerme tras 15 min sin oir nada: ya no oye
+
+# --- 6) Al despertar (3 pulsaciones) vuelve a escuchar y avisa con una baliza ---
+radio mark
+tap morse
+tap morse
+tap morse
+wait 600
+expect radiomode rxcont
+expect tx 1 3                              # la baliza con que se anuncia al despertar
+radio mark
+chatmsg 50 32 despierto
+run 1500
+expect serial Guardado: despierto
+expect rx lost = 0
+radio deepsleep 0
+print Al despertar vuelve a escuchar y se anuncia con una baliza
