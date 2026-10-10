@@ -61,6 +61,7 @@ check() {
   if [[ "$2" == "1" ]]; then echo "  [PASS] $1"; else echo "  [FAIL] $1"; fail=$((fail + 1)); fi
 }
 has()    { grep -qE "$2" "$1" && echo 1 || echo 0; }
+all1()   { for v in "$@"; do [[ "$v" == "1" ]] || { echo 0; return; }; done; echo 1; }   # AND de varios 0/1
 hasnot() { grep -qE "$2" "$1" && echo 0 || echo 1; }
 
 # Guion: navegar IDLE -> Enviar -> Instant -> mensaje <potIdx> -> enviar; seguir vivo.
@@ -192,6 +193,27 @@ check "#2 adopta 09:06 de #1 (gen 1)"           "$(has "$r2" 'hora adoptada del 
 check "#1 corrige a 07:20 (hacia atras)"        "$(has "$r1" 'puesta a mano: 07:20')"
 check "#2 adopta 07:20 aunque sea anterior"     "$(has "$r2" 'hora adoptada del peer: 264[0-9]{2} gen 2')"
 
+# ============================================================
+#  ESCENA D: tres equipos se ven entre si (tabla de companeros, balizas con jitter).
+#  Cada uno debe registrar a los OTROS DOS como "en alcance" y ninguno a si mismo.
+#  (ids: chip 100 -> #101, chip 200 -> #201, chip 300 -> #47)
+# ============================================================
+echo
+echo "==== Escena D: tres equipos se ven por las balizas ===="
+AIR_D="$WORK/air_d"
+clear_air "$AIR_D"
+start_node "$AIR_D" 1 100 "0 pot 512
+60000 q" "_d1.txt" "$WORK/_d1.out"; d1=$NODE_PID
+start_node "$AIR_D" 2 200 "0 pot 512
+60000 q" "_d2.txt" "$WORK/_d2.out"; d2=$NODE_PID
+start_node "$AIR_D" 3 300 "0 pot 512
+60000 q" "_d3.txt" "$WORK/_d3.out"; d3=$NODE_PID
+wait_all 60 "$d1" "$d2" "$d3"
+check "#101 ve a #201 y a #47"        "$(all1 "$(has "$WORK/_d1.out" 'equipo #201 en alcance')" "$(has "$WORK/_d1.out" 'equipo #47 en alcance')")"
+check "#201 ve a #101 y a #47"        "$(all1 "$(has "$WORK/_d2.out" 'equipo #101 en alcance')" "$(has "$WORK/_d2.out" 'equipo #47 en alcance')")"
+check "#47 ve a #101 y a #201"        "$(all1 "$(has "$WORK/_d3.out" 'equipo #101 en alcance')" "$(has "$WORK/_d3.out" 'equipo #201 en alcance')")"
+check "ninguno se ve a si mismo"      "$(all1 "$(hasnot "$WORK/_d1.out" 'equipo #101 en alcance')" "$(hasnot "$WORK/_d2.out" 'equipo #201 en alcance')" "$(hasnot "$WORK/_d3.out" 'equipo #47 en alcance')")"
+
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""
 command -v magick  >/dev/null 2>&1 && conv="magick"
@@ -200,7 +222,7 @@ for n in net_rx2 net_rx3; do
   if [[ -n "$conv" && -f "$WORK/$n.bmp" ]]; then "$conv" "$WORK/$n.bmp" "$WORK/$n.png" 2>/dev/null || true; fi
 done
 
-rm -f "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
+rm -f "$WORK"/_d1.txt "$WORK"/_d2.txt "$WORK"/_d3.txt "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
 echo
 if (( fail == 0 )); then echo "MULTI-DISPOSITIVO OK: comunicacion real (difusion + bidireccional) verificada."
 else                     echo "$fail comprobacion(es) fallaron."; fi

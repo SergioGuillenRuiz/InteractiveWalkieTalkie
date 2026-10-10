@@ -1,0 +1,162 @@
+# ============================================================
+#  Varios equipos: el firmware recuerda hasta MAX_PEERS (4) companeros, cada uno por
+#  separado (id, ultimo oido, bateria, aviso de bateria baja). Antes solo conocia "el
+#  ultimo que oyo": con 3 o mas equipos la presencia y la bateria saltaban de uno a otro.
+#    - corazon = ALGUN companero en alcance; se apaga cuando se va el ULTIMO;
+#    - bateria en pantalla = el nivel MAS BAJO entre los que estan en alcance (y "!" si
+#      alguno avisa de bateria baja), sin depender de quien emitio la ultima baliza;
+#    - tabla llena: se olvida al que lleva mas tiempo sin oirse;
+#    - dedup con ventana de 16 mensajes y los mensajes de cada emisor se guardan y confirman por
+#      separado. (El jitter de las balizas esta en beacon_jitter.sim.)
+#  Pixeles: icono de bateria del peer con contorno en (102,1) y relleno x=103..110 (0..8 px,
+#  redondeado: 12%->1 px, 55%->4 px, 80%->6 px); "!" del peer: pixel (96,2); corazon lleno (121,4).
+#  (Device_id del sim = 137.)
+# ============================================================
+
+wait 600
+pot 80
+wait 300
+
+# --- Tres equipos a la vez; el ULTIMO en oirse (#50, 80 %) no manda en la pantalla ---
+presence 60 0 12              # bateria baja (flag)
+run 400
+presence 70 0 55
+run 400
+presence 50 0 80              # el ultimo en emitir
+run 400
+expect serial equipo #60 en alcance
+expect serial equipo #70 en alcance
+expect serial equipo #50 en alcance
+expect pixel 121 4 on         # corazon lleno: hay alguien en alcance
+expect pixel 102 1 on         # icono de bateria del companero
+expect pixel 103 3 on         # 12 % -> 1 px de relleno: el MAS BAJO de los tres
+expect pixel 104 3 off
+expect pixel 96 2 on          # "!": #60 avisa de bateria baja (aunque el ultimo, #50, no)
+shot peers_tres
+print Tres equipos: se muestra el nivel mas bajo (12 %) y el aviso, no el del ultimo en emitir
+
+# --- #60 deja de emitir; #50 y #70 siguen: sigue habiendo alguien, y la bateria sube a 55 % ---
+ff 30000
+presence 50 0 80
+presence 70 0 55
+run 500
+ff 30000
+presence 50 0 80
+presence 70 0 55
+run 500
+ff 30000
+presence 50 0 80
+presence 70 0 55
+run 500
+ff 10000
+presence 50 0 80
+presence 70 0 55
+run 500
+expect serial equipo #60 fuera de alcance
+expect pixel 121 4 on         # el corazon sigue lleno
+expect pixel 105 3 on         # 55 % -> 4 px
+expect pixel 106 3 on
+expect pixel 107 3 off
+expect pixel 96 2 off         # ya no hay aviso de bateria baja
+print #60 se va: la presencia sigue y la bateria pasa al minimo de los que quedan
+
+# --- Callan todos: fuera de alcance de verdad ---
+pot 100                       # (un toque al pote reinicia el temporizador de suspension de 5 min)
+wait 200
+pot 80
+wait 200
+ff 100000
+expect serial equipo #50 fuera de alcance
+expect serial equipo #70 fuera de alcance
+expect serial companero fuera de alcance
+expect pixel 121 4 off        # corazon hueco
+expect pixel 102 1 off        # sin icono de bateria
+print Se van los ultimos: el corazon se vacia
+
+pot 100
+wait 200
+pot 80
+wait 200
+
+# --- Una baliza sin nivel de bateria (0xFF) no tapa a las que si lo comunican ---
+presence 50 0 255
+run 400
+presence 60 0 40
+run 400
+expect pixel 105 3 on         # 40 % -> 3 px (el nivel conocido manda)
+expect pixel 106 3 off
+print Nivel desconocido: se ignora si otro equipo si lo comunica
+
+# --- Tabla llena (4): el 5o equipo sustituye al que lleva mas tiempo sin oirse ---
+ff 2000
+presence 70 0 90
+run 300
+presence 80 0 90
+run 300
+expect serial equipo #80 en alcance
+presence 90 0 90              # 5o: la tabla (50, 60, 70, 80) esta llena
+run 400
+expect serial tabla llena: se olvida el equipo #50
+expect serial equipo #90 en alcance
+print Tabla llena: se sustituye al mas antiguo (#50)
+
+# --- Mensajes de varios equipos: cada uno con su ACK, mismo msgId de emisores distintos no choca ---
+chatmsg 60 1 desde sesenta
+run 400
+chatmsg 70 1 desde setenta
+run 400
+expect serial Guardado: desde sesenta
+expect serial Guardado: desde setenta
+expect serial ACK a #60 msg 1
+expect serial ACK a #70 msg 1
+print Mensajes de #60 y #70 con el mismo msgId: los dos se guardan y se confirman
+
+# --- Dedup con ventana de 16: tras 12 mensajes distintos, un reintento del primero se descarta ---
+chatmsg 80 5 primero
+run 400
+chatmsg 80 6 m6
+run 400
+chatmsg 80 7 m7
+run 400
+chatmsg 80 8 m8
+run 400
+chatmsg 80 9 m9
+run 400
+chatmsg 80 10 m10
+run 400
+chatmsg 80 11 m11
+run 400
+chatmsg 80 12 m12
+run 400
+chatmsg 80 13 m13
+run 400
+chatmsg 80 14 m14
+run 400
+chatmsg 80 5 primero
+run 400
+expect serial Duplicado descartado de #80 msg 5
+print Dedup: ventana de 16 (antes 8): un reintento tardio no se vuelve a guardar
+
+# --- Un equipo NUEVO que aparece reactiva los reintentos de lo pendiente ---
+# (enviar "happy" desde Instant; nadie lo confirma; se agotan los 3 reintentos)
+pot 80
+wait 300
+tap morse
+wait 300
+pot 300
+wait 300
+tap morse
+wait 300
+pot 585
+wait 300
+tap morse
+wait 700
+expect serial Chat] Enviando: happy
+in 0 finish down
+in 150 finish up
+run 700
+pot 80
+ff 25000
+presence 100 0 70             # un equipo que no habiamos visto
+waitfor serial 0 1500 Reintento msg
+print Un equipo nuevo en alcance reactiva el reenvio de los mensajes sin confirmar

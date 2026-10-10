@@ -1,0 +1,23 @@
+# ============================================================
+#  Balizas de presencia con JITTER: la primera a los 2-4 s del arranque y las siguientes
+#  cada 30 s +-3 s (27-33 s), aleatorio. Dos equipos encendidos a la vez no deben emitir
+#  SIEMPRE juntos: la radio no oye mientras emite y se taparian la baliza una y otra vez.
+#  "waitfor serial <min> <max> <texto>" comprueba que el texto aparece entre min y max ms.
+#  Cada dispositivo del simulador siembra su aleatorio con su SIM_CHIPID (como la placa, que
+#  usa el RNG por hardware); aqui, el id por defecto (137).
+# ============================================================
+waitfor serial 0 4500 [Chat] Baliza
+waitfor clear
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+waitfor serial 26900 33200 [Chat] Baliza
+# Las cotas por si solas no distinguen "30 s fijos" de "30 s +-3 s": exigimos variacion real
+# (con 8 intervalos aleatorios uniformes en +-3 s la dispersion es siempre > 1,5 s)
+expect spread 1500
+print Primera baliza a los 2-4 s, las siguientes cada 27-33 s y NO todas iguales
+# (el equipo no llega a dormirse: son < 300 s)

@@ -32,22 +32,19 @@ static uint8_t  s_beaconFlags  = 0;
 static uint8_t  s_beaconGen    = 0;
 
 // --- Dedup de recepcion (anillo de los ultimos N (sender,msgId)) ---
-#define SEEN_N 8
+#define SEEN_N 16        // con varios equipos entran mas mensajes y reintentos: ventana mas amplia
 static uint8_t g_seenS[SEEN_N];
 static uint8_t g_seenM[SEEN_N];
 static int     g_seenHead = 0;
 
-// --- Presencia del companero ---
-static uint8_t  g_peerId    = 0;
-static uint8_t  g_peerBatt  = 0xFF;
-static uint8_t  g_peerFlags = 0;      // flags de la ultima baliza del peer (BEACON_FLAG_*)
-static uint32_t g_lastHeard = 0;
-static bool     g_everHeard = false;
-static bool     g_wasOnline = false;
+// --- Presencia: tabla de companeros (id 0 = hueco libre) ---
+struct Peer { uint8_t id; uint32_t lastHeard; uint8_t batt; uint8_t flags; bool wasOnline; };
+static Peer     g_peers[MAX_PEERS];
+static uint8_t  g_lastPeerId = 0;     // ultimo peer oido (Chat_peerId)
+static bool     g_wasOnline  = false; // agregado: habia alguien en alcance
 
-// --- Baliza periodica ---
-static uint32_t g_lastBeacon   = 0;
-static bool     g_beaconedOnce = false;
+// --- Baliza periodica (con jitter) ---
+static uint32_t g_beaconDue = 0;      // millis() en que toca la proxima baliza
 
 // --- Outbox (mensajes enviados sin confirmar) ---
 struct OutItem { uint8_t state; uint8_t msgId; uint8_t target; String text; uint8_t retries; uint32_t nextAt; };
@@ -72,7 +69,13 @@ static bool txMessage(uint8_t mid, const String &text) {
   return Lora_send(p);
 }
 
+// Intervalo hasta la proxima baliza: BEACON_INTERVAL_MS +-BEACON_JITTER_MS.
+static uint32_t nextBeaconDelay() {
+  return BEACON_INTERVAL_MS - BEACON_JITTER_MS + (uint32_t)random(2 * BEACON_JITTER_MS + 1);
+}
+
 static void sendBeacon() {
+  Serial.println("[Chat] Baliza");
   String p;
   p += CHAT_MARK_BEACON;
   p += (char)Device_id();
@@ -151,8 +154,9 @@ void Chat_load() {
   // que lo hacemos explicito para que el reinicio sea fiel (sin presencia, dedup
   // ni confirmaciones "fantasma" heredadas de antes del reinicio).
   g_awaiting = false; g_delivered = false; g_lastSentId = 0;
-  g_peerId = 0; g_peerBatt = 0xFF; g_peerFlags = 0; g_lastHeard = 0; g_everHeard = false; g_wasOnline = false;
-  g_beaconedOnce = false; g_lastBeacon = 0;
+  for (int i = 0; i < MAX_PEERS; i++) g_peers[i].id = 0;
+  g_lastPeerId = 0; g_wasOnline = false;
+  g_beaconDue = millis() + 2000 + (uint32_t)random(2000);   // 1a baliza a los 2-4 s del arranque
   g_seenHead = 0;
   for (int i = 0; i < SEEN_N; i++) { g_seenS[i] = 0; g_seenM[i] = 0; }
   g_nextMsgId = 1;
@@ -305,29 +309,79 @@ bool Chat_seenBefore(uint8_t sender, uint8_t msgId) {
 // ============================================================
 //  Presencia
 // ============================================================
+static bool peerAlive(const Peer &p, uint32_t now) {
+  return p.id != 0 && (uint32_t)(now - p.lastHeard) < PRESENCE_TIMEOUT_MS;
+}
+
+static Peer *findPeer(uint8_t id) {
+  for (int i = 0; i < MAX_PEERS; i++) if (g_peers[i].id == id) return &g_peers[i];
+  return nullptr;
+}
+
+// Entrada del peer; si es nuevo, un hueco libre o, si no hay, el que lleva mas tiempo sin oirse.
+static Peer *touchPeer(uint8_t id) {
+  Peer *p = findPeer(id);
+  if (p) return p;
+  uint32_t now = millis();
+  int slot = -1;
+  for (int i = 0; i < MAX_PEERS; i++) if (g_peers[i].id == 0) { slot = i; break; }
+  if (slot < 0) {                                   // tabla llena: sustituir el mas antiguo
+    uint32_t worst = 0;
+    for (int i = 0; i < MAX_PEERS; i++) {
+      uint32_t age = (uint32_t)(now - g_peers[i].lastHeard);
+      if (slot < 0 || age > worst) { worst = age; slot = i; }
+    }
+    Serial.print("[Presencia] tabla llena: se olvida el equipo #"); Serial.println(g_peers[slot].id);
+  }
+  g_peers[slot].id = id;
+  g_peers[slot].lastHeard = now;
+  g_peers[slot].batt = 0xFF;
+  g_peers[slot].flags = 0;
+  g_peers[slot].wasOnline = false;
+  return &g_peers[slot];
+}
+
 void Chat_noteHeard(uint8_t peerId) {
   if (peerId == 0 || peerId == Device_id()) return;
-  g_peerId    = peerId;
-  g_lastHeard = millis();
-  g_everHeard = true;
+  Peer *p = touchPeer(peerId);
+  p->lastHeard = millis();
+  g_lastPeerId = peerId;
 }
 
-bool Chat_peerOnline() {
-  if (!g_everHeard) return false;
-  return (uint32_t)(millis() - g_lastHeard) < PRESENCE_TIMEOUT_MS;
+int Chat_peersOnline() {
+  uint32_t now = millis();
+  int n = 0;
+  for (int i = 0; i < MAX_PEERS; i++) if (peerAlive(g_peers[i], now)) n++;
+  return n;
 }
 
-uint8_t Chat_peerId()   { return g_peerId; }
-uint8_t Chat_peerBatt() { return g_peerBatt; }
-bool    Chat_peerBattLow() { return (g_peerFlags & BEACON_FLAG_LOWBATT) != 0; }
+bool Chat_peerOnline() { return Chat_peersOnline() > 0; }
+
+uint8_t Chat_peerId() { return g_lastPeerId; }
+
+uint8_t Chat_peerBatt() {
+  uint32_t now = millis();
+  uint8_t lowest = 0xFF;
+  for (int i = 0; i < MAX_PEERS; i++)
+    if (peerAlive(g_peers[i], now) && g_peers[i].batt <= 100 && (lowest == 0xFF || g_peers[i].batt < lowest))
+      lowest = g_peers[i].batt;
+  return lowest;
+}
+
+bool Chat_peerBattLow() {
+  uint32_t now = millis();
+  for (int i = 0; i < MAX_PEERS; i++)
+    if (peerAlive(g_peers[i], now) && (g_peers[i].flags & BEACON_FLAG_LOWBATT)) return true;
+  return false;
+}
 
 // Procesa la ultima baliza parseada: presencia + bateria del peer + sincronizar
 // el reloj con su epoch. (El llamador ya comprobo Chat_parse()==CHAT_BEACON.)
 void Chat_handleBeacon() {
   if (s_beaconSender == 0 || s_beaconSender == Device_id()) return;   // ignorar eco propio
   Chat_noteHeard(s_beaconSender);
-  g_peerBatt = s_beaconBatt;
-  g_peerFlags = s_beaconFlags;
+  Peer *p = findPeer(s_beaconSender);
+  if (p) { p->batt = s_beaconBatt; p->flags = s_beaconFlags; }
   // Hora del peer. Si es de una generacion de ajuste MAS RECIENTE el reloj salta: se
   // reajustan las marcas de tiempo guardadas para que las antiguedades no cambien.
   int32_t step = Clock_syncFromPeer(s_beaconEpoch, s_beaconGen);
@@ -338,8 +392,7 @@ void Chat_handleBeacon() {
 }
 
 void Chat_beaconSoon() {
-  g_beaconedOnce = true;
-  g_lastBeacon = millis() - BEACON_INTERVAL_MS;   // aritmetica modular: ya toca emitir
+  g_beaconDue = millis();                         // ya toca emitir
 }
 
 // ============================================================
@@ -352,15 +405,29 @@ void Chat_tick() {
   // Baliza: solo en estados "ambientales" (IDLE/SLEEP) para no colisionar con los
   // paquetes de juego ni ensuciar el ultimo TX durante un envio.
   bool ambient = (mainState == STATE_IDLE || mainState == STATE_SLEEP);
-  if (ambient) {
-    if (!g_beaconedOnce && now >= 2000) { sendBeacon(); g_lastBeacon = now; g_beaconedOnce = true; }
-    else if (g_beaconedOnce && (uint32_t)(now - g_lastBeacon) >= BEACON_INTERVAL_MS) { sendBeacon(); g_lastBeacon = now; }
+  if (ambient && (int32_t)(now - g_beaconDue) >= 0) {
+    sendBeacon();
+    g_beaconDue = now + nextBeaconDelay();
   }
 
-  // Presencia: al pasar offline->online, avisar y reactivar los reintentos de la
-  // outbox; al pasar online->offline, avisar.
-  bool online = Chat_peerOnline();
-  if (online && !g_wasOnline) { Serial.println("[Presencia] companero en alcance"); flushOutbox(now); }
+  // Presencia, equipo por equipo: al pasar offline->online se avisa y se reactivan los
+  // reintentos de la outbox (puede ser justo quien no recibio un mensaje); al pasar
+  // online->offline, se avisa. Ademas, el agregado "algun companero en alcance".
+  int nOnline = 0;
+  for (int i = 0; i < MAX_PEERS; i++) {
+    if (g_peers[i].id == 0) continue;
+    bool alive = peerAlive(g_peers[i], now);
+    if (alive && !g_peers[i].wasOnline) {
+      Serial.print("[Presencia] equipo #"); Serial.print(g_peers[i].id); Serial.println(" en alcance");
+      flushOutbox(now);
+    } else if (!alive && g_peers[i].wasOnline) {
+      Serial.print("[Presencia] equipo #"); Serial.print(g_peers[i].id); Serial.println(" fuera de alcance");
+    }
+    g_peers[i].wasOnline = alive;
+    if (alive) nOnline++;
+  }
+  bool online = nOnline > 0;
+  if (online && !g_wasOnline) Serial.println("[Presencia] companero en alcance");
   else if (!online && g_wasOnline) Serial.println("[Presencia] companero fuera de alcance");
   g_wasOnline = online;
 

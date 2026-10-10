@@ -135,6 +135,8 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
 | `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
 | `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
+| `peers.sim`        | Varios equipos: tabla de compañeros (presencia por equipo, batería mínima, tabla llena, mismo msgId de emisores distintos, dedup de 16, reactivar reintentos) |
+| `beacon_jitter.sim`| Balizas con jitter: primera a los 2-4 s y siguientes cada 27-33 s, no todas iguales |
 | `peer_batt.sim`    | Batería del compañero junto al corazón de presencia (nivel, "!" de batería baja, oculta fuera de alcance) |
 | `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
@@ -147,8 +149,9 @@ out\walkie_sim.exe --fresh scripts\history.sim
 
 ## Lenguaje de scripts
 
-Un comando por línea. Las líneas que empiezan por `#`, y todo lo que siga a ` #`,
-son comentarios.
+Un comando por línea. Las líneas que empiezan por `#`, y todo lo que siga a ` # `
+(almohadilla **precedida y seguida de espacio**), son comentarios. Un `#` pegado a un
+texto forma parte del argumento: `expect serial ACK a #50` busca `ACK a #50`.
 
 Un error en el propio guion (comando o comprobación desconocidos, argumentos que
 faltan o no válidos, un mensaje inyectado demasiado largo para que el firmware
@@ -217,6 +220,9 @@ expect sent <sub>      el último TX LoRa descifra y contiene <sub>
 expect beacon gen|batt|epoch|time <v>   la última BALIZA transmitida lleva ese valor (time = HH:MM)
 expect panel on|off    el panel OLED está encendido/apagado (la suspensión lo apaga)
 expect pixel <x> <y> on|off   estado de un píxel
+waitfor serial <min> <max> <texto>   ejecuta el firmware hasta que <texto> aparezca en el log serie (solo
+                       lo nuevo) y comprueba que lo hace entre <min> y <max> ms (ritmo de balizas, reintentos)
+waitfor clear          olvida las esperas registradas;  expect spread <ms>: entre ellas, max-min >= <ms>
 watch pixel <x> <y> on|off <ms>   ejecuta el firmware <ms> y comprueba el píxel tras CADA vuelta de loop()
                        (detecta parpadeos que un expect puntual no ve)
 print <texto>          imprime una nota
@@ -258,7 +264,8 @@ Sin script y sin `--interactive`, lee comandos por la entrada estándar.
 Una opción desconocida o sin su valor, o un guion de teclas que no existe, termina
 con código 2. Las carpetas de `--shots` y de `--eeprom` se crean si no existen.
 Para dar un id de equipo distinto a cada dispositivo, exporta `SIM_CHIPID` antes de
-lanzarlo (`Device_id()` lo deriva de ahí en el simulador).
+lanzarlo (`Device_id()` lo deriva de ahí en el simulador, y también siembra su aleatorio:
+cada equipo sortea distinto, como la placa con su RNG por hardware).
 
 ## Fidelidad respecto al hardware real
 

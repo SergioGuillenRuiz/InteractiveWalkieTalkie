@@ -78,6 +78,13 @@
 // PRESENCE_TIMEOUT_MS se considera "fuera de alcance".
 #define BEACON_INTERVAL_MS   30000UL
 #define PRESENCE_TIMEOUT_MS  90000UL
+// La baliza sale cada BEACON_INTERVAL_MS +-BEACON_JITTER_MS (aleatorio): dos equipos
+// encendidos a la vez no deben emitir SIEMPRE juntos (la radio no oye mientras emite:
+// se taparian la baliza una y otra vez y no se verian nunca).
+#define BEACON_JITTER_MS     3000UL
+// Companeros que se recuerdan a la vez (presencia, bateria): con mas, se sustituye el
+// que lleva mas tiempo sin oirse.
+#define MAX_PEERS            4
 
 // ------------------------------------------------------------
 // Batería

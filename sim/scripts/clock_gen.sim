@@ -65,7 +65,7 @@ print Peer gen 2 (mas antigua) con epoch mayor: ignorada
 presence 50 1700035200 80 4
 run 600
 expect text 08:00
-ff 31000                        # a los 30 s sale mi baliza con la generacion adoptada
+ff 34000                        # a los 27-33 s (con jitter) sale mi baliza con la generacion adoptada
 expect beacon gen 4
 expect beacon time 08:00
 print Peer gen 4 (08:00, ANTERIOR): adoptada; mi baliza ya lleva gen 4

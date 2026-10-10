@@ -33,6 +33,13 @@ bool g_finish = false;
 std::string g_serial;
 std::vector<Ev> g_events;
 std::mt19937 g_rng(12345u);
+// Cada dispositivo simulado (SIM_CHIPID distinto) tiene su propia secuencia aleatoria, como en la
+// placa (RNG por hardware): dos equipos arrancados a la vez no deben sortear lo mismo.
+const bool g_rngSeeded = [] {
+    const char *e = getenv("SIM_CHIPID");
+    if (e) g_rng.seed(12345u + (uint32_t)strtoul(e, nullptr, 0) * 7919u);
+    return true;
+}();
 void (*g_pump)(uint32_t) = nullptr;   // hook del modo interactivo (teclado + render + ritmo)
 void (*g_injectHook)(int) = nullptr;  // handler de EV_INJECT (lo fija el runner)
 

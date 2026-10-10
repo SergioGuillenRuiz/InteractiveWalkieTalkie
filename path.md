@@ -20,10 +20,10 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación. Los recibidos entran como **no leídos** (bit persistente): insignia con el recuento sobre el icono "Hist" (9+), punto de "nuevo" en la fila y se marcan como leídos al abrirlos o al salir de la lista si su fila llegó a verse |
 | Aviso | Mensaje o dibujo nuevo: el hipopótamo persigue el corazón en el menú principal; con la pantalla apagada (suspensión) se enciende 8 s con vista previa (**A** = leer, abre el Historial; **B** = cerrar; sin pulsar se apaga sola) y esas pulsaciones no cuentan para el despertar de 3 pulsaciones |
 | Hora | Se pone a mano (mantener **B** 1,5 s en el menú principal → "Poner la hora": horas / decenas / unidades de minuto con el pote), se muestra en el menú principal y en el Historial, se difunde y es **autoritativa** entre equipos (generación de ajuste en la baliza: la última hora puesta gana aunque se corrija hacia atrás), persiste en EEPROM y las antigüedades del historial no cambian al saltar el reloj. Es la hora local (sin zona horaria: al cambiar la hora de verano/invierno hay que volver a ponerla). No se puede por puerto serie: el SCL del OLED va al pin RX |
-| Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance, con su nivel de batería (y "!" si avisa de batería baja) a la izquierda del corazón |
+| Presencia | Baliza cada 30 s ±3 s (aleatoria, para que dos equipos encendidos a la vez no se tapen) y corazón en pantalla cuando hay algún compañero en alcance. Recuerda hasta 4 compañeros **por separado** (id, último oído, batería); a la izquierda del corazón se muestra el nivel de batería **más bajo** de los que están en alcance (y "!" si alguno avisa de batería baja), no el del último que emitió |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 32 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 34 tests, multi-dispositivo y demos |
 
 ---
 
@@ -38,7 +38,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - Tres en raya y Tetris 2 jugadores descartan cualquier paquete que no sea del juego (`src/TresEnRaya.cpp:61`, `src/TetrisCoop.cpp:349`).
   - HippoRadar guarda en el historial los paquetes en crudo (`src/HippoRadar.cpp:106`), así que confirmaciones y balizas aparecerían como texto basura.
   - Durante esas partidas no se envían balizas ni reintentos.
-- [ ] **Varios equipos.** El firmware solo conoce un "compañero" (el último que oyó). Con 3 o más equipos, la presencia salta de uno a otro.
 
 ---
 
@@ -62,6 +61,7 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - La librería LoRa solo recibe mientras está en modo "recepción única", que activa `parsePacket()`. Si cada vuelta la pasa a reposo, la radio estaría casi siempre sorda y podría perder mensajes. Deducido del código de la librería; no comprobado.
   - En el simulador `idle()` no hace nada, así que no lo detecta.
   - Por la misma razón, `LoRa.sleep()` en suspensión probablemente se deshace al instante, y el ahorro de energía (light sleep, despertar por GPIO, consumo) también está sin medir.
+- [ ] **ACK simultáneos.** Con 3 o más equipos, todos los receptores confirman un mensaje a la vez (sin escucha previa ni espera aleatoria) y los ACK pueden taparse entre sí. Hace falta un retardo aleatorio corto antes de cada ACK (y el simulador de radio realista para comprobarlo).
 - [ ] **Algunos modos ocupan la radio más del 100 % del tiempo** (SF7/125 kHz salvo que se indique; tiempo en el aire calculado):
 
   | Paquete | Tiempo en el aire | Se envía cada | Ocupación |

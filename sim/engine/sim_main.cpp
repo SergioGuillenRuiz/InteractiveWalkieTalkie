@@ -186,6 +186,7 @@ static void check(bool ok, const std::string &desc) {
 // comprobaria nada y el test pasaria en silencio.
 static int g_lineNo = 0;
 static std::string g_curLine;
+static std::vector<uint32_t> g_waitSamples;   // instantes (ms) en que "waitfor" vio su texto: para "expect spread" 
 static void scriptError(const std::string &msg) {
     g_fail++;
     if (g_lineNo > 0) printf("  [FAIL] linea %d: %s  -> \"%s\"\n", g_lineNo, msg.c_str(), g_curLine.c_str());
@@ -233,8 +234,13 @@ static void execLine(const std::string &raw) {
     std::string line = trim(raw);
     if (line.empty() || line[0] == '#') return;
     g_curLine = line;
-    // Comentarios en linea: cortar a partir de " #"
-    size_t cpos = line.find(" #");
+    // Comentarios en linea: cortar a partir de " #" SEGUIDO DE ESPACIO (o de fin de linea). Un "#" pegado
+    // a un texto ("ACK a #50", "De #137") es parte del argumento: antes se cortaba ahi y esas
+    // aserciones solo comprobaban "ACK a" o "De".
+    size_t cpos = std::string::npos;
+    for (size_t q = line.find(" #"); q != std::string::npos; q = line.find(" #", q + 1)) {
+        if (q + 2 >= line.size() || line[q + 2] == ' ' || line[q + 2] == '\t') { cpos = q; break; }
+    }
     if (cpos != std::string::npos) line = trim(line.substr(0, cpos));
     if (line.empty()) return;
 
@@ -299,6 +305,36 @@ static void execLine(const std::string &raw) {
         if (bad == 0) snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms (%ld vueltas)", x, y, st.c_str(), (unsigned)ms, samples);
         else          snprintf(b, sizeof(b), "pixel(%d,%d)=%s durante %u ms: falla en %ld de %ld vueltas (la 1a a los %u ms)", x, y, st.c_str(), (unsigned)ms, bad, samples, (unsigned)firstBad);
         check(bad == 0, b);
+    }
+    else if (cmd == "waitfor") {   // waitfor serial <minMs> <maxMs> <texto>: aparece en el log serie ENTRE minMs y maxMs
+        // Ejecuta el firmware hasta que el texto aparezca en el log (solo lo nuevo, desde ahora) y
+        // comprueba el instante en que lo hace. Sirve para fijar el ritmo de eventos periodicos
+        // (balizas, reintentos) con cotas por ambos lados.
+        std::string what; uint32_t mn = 0, mx = 0;
+        is >> what;
+        if (what == "clear") { g_waitSamples.clear(); return; }     // waitfor clear: olvida las muestras
+        if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear)"); return; }
+        std::string txt = restAfter(line, 4);
+        if (txt.empty()) { scriptError("waitfor necesita el texto a esperar"); return; }
+        size_t startLen = sim::serialLog().size();
+        uint32_t t0 = sim::now(), limit = t0 + mx + 2000;
+        sim::setDeadline(limit + SLACK);
+        bool found = false; uint32_t tFound = 0;
+        try {
+            sim::applyDue();
+            while (sim::now() < limit) {
+                uint32_t before = sim::now();
+                loop();
+                if (sim::now() == before) sim::advance(25);       // pasos de 25 ms: basta para cotas en segundos
+                if (sim::serialLog().find(txt, startLen) != std::string::npos) { found = true; tFound = sim::now() - t0; break; }
+            }
+        } catch (sim::Timeout &) { fprintf(stderr, "[sim] aviso: espera bloqueante (deadline alcanzado)\n"); }
+        sim::clearDeadline();
+        char b[200];
+        if (!found) snprintf(b, sizeof(b), "\"%s\" no aparece en %u ms (se esperaba entre %u y %u)", txt.c_str(), (unsigned)(limit - t0), (unsigned)mn, (unsigned)mx);
+        else        snprintf(b, sizeof(b), "\"%s\" aparece a los %u ms (cota %u..%u)", txt.c_str(), (unsigned)tFound, (unsigned)mn, (unsigned)mx);
+        check(found && tFound >= mn && tFound <= mx, b);
+        if (found) g_waitSamples.push_back(tFound);
     }
     else if (cmd == "ff") { uint32_t ms = 0; if (!(is >> ms)) { scriptError("ff necesita los ms a avanzar"); return; } fastForward(ms); }
     else if (cmd == "in") {
@@ -448,6 +484,15 @@ static void execLine(const std::string &raw) {
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
         }
+        else if (sub == "spread") {   // expect spread <ms>: entre las esperas "waitfor" registradas, max-min >= ms
+            uint32_t mn = 0;
+            if (!(is >> mn)) { scriptError("expect spread necesita los ms"); return; }
+            if (g_waitSamples.size() < 2) { scriptError("expect spread necesita al menos 2 esperas waitfor registradas"); return; }
+            uint32_t lo = g_waitSamples[0], hi = g_waitSamples[0];
+            for (uint32_t v : g_waitSamples) { if (v < lo) lo = v; if (v > hi) hi = v; }
+            char b[160]; snprintf(b, sizeof(b), "las %u esperas varian %u ms (entre %u y %u; se pedian >= %u)", (unsigned)g_waitSamples.size(), (unsigned)(hi - lo), (unsigned)lo, (unsigned)hi, (unsigned)mn);
+            check(hi - lo >= mn, b);
+        }
         else if (sub == "panel") {    // expect panel on|off: el panel OLED esta encendido/apagado
             std::string st; is >> st;
             if (st != "on" && st != "off") { scriptError("expect panel necesita on|off"); return; }
@@ -483,7 +528,7 @@ static void execLine(const std::string &raw) {
             bool on = display.simPixel(x, y);
             check(on == (st == "on"), "pixel(" + std::to_string(x) + "," + std::to_string(y) + ")=" + st);
         }
-        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|panel|pixel)");
+        else scriptError("comprobacion desconocida \"expect " + sub + "\" (text|notext|serial|sent|beacon|panel|spread|pixel)");
     }
     else scriptError("comando desconocido \"" + cmd + "\"");
 }

@@ -66,12 +66,16 @@ void Chat_resetPending();
 // --- Dedup de recepcion: true si (sender,msgId) ya se vio (y lo registra) ---
 bool Chat_seenBefore(uint8_t sender, uint8_t msgId);
 
-// --- Presencia del companero ---
-void    Chat_noteHeard(uint8_t peerId);  // llamar al oir CUALQUIER paquete del peer
-bool    Chat_peerOnline();               // se ha oido al peer hace < PRESENCE_TIMEOUT
+// --- Presencia de los companeros (hasta MAX_PEERS a la vez, cada uno por separado) ---
+void    Chat_noteHeard(uint8_t peerId);  // llamar al oir CUALQUIER paquete de un peer
+bool    Chat_peerOnline();               // hay ALGUN peer oido hace < PRESENCE_TIMEOUT
+int     Chat_peersOnline();              // cuantos peers estan en alcance
 uint8_t Chat_peerId();                   // id del ultimo peer oido (0 = ninguno)
-uint8_t Chat_peerBatt();                 // % bateria del peer (0xFF = desconocido)
-bool    Chat_peerBattLow();              // el peer avisa de bateria baja (flag de su baliza)
+// Bateria de los peers EN ALCANCE: se resume en el nivel MAS BAJO conocido (0xFF = ninguno la
+// comunica) y en "alguno avisa de bateria baja". No depende de quien emitio la ultima
+// baliza (antes la pantalla saltaba de un equipo a otro).
+uint8_t Chat_peerBatt();
+bool    Chat_peerBattLow();
 
 // --- Outbox ---
 int  Chat_pendingCount();                // mensajes en la outbox sin confirmar
