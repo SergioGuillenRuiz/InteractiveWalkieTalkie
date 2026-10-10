@@ -323,7 +323,8 @@ bool handleIdle() {
     // pinten las animaciones), pero el volcado a pantalla está limitado por
     // Display_update()/moveCursor(), no se hace en cada vuelta.
     drawMenu();
-    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow());
+    drawStatusBar(Chat_peerOnline(), Battery_percent(), Battery_isLow(),
+                  Chat_peerBatt(), Chat_peerBattLow());
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;

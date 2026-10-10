@@ -903,7 +903,7 @@ void drawHeartOutline(int x, int y, int color) {
 // menu que arrancan en Y=8 y fuera del area de animaciones): bateria + aviso de
 // bateria baja en la esquina IZQUIERDA, presencia (corazon lleno/hueco) en la
 // esquina DERECHA (asi no estorba al cursor del menu).
-void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow) {
+void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow, uint8_t peerBatt, bool peerBattLow) {
   // --- Bateria + "!" en la esquina superior IZQUIERDA ---
   display.fillRect(0, 0, 26, 8, SH110X_BLACK);
   const int bx = 1, by = 0;
@@ -914,6 +914,22 @@ void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow) {
   if (battLow) {                                           // aviso a la derecha del medidor
     display.setTextSize(1); display.setTextColor(SH110X_WHITE);
     display.setCursor(17, 0); display.print("!");
+  }
+
+  // --- Bateria del COMPANERO, a la izquierda del corazon: solo si esta en alcance y
+  //     ha comunicado su nivel (0xFF = desconocido). Icono 10x6 + polo (x=102..112)
+  //     y "!" a su izquierda si el peer avisa de bateria baja. ---
+  display.fillRect(90, 0, 24, 8, SH110X_BLACK);
+  if (peerOnline && peerBatt <= 100) {
+    const int px = 102;
+    display.drawRect(px, 1, 10, 6, SH110X_WHITE);
+    display.fillRect(px + 10, 2, 1, 4, SH110X_WHITE);          // polo +
+    int pfill = ((int)peerBatt * 8 + 50) / 100;                 // 0..8 px interiores (redondeado)
+    if (pfill > 0) display.fillRect(px + 1, 2, pfill, 4, SH110X_WHITE);
+    if (peerBattLow) {
+      display.setTextSize(1); display.setTextColor(SH110X_WHITE);
+      display.setCursor(94, 0); display.print("!");
+    }
   }
 
   // --- Presencia: corazon en la esquina superior DERECHA ---

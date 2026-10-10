@@ -74,7 +74,10 @@ bool animateHippoChasingHeart();
 bool animateHippoGivingHeart();
 void drawHeart(int x, int y, int color);
 void drawHeartOutline(int x, int y, int color);
-void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow);  // presencia + bateria en el IDLE
+// Barra de estado del IDLE: bateria propia (izq.), y a la derecha presencia (corazon) con la
+// bateria del companero a su izquierda (solo si esta en alcance y la ha comunicado).
+void drawStatusBar(bool peerOnline, uint8_t battPct, bool battLow,
+                   uint8_t peerBatt = 0xFF, bool peerBattLow = false);
 
 void updateHippoAnimation();
 void triggerAnimation(HippoAnimation anim);

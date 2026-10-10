@@ -39,6 +39,7 @@ static int     g_seenHead = 0;
 // --- Presencia del companero ---
 static uint8_t  g_peerId    = 0;
 static uint8_t  g_peerBatt  = 0xFF;
+static uint8_t  g_peerFlags = 0;      // flags de la ultima baliza del peer (BEACON_FLAG_*)
 static uint32_t g_lastHeard = 0;
 static bool     g_everHeard = false;
 static bool     g_wasOnline = false;
@@ -148,7 +149,7 @@ void Chat_load() {
   // que lo hacemos explicito para que el reinicio sea fiel (sin presencia, dedup
   // ni confirmaciones "fantasma" heredadas de antes del reinicio).
   g_awaiting = false; g_delivered = false; g_lastSentId = 0;
-  g_peerId = 0; g_peerBatt = 0xFF; g_lastHeard = 0; g_everHeard = false; g_wasOnline = false;
+  g_peerId = 0; g_peerBatt = 0xFF; g_peerFlags = 0; g_lastHeard = 0; g_everHeard = false; g_wasOnline = false;
   g_beaconedOnce = false; g_lastBeacon = 0;
   g_seenHead = 0;
   for (int i = 0; i < SEEN_N; i++) { g_seenS[i] = 0; g_seenM[i] = 0; }
@@ -314,6 +315,7 @@ bool Chat_peerOnline() {
 
 uint8_t Chat_peerId()   { return g_peerId; }
 uint8_t Chat_peerBatt() { return g_peerBatt; }
+bool    Chat_peerBattLow() { return (g_peerFlags & BEACON_FLAG_LOWBATT) != 0; }
 
 // Procesa la ultima baliza parseada: presencia + bateria del peer + sincronizar
 // el reloj con su epoch. (El llamador ya comprobo Chat_parse()==CHAT_BEACON.)
@@ -321,6 +323,7 @@ void Chat_handleBeacon() {
   if (s_beaconSender == 0 || s_beaconSender == Device_id()) return;   // ignorar eco propio
   Chat_noteHeard(s_beaconSender);
   g_peerBatt = s_beaconBatt;
+  g_peerFlags = s_beaconFlags;
   Clock_syncFromPeer(s_beaconEpoch);
 }
 

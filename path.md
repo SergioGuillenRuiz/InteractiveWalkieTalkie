@@ -18,19 +18,17 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24) |
 | Mensajería | Identificador por equipo, cifrado AES-128 con IV aleatorio, confirmación "Entregado", 3 reintentos, cola de pendientes persistente y descarte de duplicados |
 | Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación |
-| Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance |
+| Presencia | Baliza cada 30 s y corazón en pantalla cuando el compañero está en alcance, con su nivel de batería (y "!" si avisa de batería baja) a la izquierda del corazón |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 27 tests, multi-dispositivo y demos |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 28 tests, multi-dispositivo y demos |
 
 ---
 
 ## 🟡 A medias
 
 - [ ] **Hora compartida.** No hay forma de poner la hora en la placa: `Clock_set()` solo lo llama el simulador (comando `settime`). Los equipos arrancan en 00:00 y se sincronizan entre ellos, así que la hora de la barra de título es falsa. Tampoco hay zona horaria (`Clock_hhmm()` usa UTC).
-- [ ] **Batería.**
-  - En la placa, la lectura siempre devuelve 100 % (`src/Battery.cpp:13`), porque el único ADC del ESP8266 lo usa el potenciómetro. Hace falta hardware.
-  - La batería del compañero llega en la baliza, pero `Chat_peerBatt()` no se usa en ninguna pantalla.
+- [ ] **Batería.** En la placa, la lectura siempre devuelve 100 % (`src/Battery.cpp:13`), porque el único ADC del ESP8266 lo usa el potenciómetro. Hace falta hardware (y, por tanto, también el nivel que envía la baliza es siempre 100 %).
 - [ ] **Dibujos.**
   - Solo se guarda el último recibido, y solo en RAM (`src/Doodle.cpp:119`). Tras reiniciar sale "(ya no guardado)".
   - Los dibujos enviados no aparecen en el historial.

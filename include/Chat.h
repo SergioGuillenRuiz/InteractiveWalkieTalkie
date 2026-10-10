@@ -66,6 +66,7 @@ void    Chat_noteHeard(uint8_t peerId);  // llamar al oir CUALQUIER paquete del 
 bool    Chat_peerOnline();               // se ha oido al peer hace < PRESENCE_TIMEOUT
 uint8_t Chat_peerId();                   // id del ultimo peer oido (0 = ninguno)
 uint8_t Chat_peerBatt();                 // % bateria del peer (0xFF = desconocido)
+bool    Chat_peerBattLow();              // el peer avisa de bateria baja (flag de su baliza)
 
 // --- Outbox ---
 int  Chat_pendingCount();                // mensajes en la outbox sin confirmar

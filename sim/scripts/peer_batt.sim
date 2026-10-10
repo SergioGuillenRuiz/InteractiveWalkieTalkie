@@ -1,0 +1,86 @@
+# ============================================================
+#  Bateria del COMPANERO en la barra de estado del IDLE.
+#  La baliza de presencia lleva el % de bateria y el flag de "baliza baja" del
+#  peer; se dibuja a la izquierda del corazon de presencia SOLO mientras esta en
+#  alcance y ha comunicado su nivel:
+#    - icono 10x6 con contorno en (102,1); relleno de 0..8 px (x=103..110, y=2..5)
+#    - "!" a su izquierda (el palo del glifo cae en x=96) si el peer avisa de bateria baja
+#  "presence <peer> <epoch> <bateria>" inyecta la baliza (flag bajo si bateria <= 15).
+#  (Device_id del sim = 137; peer #50.)
+# ============================================================
+wait 600
+
+# --- Sin haber oido a nadie: ni icono ni aviso ---
+expect pixel 102 1 off
+expect pixel 103 3 off
+expect pixel 96 2 off
+print Sin companero: no se dibuja su bateria
+
+# --- Peer al 80%: contorno + relleno de 6 px (80% de 8, redondeado) ---
+presence 50 0 80
+run 500
+expect serial companero en alcance
+expect pixel 102 1 on        # esquina del contorno
+expect pixel 103 3 on        # relleno
+expect pixel 108 3 on
+expect pixel 109 3 off       # el relleno se queda en 6 px
+expect pixel 96 2 off        # sin aviso de bateria baja
+shot peer_batt_80
+print Peer 80%: icono con relleno proporcional
+
+# --- Peer al 100%: relleno completo ---
+presence 50 0 100
+run 500
+expect pixel 110 3 on
+print Peer 100%: relleno completo
+
+# --- Peer al 40%: 3 px ---
+presence 50 0 40
+run 500
+expect pixel 105 3 on
+expect pixel 106 3 off
+print Peer 40%: relleno de 3 px
+
+# --- Peer al 8%: aviso "!" y un solo pixel de relleno ---
+presence 50 0 8
+run 500
+expect pixel 96 2 on         # "!" del peer
+expect pixel 103 3 on
+expect pixel 104 3 off
+shot peer_batt_8
+print Peer 8%: aviso de bateria baja del companero
+
+# --- Recupera (flag bajo borrado): el "!" desaparece ---
+presence 50 0 60
+run 500
+expect pixel 96 2 off
+print Peer 60%: el aviso desaparece
+
+# --- Nivel desconocido (0xFF): sigue en alcance (corazon) pero sin icono ---
+presence 50 0 255
+run 500
+expect pixel 102 1 off
+expect pixel 121 4 on        # corazon lleno = en alcance
+print Peer sin nivel conocido: sin icono de bateria
+
+# --- Fuera de alcance: el ultimo nivel conocido ya no es fiable -> se oculta ---
+presence 50 0 80
+run 500
+expect pixel 102 1 on
+ff 95000
+expect serial fuera de alcance
+expect pixel 102 1 off
+expect pixel 103 3 off
+print Peer fuera de alcance: se oculta su bateria
+
+# --- Vuelve a oirse ---
+presence 50 0 70
+run 500
+expect pixel 102 1 on
+print Peer vuelve a alcance: reaparece su bateria
+
+# --- La bateria PROPIA no se ve afectada (esquina izquierda) ---
+battery 90
+run 400
+expect pixel 6 3 on
+print Bateria propia independiente de la del companero
