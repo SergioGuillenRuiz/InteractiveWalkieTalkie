@@ -12,7 +12,8 @@
 //    MENSAJE:  0x01 | emisor(1) | msgId(1) | texto...
 //    ACK:      0x06 | destino(1) | msgId(1)            (destino = emisor original)
 //    BALIZA:   0x02 | emisor(1) | flags(1) | epoch(4, BE) | bateria%(1) | generacionHora(1)
-//    DIBUJO:   0x04 | emisor(1) | bytes del lienzo (MSB primero)
+//    DIBUJO:   0x04 | emisor(1) | msgId(1) | bytes del lienzo (DOODLE_BYTES, MSB primero)
+//              (msgId y ACK como un mensaje de texto: se confirma, se reintenta y no se duplica)
 //
 //  Los marcadores 0x01/0x02/0x04/0x06 no colisionan con los protocolos de los
 //  juegos ('T' de Tetris, "HR" de HippoRadar). Un paquete sin sobre = CHAT_OTHER.
@@ -49,8 +50,13 @@ void Chat_sendAck(uint8_t targetId, uint8_t msgId);       // inmediato
 // lo envia Chat_tick(). Es la que usa la recepcion.
 void Chat_queueAck(uint8_t targetId, uint8_t msgId);
 
-// Envia un dibujo (lienzo cuadrado, MSB primero), fire-and-forget.
-void Chat_sendDoodle(const uint8_t *buf32);
+// Offset del lienzo dentro de un paquete de dibujo ya descifrado (marcador, emisor, msgId).
+#define DOODLE_PAYLOAD_OFFSET 3
+
+// Envia un dibujo (lienzo cuadrado, MSB primero) con msgId: queda en el historial como ENVIADO, en la
+// outbox persistente (se reintenta hasta que llegue el ACK, incluso tras reiniciar) y arma la espera de
+// la confirmacion (Chat_awaitingAck/Chat_delivered). false si no se pudo emitir.
+bool Chat_sendDoodle(const uint8_t *bitmap);
 
 // Adelanta la proxima baliza a la siguiente llamada de Chat_tick() (p.ej. tras poner
 // la hora a mano: asi el companero la adopta enseguida y no a los 30 s).

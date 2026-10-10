@@ -20,6 +20,7 @@ wait 600
 pot 80
 wait 300
 waitfor serial 0 6000 [Chat] Baliza       # (la baliza de arranque sale a los 2-4 s)
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 
 # --- Tres equipos a la vez; el ULTIMO en oirse (#50, 80 %) no manda en la pantalla ---
 presence 60 0 12              # bateria baja (flag)
@@ -41,21 +42,25 @@ print Tres equipos: se muestra el nivel mas bajo (12 %) y el aviso, no el del ul
 
 # --- #60 deja de emitir; #50 y #70 siguen (cada ~30 s): sigue habiendo alguien, y la bateria sube a 55 % ---
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 50 0 80
 run 300
 presence 70 0 55
 run 400
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 50 0 80
 run 300
 presence 70 0 55
 run 400
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 50 0 80
 run 300
 presence 70 0 55
 run 400
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 50 0 80
 run 300
 presence 70 0 55
@@ -88,6 +93,7 @@ wait 200
 
 # --- Una baliza sin nivel de bateria (0xFF) no tapa a las que si lo comunican ---
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 50 0 255
 run 400
 presence 60 0 40
@@ -122,6 +128,7 @@ print Mensajes de #60 y #70 con el mismo msgId: los dos se guardan y se confirma
 
 # --- Dedup con ventana de 16: tras 12 mensajes distintos, un reintento del primero se descarta ---
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 chatmsg 80 5 primero
 run 800
 chatmsg 80 6 m6
@@ -168,6 +175,7 @@ run 700
 pot 80
 ff 25000
 waitfor serial 0 40000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 presence 100 0 70             # un equipo que no habiamos visto
 waitfor serial 0 1500 Reintento msg
 print Un equipo nuevo en alcance reactiva el reenvio de los mensajes sin confirmar

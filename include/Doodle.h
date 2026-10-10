@@ -11,11 +11,14 @@
 //    - Mantener A + potenciometro: mueve IZQUIERDA/DERECHA (columna, X).
 //    - Pulsar A: PINTA el pixel del cursor.   - Pulsar B: lo BORRA.
 //    - Mantener B: ENVIA el dibujo.           - Inactividad: cancela.
-//  El dibujo viaja como 72 bytes (marcador 0x04 del protocolo de chat);
-//  24x24 = 72 B + 2 de cabecera = 74, cabe en un solo paquete LoRa cifrado.
+//  El dibujo viaja como 72 bytes (marcador 0x04 del protocolo de chat) con emisor y msgId:
+//  24x24 = 72 B + 3 de cabecera = 75, cabe en un solo paquete LoRa cifrado. Como un mensaje de texto,
+//  se confirma (ACK), se reintenta hasta que llega y no se duplica.
 //
-//  Recepcion: el dibujo entrante NO interrumpe; va al Historial como un mensaje
-//  mas y se ve/abre desde alli (el registro "[dibujo]" muestra el dibujo real).
+//  Enviar: tras mantener B sale la pantalla de resultado ("Enviado" -> "Entregado!" o "(sin confirmar)")
+//  y el dibujo queda en el Historial como ENVIADO, con su lienzo.
+//  Recepcion: el dibujo entrante NO interrumpe; va al Historial como un mensaje mas (no leido) y se
+//  ve/abre desde alli: el lienzo vive dentro de su registro, asi que sobrevive a un reinicio.
 // ============================================================
 
 #define DOODLE_DIM      24
@@ -24,13 +27,8 @@
 
 void startDoodle();                                   // editor (5o modo del menu Enviar)
 
-// Recepcion. Se guarda el ultimo dibujo recibido junto con (emisor, epoch) para
-// poder verlo desde el Historial (el registro lleva ese mismo sello de tiempo).
-void Doodle_onReceived(uint8_t sender, const uint8_t *buf, unsigned long epoch);
-
-// Apertura desde el Historial: ¿el dibujo guardado es el de este registro?
-bool Doodle_isStored(uint8_t sender, unsigned long epoch);
-void Doodle_shiftTimestamps(int32_t delta);   // acompana a History_shiftTimestamps (mismo sello de tiempo)
-void Doodle_drawStored(int ox, int oy);                      // pinta el dibujo guardado (sin clear/display)
+// Pinta un lienzo (DOODLE_BYTES bytes) con la esquina superior izquierda en (ox, oy), a 4 px por celda
+// (24 x 4 = 96 px). No limpia ni vuelca la pantalla.
+void Doodle_draw(const uint8_t *bitmap, int ox, int oy);
 
 #endif

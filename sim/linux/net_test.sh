@@ -247,15 +247,68 @@ check "#201 ve a #101 y a #47"        "$(all1 "$(has "$WORK/_d2.out" 'equipo #10
 check "#47 ve a #101 y a #201"        "$(all1 "$(has "$WORK/_d3.out" 'equipo #101 en alcance')" "$(has "$WORK/_d3.out" 'equipo #201 en alcance')")"
 check "ninguno se ve a si mismo"      "$(all1 "$(hasnot "$WORK/_d1.out" 'equipo #101 en alcance')" "$(hasnot "$WORK/_d2.out" 'equipo #201 en alcance')" "$(hasnot "$WORK/_d3.out" 'equipo #47 en alcance')")"
 
+# ============================================================
+#  ESCENA F: dibujo entre dos equipos. #1 abre el editor de Dibujar, pinta un pixel y lo envia (mantener B);
+#  #2 lo recibe (302 ms en el aire), lo guarda en el Historial con su lienzo y lo confirma; #1 recibe el ACK
+#  y su pantalla de resultado pasa a "Entregado!". Despues #2 abre el registro y lo ve.
+# ============================================================
+echo
+echo "==== Escena F: dibujo entre dos equipos (#1 -> #2) ===="
+AIR_F="$WORK/air_f"
+clear_air "$AIR_F"
+NODES=2
+
+keys_f1=$(cat <<EOF
+0 pot 80
+3000 mdown
+3120 mup
+3600 pot 880
+4000 mdown
+4120 mup
+4600 mdown
+4720 mup
+5200 fdown
+6800 fup
+10000 shot net_doodle_tx
+10200 fdown
+10350 fup
+13000 q
+EOF
+)
+keys_f2=$(cat <<EOF
+0 pot 512
+9000 mdown
+9120 mup
+9800 pot 0
+10300 mdown
+10420 mup
+11500 shot net_doodle_rx
+13000 q
+EOF
+)
+start_node "$AIR_F" 1 100 "$keys_f1" "_f1.txt" "$WORK/_f1.out"; f1=$NODE_PID
+start_node "$AIR_F" 2 200 "$keys_f2" "_f2.txt" "$WORK/_f2.out"; f2=$NODE_PID
+wait_all 60 "$f1" "$f2"
+
+g1="$WORK/_f1.out"; g2="$WORK/_f2.out"
+check "#1 envia el dibujo"                         "$(has "$g1" 'Dibujo\] enviado msg 1')"
+check "#2 lo recibe (de #101)"                     "$(has "$g2" 'Dibujo\] de #101')"
+check "#2 lo guarda en el historial"               "$(has "$g2" 'Guardado: \[dibujo\]')"
+check "#2 lo confirma con ACK a #101"              "$(has "$g2" 'ACK a #101 msg 1')"
+check "#1 recibe la confirmacion"                  "$(has "$g1" 'Confirmado: entregado')"
+check "#1 saca el dibujo de la outbox"             "$(has "$g1" 'Entregado msg 1')"
+check "sin reintentos: la 1a emision basta"        "$(hasnot "$g1" 'Reintento')"
+check "#2 oye el dibujo entero (302 ms en el aire)" "$(has "$g2" 'rx t=[0-9]+\.\.[0-9]+ ms  192 B  oida')"
+
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""
 command -v magick  >/dev/null 2>&1 && conv="magick"
 [[ -z "$conv" ]] && command -v convert >/dev/null 2>&1 && conv="convert"
-for n in net_rx2 net_rx3; do
+for n in net_rx2 net_rx3 net_doodle_tx net_doodle_rx; do
   if [[ -n "$conv" && -f "$WORK/$n.bmp" ]]; then "$conv" "$WORK/$n.bmp" "$WORK/$n.png" 2>/dev/null || true; fi
 done
 
-rm -f "$WORK"/_d1.txt "$WORK"/_d2.txt "$WORK"/_d3.txt "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
+rm -f "$WORK"/_f1.txt "$WORK"/_f2.txt "$WORK"/_e1.txt "$WORK"/_e2.txt "$WORK"/_d1.txt "$WORK"/_d2.txt "$WORK"/_d3.txt "$WORK"/_a1.txt "$WORK"/_a2.txt "$WORK"/_a3.txt "$WORK"/_b1.txt "$WORK"/_b2.txt "$WORK"/_c1.txt "$WORK"/_c2.txt
 echo
 if (( fail == 0 )); then echo "MULTI-DISPOSITIVO OK: comunicacion real (difusion + bidireccional) verificada."
 else                     echo "$fail comprobacion(es) fallaron."; fi

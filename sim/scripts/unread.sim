@@ -10,6 +10,8 @@
 #  (Device_id del sim = 137, peer #50.)
 # ============================================================
 wait 600
+waitfor serial 0 6000 [Chat] Baliza        # la baliza de arranque (a los 2-4 s) fuera de en medio: el equipo no oye mientras emite
+waitfor txend
 pot 80
 wait 300
 
@@ -19,11 +21,11 @@ print Sin mensajes: sin insignia
 
 # --- Tres mensajes en el IDLE: el recuento sube y aparece la insignia ---
 chatmsg 50 1 hola
-run 400
+run 800
 expect serial no leidos: 1
 expect pixel 87 13 on
 chatmsg 50 2 que tal
-run 400
+run 800
 expect serial no leidos: 2
 chatmsg 50 3 cenamos fuera
 run 5000
@@ -34,9 +36,9 @@ print Tres mensajes recibidos: insignia y recuento 3
 
 # --- Duplicado (mismo msgId), eco propio y ACK/baliza NO cuentan ---
 chatmsg 50 3 cenamos fuera
-run 400
+run 800
 chatmsg 137 9 eco propio
-run 400
+run 800
 chatack 137 77
 run 300
 presence 50 0 80
@@ -135,17 +137,17 @@ pot 80
 wait 800
 expect pixel 87 13 off
 chatmsg 50 31 m1
-run 450
+run 800
 chatmsg 50 32 m2
-run 450
+run 800
 chatmsg 50 33 m3
-run 450
+run 800
 chatmsg 50 34 m4
-run 450
+run 800
 chatmsg 50 35 m5
-run 450
+run 800
 chatmsg 50 36 m6
-run 450
+run 800
 expect serial no leidos: 6
 pot 350                         # columna Hist del menu; en la lista cae en la fila 3 (no hace falta desplazarse)
 wait 300
@@ -178,9 +180,9 @@ print Al desplazarse hasta el final todos pasan a leidos
 
 # --- Abrir un mensaje en detalle lo marca como leido al instante ---
 chatmsg 50 41 uno
-run 450
+run 800
 chatmsg 50 42 dos
-run 450
+run 800
 expect serial no leidos: 2
 pot 512
 wait 300
@@ -205,25 +207,25 @@ run 700
 pot 80
 wait 800
 chatmsg 50 51 a
-run 450
+run 800
 chatmsg 50 52 b
-run 450
+run 800
 chatmsg 50 53 c
-run 450
+run 800
 chatmsg 50 54 d
-run 450
+run 800
 chatmsg 50 55 e
-run 450
+run 800
 chatmsg 50 56 f
-run 450
+run 800
 chatmsg 50 57 g
-run 450
+run 800
 chatmsg 50 58 h
-run 450
+run 800
 chatmsg 50 59 i
-run 450
+run 800
 chatmsg 50 60 j
-run 450
+run 800
 expect pixel 72 13 on           # pastilla ancha (x=71..87)
 shot unread_9mas
 print Diez o mas sin leer: insignia 9+

@@ -1,0 +1,197 @@
+# ============================================================
+#  Dibujos persistentes: el lienzo (72 B) vive DENTRO de su registro del Historial, en RAM y en EEPROM.
+#    1) llegan dos dibujos distintos (de #50 y #60), se confirman (ACK) y se ven al abrirlos;
+#    2) tras REINICIAR siguen ahi, intactos (antes solo se guardaba el ultimo y solo en RAM);
+#    3) cuando el historial se llena (10) y se descarta el mas antiguo, cada dibujo sigue a su registro;
+#    4) lo mismo si se BORRA un mensaje intermedio;
+#    5) un dibujo repetido (mismo emisor y msgId) no se duplica, pero se vuelve a confirmar;
+#    6) un dibujo ENVIADO sin confirmar sobrevive a un reinicio en la outbox, se reintenta con el mismo
+#       lienzo y su registro sigue en el Historial.
+#  Pixeles del lienzo en pantalla: celda (cx,cy) -> x=16+4*cx+1, y=20+4*cy+1.
+#    "heart" (de #50): fila 0 encendida de x=2 a 21 (celda (9,0) ON, (0,0) OFF).
+#    "frame" (de #60): marco + diagonal (celda (0,0) ON, (12,12) ON, (9,16) OFF).
+#  (Device_id del sim = 137.)
+# ============================================================
+wait 300
+waitfor serial 0 6000 [Chat] Baliza
+waitfor txend
+
+# --- 1) Llegan dos dibujos distintos ---
+doodle 50 10 heart
+run 1000
+doodle 60 11 frame
+run 1000
+expect serial Dibujo] de #50
+expect serial Dibujo] de #60
+expect serial ACK a #50 msg 10
+expect serial ACK a #60 msg 11
+expect serial no leidos: 2
+
+# Abrir el mas reciente (#60, frame) y el mas antiguo (#50, heart)
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+pot 0
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200            # (la vista del mensaje es bloqueante: con poco margen el run la corta enseguida y la lista sigue ahi)
+expect text De #60
+expect pixel 17 21 on
+expect pixel 65 69 on
+expect pixel 53 85 off
+pot 1023
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text De #50
+expect pixel 53 21 on
+expect pixel 17 21 off
+in 0 finish down       # B: salir a IDLE
+in 150 finish up
+run 500
+print 1) Dos dibujos distintos: se confirman y cada uno se ve con su lienzo
+
+# --- 2) Reinicio: siguen en el Historial, intactos ---
+reboot
+wait 300
+expect serial Cargados 2 mensajes
+pot 512
+wait 200
+tap morse
+wait 300
+pot 0
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text De #60
+expect pixel 17 21 on
+expect pixel 65 69 on
+expect pixel 53 85 off
+pot 1023
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text De #50
+expect pixel 53 21 on
+expect pixel 17 21 off
+in 0 finish down
+in 150 finish up
+run 500
+print 2) Tras reiniciar, los dibujos siguen guardados
+
+# --- 3) Historial lleno: al entrar el 11o se descarta el mas antiguo (el corazon) y el marco sigue intacto ---
+waitfor serial 0 40000 [Chat] Baliza
+waitfor txend
+in 0 chatmsg 70 1 t1
+in 800 chatmsg 70 2 t2
+in 1600 chatmsg 70 3 t3
+in 2400 chatmsg 70 4 t4
+in 3200 chatmsg 70 5 t5
+in 4000 chatmsg 70 6 t6
+in 4800 chatmsg 70 7 t7
+in 5600 chatmsg 70 8 t8
+in 6400 chatmsg 70 9 t9
+run 7500
+expect serial Guardado: t9
+pot 512
+wait 200
+tap morse
+wait 300
+pot 1023               # el mas antiguo que queda: ahora es el marco de #60
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text De #60
+expect pixel 17 21 on
+expect pixel 65 69 on
+expect pixel 53 85 off
+print 3) Al desplazarse el historial (FIFO), el dibujo sigue a su registro
+
+# --- 4) Borrar un mensaje intermedio: el marco sigue intacto ---
+pot 800                # un texto de en medio
+wait 400
+in 0 morse down        # abrir
+in 200 morse up
+in 800 morse down      # A: Borrar -> confirmacion
+in 1000 morse up
+in 1700 morse down     # A: Si
+in 1900 morse up
+run 4200
+expect serial Borrado. Total: 9
+pot 1023
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text De #60
+expect pixel 17 21 on
+expect pixel 65 69 on
+expect pixel 53 85 off
+in 0 finish down       # B: salir a IDLE
+in 150 finish up
+run 500
+print 4) Al borrar un mensaje, el dibujo conserva su lienzo
+
+# --- 5) Un dibujo repetido (mismo emisor y msgId) no se duplica, pero se vuelve a confirmar ---
+waitfor serial 0 40000 [Chat] Baliza
+waitfor txend
+doodle 70 30 heart
+run 1000
+doodle 70 30 heart
+run 1000
+expect serial Duplicado descartado de #70 msg 30
+expect times 1 Dibujo] de #70      # se guardo UNA vez...
+expect times 2 ACK a #70 msg 30    # ...pero se confirmo las DOS (el emisor repite porque perdio nuestro ACK)
+print 5) Dibujo repetido: se descarta y se confirma de nuevo
+
+# --- 6) Un dibujo ENVIADO sin confirmar sobrevive a un reinicio y se reintenta con el MISMO lienzo ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 880
+wait 250
+in 0 morse down        # entra al editor
+in 120 morse up
+in 700 morse down      # pinta el (0,20)
+in 820 morse up
+in 1400 finish down    # mantener B: envia (a los 2900 ms)
+in 3100 finish up
+in 3400 expect serial Dibujo] enviado msg 1
+in 3900 finish down    # salir de la pantalla de resultado (sin ACK): tras RESULT_MIN_MS (0,8 s) desde el envio
+in 4050 finish up
+run 4900
+expect text Env
+reboot-cold
+wait 300
+expect serial Outbox cargada, pendientes: 1
+run 2600
+expect serial Reintento msg 1 (1)
+expect sentdoodle 1 1 0 20         # el reintento tras el reinicio lleva el MISMO lienzo (1 pixel, el (0,20))
+wait 1500                          # (deja pasar la baliza de arranque: el ACK no debe coincidir con ella)
+chatack 137 1
+run 600
+expect serial Entregado msg 1
+reboot-cold
+wait 300
+expect serial Outbox cargada, pendientes: 0
+pot 512
+wait 200
+tap morse
+wait 300
+pot 0                              # el mas reciente: el dibujo enviado
+wait 400
+in 0 morse down
+in 200 morse up
+run 700 200
+expect text Enviado
+expect pixel 17 101 on             # su lienzo sigue en el Historial tras los reinicios
+expect pixel 21 101 off
+print 6) Dibujo enviado: outbox y registro sobreviven a reinicios; el reintento lleva el mismo lienzo

@@ -29,6 +29,9 @@ const uint8_t IRQ_RXTIMEOUT = 0x80, IRQ_RXDONE = 0x40, IRQ_CRCERR = 0x20, IRQ_VA
 
 // Simbolos de preambulo que el receptor necesita ver para engancharse (deteccion de preambulo).
 const int RX_LOCK_SYMS = 6;
+// RegModemStat "senal detectada" (lo que usa el firmware para escuchar antes de hablar) se activa antes que el
+// enganche completo: a los pocos simbolos de preambulo, como el CAD del chip. Antes de eso nadie ve que otro emite.
+const int RX_DETECT_SYMS = 3;
 
 // Corrientes tipicas del datasheet (mA) para la estimacion de consumo.
 const double MA_SLEEP = 0.0002, MA_STDBY = 1.6, MA_TX17 = 87.0, MA_TX20 = 120.0, MA_RX = 11.5;
@@ -75,6 +78,7 @@ std::vector<sx::TxRecord> g_tx;
 std::vector<sx::RxRecord> g_rx;
 bool g_ideal = false;            // por defecto el modelo realista; --radio ideal / "radio ideal on" dan el comportamiento antiguo
 bool g_loopback = false;
+bool g_polite = true;            // ver sx::setPolite()
 AirFrame g_peer;                 // parametros por defecto de las tramas inyectadas
 double g_lastAirPoll = -1;
 
@@ -306,7 +310,15 @@ uint8_t readReg(uint8_t a) {
         case R_FIFO: { uint8_t v = (g_ideal ? c.fifoRx : c.fifo)[c.reg[R_FIFO_ADDR_PTR]]; c.reg[R_FIFO_ADDR_PTR]++; return v; }
         case R_OPMODE: return (uint8_t)((c.lora ? 0x80 : 0x00) | c.mode);
         case R_IRQ_FLAGS: idealDeliver(nowMs()); return c.irq;
-        case 0x18: return c.locked ? 0x0F : 0x10;       // RegModemStat: recibiendo una trama (senal+sincronismo+RX en curso+cabecera) / modem libre
+        case 0x18: {                                    // RegModemStat: recibiendo una trama (senal+sincronismo+RX en curso+cabecera) / modem libre
+            if (c.locked) return 0x0F;
+            if (listeningAt(now))                       // preambulo ya detectable (pero aun sin enganchar): "senal detectada"
+                for (auto &f : frames)
+                    if (!f.done && &f != c.locked && f.start + RX_DETECT_SYMS * symMs(f.p.sf, f.p.bw) <= now && now < f.end &&
+                        (g_ideal || paramsMatch(f.p)))
+                        return 0x01;
+            return 0x10;
+        }
         case R_VERSION: return 0x12;
         case R_RSSI: return (uint8_t)(-110 + 157);
         default: return c.reg[a];
@@ -405,11 +417,19 @@ bool ideal() { return g_ideal; }
 void setLoopback(bool on) { g_loopback = on; }
 AirFrame &peerFrame() { return g_peer; }
 
+void setPolite(bool on) { g_polite = on; }
+bool polite() { return g_polite; }
+
 void inject(const std::string &payload, int rssi, bool corrupt) {
     AirFrame a = g_peer;
     a.payload = payload;
     a.rssi = rssi;
-    frames.push_back(mkFrame(a, nowMs(), corrupt));
+    double start = nowMs();
+    if (g_polite && !g_ideal) {
+        advanceTo(start);                                          // poner el chip al dia: (esta emitiendo ahora?)
+        if (c.mode == MODE_TX && c.txEnd > start) start = c.txEnd + 1.0;   // espera a que el firmware termine de emitir
+    }
+    frames.push_back(mkFrame(a, start, corrupt));
 }
 
 void resetWorld() {

@@ -10,7 +10,8 @@
 //  begin(EE_TOTAL_SIZE), de modo que cada commit preserve las regiones ajenas
 //  (se leen al hacer begin y se reescriben intactas).
 //
-//   [0 .. EE_HISTORIAL_END)        -> Historial (ver Historial.cpp)
+//   [0 .. EE_HISTORIAL_END)        -> Historial (ver Historial.cpp). Un registro de DIBUJO guarda su lienzo
+//                                     (72 B) en el hueco del texto del propio registro: no ocupa mas sitio
 //   [EE_FRASERO_BASE .. +SIZE)     -> Frasero: piezas propias (ver Frasero.cpp)
 //   [EE_OUTBOX_BASE .. +SIZE)      -> Outbox: mensajes sin confirmar (ver Chat.cpp)
 //   [EE_CLOCK_BASE .. +SIZE)       -> Reloj: epoch persistido (ver Clock.cpp)
@@ -33,7 +34,8 @@
 
 // --- Region OUTBOX: mensajes enviados pendientes de confirmacion (ACK) ---
 // Permite reintentar tras un corte de enlace e incluso tras reiniciar.
-// Slot: 1B estado + 1B msgId + 1B destino + 1B longitud + texto(+\0).
+// Slot: 1B estado (0 libre, 1 texto, 2 dibujo) + 1B msgId + 1B destino + 1B longitud + texto(+\0)
+// (si es un dibujo, el hueco del texto guarda sus 72 B de lienzo).
 #define EE_OUTBOX_BASE     (EE_FRASERO_BASE + EE_FRASERO_SIZE)   // 1378
 #define OB_HDR_SIZE        4            // 3 magia {'O','B','1'} + 1 version
 #define OB_MAX_MSG_LEN     100          // mismo limite que el historial (99 utiles + \0)

@@ -62,9 +62,6 @@ static const uint32_t SLACK = 60000;  // margen antibloqueo (ms virtuales)
 // el motor (EV_INJECT) en el instante pedido, incluso durante esperas
 // bloqueantes del firmware (p.ej. la pantalla de resultado de envio).
 static std::vector<std::string> g_deferredPackets;
-static void injectDeferred(int idx) {
-    if (idx >= 0 && idx < (int)g_deferredPackets.size()) simLoraInject(g_deferredPackets[idx]);
-}
 static int deferPacket(const std::string &enc) {
     g_deferredPackets.push_back(enc);
     return (int)g_deferredPackets.size() - 1;
@@ -86,6 +83,29 @@ static std::string buildBeacon(int peer, long epoch, int batt, int flags, int ge
     String enc = SimpleCrypto_encrypt(p);
     return std::string(enc.c_str(), enc.length());
 }
+
+// Construye un paquete de dibujo cifrado: 0x04 | peer | msgId | 72 bytes del lienzo (24x24, MSB primero).
+// 'pattern': "heart" (un corazon) o "frame" (marco con una diagonal).
+static std::string buildDoodle(int peer, int msgId, const std::string &pattern) {
+    String p; p += (char)0x04; p += (char)peer; p += (char)msgId;
+    for (int cy = 0; cy < 24; cy++) {
+        unsigned char b[3] = {0, 0, 0};
+        for (int cx = 0; cx < 24; cx++) {
+            bool on;
+            if (pattern == "frame") on = (cx == 0 || cy == 0 || cx == 23 || cy == 23 || cx == cy);
+            else {
+                double x = (cx - 11.5) / 10.0, y = (9.5 - cy) / 10.0;   // curva del corazon
+                double t = x * x + y * y - 1.0;
+                on = (t * t * t - x * x * y * y * y < 0.0);
+            }
+            if (on) b[cx / 8] |= (1 << (7 - (cx % 8)));
+        }
+        p += (char)b[0]; p += (char)b[1]; p += (char)b[2];
+    }
+    String e = SimpleCrypto_encrypt(p);
+    return std::string(e.c_str(), e.length());
+}
+static int g_doodleSeq = 0;      // msgId automatico de los dibujos inyectados sin msgId explicito
 
 // Construye un paquete de Tres en raya cifrado: 0x07 'H'|'S' | peer [ tablero(9) fin ].
 static std::string buildTtt(const std::string &sub, int peer, const std::string &cells, int over) {
@@ -198,6 +218,24 @@ static void scriptError(const std::string &msg) {
     else              printf("  [FAIL] %s  -> \"%s\"\n", msg.c_str(), g_curLine.c_str());
 }
 
+// Eventos diferidos (EV_INJECT): un paquete LoRa (idx >= 0) o una LINEA del guion (idx < 0) que se ejecuta en el
+// instante pedido, incluso dentro de una espera bloqueante del firmware: "in <ms> expect|shot|print ...".
+// Sirven para comprobar la pantalla en mitad de un bucle de juego o de una pantalla de resultado.
+static void execLine(const std::string &raw);
+static std::vector<std::pair<std::string, int>> g_deferredLines;   // (linea, nº de linea del guion que la programo)
+static void injectDeferred(int idx) {
+    if (idx >= 0) {
+        if (idx < (int)g_deferredPackets.size()) simLoraInject(g_deferredPackets[idx]);
+        return;
+    }
+    size_t li = (size_t)(-idx - 1);
+    if (li >= g_deferredLines.size()) return;
+    std::string saveLine = g_curLine; int saveNo = g_lineNo;
+    g_lineNo = g_deferredLines[li].second;
+    execLine(g_deferredLines[li].first);
+    g_curLine = saveLine; g_lineNo = saveNo;
+}
+
 // Validadores de argumentos.
 static bool parseBtn(const std::string &b, sim::EvKind *k) {
     if (b == "morse")  { *k = sim::EV_MORSE;  return true; }
@@ -227,8 +265,9 @@ static bool encryptedOk(const String &enc) {
 // Deja la radio en un estado cualquiera: despues hay que hacer "reboot" (setup() la reinicializa).
 // ---------------------------------------------------------------------------
 static void radioSelfTest() {
-    const bool wasIdeal = sx::ideal();
+    const bool wasIdeal = sx::ideal(), wasPolite = sx::polite();
     sx::setIdeal(false);
+    sx::setPolite(false);                                           // el autotest comprueba justo lo contrario: lo que llega MIENTRAS se transmite se pierde
     sx::peerFrame() = AirFrame();                                   // sf7 / 125 kHz / CR4-5 / 8 simbolos / CRC on / sync 0x12
     sx::peerFrame().freq = (long)LORA_FREQUENCY;
     auto radioInit = []() {
@@ -351,7 +390,7 @@ static void radioSelfTest() {
     LoRa.receive();
     check(sx::currentMode() == 5 && sx::listening(), "receive() vuelve al RX continuo");
 
-    sx::setIdeal(wasIdeal);
+    sx::setIdeal(wasIdeal); sx::setPolite(wasPolite);
     printf("  (autotest del chip hecho: la radio ha quedado en un estado cualquiera; usa \"reboot\" para continuar con el firmware)\n");
 }
 
@@ -456,14 +495,15 @@ static void execLine(const std::string &raw) {
         } else if (sub == "peer") {      // parametros con que emiten los "otros equipos" que inyecta el guion
             std::string f, v; is >> f >> v;
             AirFrame &pf = sx::peerFrame();
-            if (f == "sf" && !v.empty()) pf.sf = atoi(v.c_str());
+            if (f == "polite" && (v == "on" || v == "off")) sx::setPolite(v == "on");
+            else if (f == "sf" && !v.empty()) pf.sf = atoi(v.c_str());
             else if (f == "bw" && !v.empty()) pf.bw = (long)(atof(v.c_str()) * 1000.0);        // en kHz
             else if (f == "crc" && (v == "on" || v == "off")) pf.crc = (v == "on");
             else if (f == "preamble" && !v.empty()) pf.preamble = atoi(v.c_str());
             else if (f == "sync" && !v.empty()) pf.sync = (int)strtol(v.c_str(), nullptr, 0);
             else if (f == "freq" && !v.empty()) pf.freq = (long)(atof(v.c_str()) * 1e6);     // en MHz
             else if (f == "reset") { pf.freq = (long)LORA_FREQUENCY; pf.sf = LORA_SPREADING; pf.bw = (long)LORA_BANDWIDTH; pf.cr = 1; pf.preamble = 8; pf.crc = true; pf.sync = 0x12; }
-            else { scriptError("radio peer necesita: sf <n> | bw <kHz> | crc on|off | preamble <n> | sync <hex> | freq <MHz> | reset"); return; }
+            else { scriptError("radio peer necesita: sf <n> | bw <kHz> | crc on|off | preamble <n> | sync <hex> | freq <MHz> | polite on|off | reset"); return; }
         } else if (sub == "deepsleep") {   // radio deepsleep <ms>: ahorro opcional (Lora_setDeepSleepMs); 0 = no dormir nunca
             long ms = -1;
             if (!(is >> ms) || ms < 0) { scriptError("radio deepsleep necesita los ms (0 = nunca)"); return; }
@@ -483,6 +523,9 @@ static void execLine(const std::string &raw) {
             auto &rl = sx::rxLog();
             for (size_t i = g_markRx; i < rl.size(); i++)
                 printf("  rx t=%.0f..%.0f ms  %zu B  %s\n", rl[i].start, rl[i].end, rl[i].len, sx::outcomeName(rl[i].outcome));
+            auto &tl = sx::txLog();
+            for (size_t i = g_markTx; i < tl.size(); i++)
+                printf("  tx t=%.0f..%.0f ms  %zu B\n", tl[i].start, tl[i].end, tl[i].payload.size());
         }
         else scriptError("subcomando radio desconocido \"" + sub + "\" (ideal|peer|deepsleep|mark|report|log|selftest|kick)");
     }
@@ -493,7 +536,29 @@ static void execLine(const std::string &raw) {
         std::string what; uint32_t mn = 0, mx = 0;
         is >> what;
         if (what == "clear") { g_waitSamples.clear(); return; }     // waitfor clear: olvida las muestras
-        if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear)"); return; }
+        if (what == "txend") {      // waitfor txend: ejecuta el firmware hasta que la radio termine de emitir lo que tenga en el aire
+            // (la emision es asincrona: el firmware sigue con su bucle mientras el chip emite. Un guion que
+            //  espera "[Chat] Baliza" tiene la baliza aun en el aire; inyectar una trama ahora la pisaria.)
+            uint32_t t0 = sim::now(), limit = t0 + 4000;
+            sim::setDeadline(limit + SLACK);
+            bool ended = false;
+            try {
+                while (sim::now() < limit) {
+                    sx::sync();
+                    if (sx::currentMode() != 3) { ended = true; break; }
+                    uint32_t before = sim::now();
+                    loop();
+                    if (sim::now() == before) sim::advance(2);
+                }
+            } catch (sim::Timeout &) {}
+            if (ended) {                 // unas vueltas mas: el firmware vuelve a poner la radio a escuchar al acabar de emitir
+                try { for (int i = 0; i < 10; i++) { loop(); sim::advance(2); } } catch (sim::Timeout &) {}
+            }
+            sim::clearDeadline();
+            check(ended, "radio: la emision en curso termina en menos de 4 s");
+            return;
+        }
+        if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear | txend)"); return; }
         std::string txt = restAfter(line, 4);
         if (txt.empty()) { scriptError("waitfor necesita el texto a esperar"); return; }
         size_t startLen = sim::serialLog().size();
@@ -563,6 +628,18 @@ static void execLine(const std::string &raw) {
             int flags = (batt <= 15) ? 1 : 0;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags, gen)));
         }
+        else if (what == "expect" || what == "shot" || what == "print") {   // comprobacion / captura / mensaje DIFERIDO
+            g_deferredLines.push_back({ restAfter(line, 2), g_lineNo });
+            sim::scheduleAt(t, sim::EV_INJECT, -(int)g_deferredLines.size());
+        }
+        else if (what == "doodle") {     // dibujo diferido: in <ms> doodle <peerId> [msgId] [heart|frame]
+            int peer = 0, mid = 0; std::string pat = "heart";
+            is >> peer;
+            std::string a2; if (is >> a2) { if (isdigit((unsigned char)a2[0])) { mid = atoi(a2.c_str()); is >> pat; } else pat = a2; }
+            if (pat != "heart" && pat != "frame") { scriptError("in doodle: el dibujo es heart|frame"); return; }
+            if (mid == 0) mid = 200 + (g_doodleSeq++ % 50);
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildDoodle(peer, mid, pat)));
+        }
         else if (what == "ttt") {        // tres en raya diferido: in <ms> ttt hello|state ...
             std::string sub; is >> sub;
             int peer = 0, ov = 0; std::string cells = "000000000";
@@ -581,21 +658,14 @@ static void execLine(const std::string &raw) {
         simLoraInject(buildBeacon(peer, ep, batt, flags, gen));
         printf("  baliza de #%d inyectada (epoch %ld, bat %d%%, gen %d)\n", peer, ep, batt, gen);
     }
-    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> (24x24, un corazon)
-        int peer = 0; is >> peer;
-        String p; p += (char)0x04; p += (char)peer;
-        for (int cy = 0; cy < 24; cy++) {
-            unsigned char b[3] = {0, 0, 0};
-            for (int cx = 0; cx < 24; cx++) {
-                double x = (cx - 11.5) / 10.0, y = (9.5 - cy) / 10.0;   // curva del corazon
-                double t = x * x + y * y - 1.0;
-                if (t * t * t - x * x * y * y * y < 0.0) b[cx / 8] |= (1 << (7 - (cx % 8)));
-            }
-            p += (char)b[0]; p += (char)b[1]; p += (char)b[2];
-        }
-        String e = SimpleCrypto_encrypt(p);
-        simLoraInject(std::string(e.c_str(), e.length()));
-        printf("  dibujo de #%d inyectado\n", peer);
+    else if (cmd == "doodle") {      // dibujo de un peer: doodle <peerId> [msgId] [heart|frame]  (24x24)
+        int peer = 0, mid = 0; std::string pat = "heart";
+        is >> peer;
+        std::string a2; if (is >> a2) { if (isdigit((unsigned char)a2[0])) { mid = atoi(a2.c_str()); is >> pat; } else pat = a2; }
+        if (pat != "heart" && pat != "frame") { scriptError("doodle: el dibujo es heart|frame"); return; }
+        if (mid == 0) mid = 200 + (g_doodleSeq++ % 50);
+        simLoraInject(buildDoodle(peer, mid, pat));
+        printf("  dibujo %s de #%d inyectado (msg %d)\n", pat.c_str(), peer, mid);
     }
     else if (cmd == "ttt") {         // tres en raya: ttt hello <peer> | ttt state <peer> <9digitos> <fin>
         std::string sub; is >> sub;
@@ -679,6 +749,38 @@ static void execLine(const std::string &raw) {
                 if (contains(std::string(dec.c_str(), dec.length()), n)) found = true;
             }
             check(found, "ultimo TX descifra y contiene \"" + n + "\"");
+        }
+        else if (sub == "times") {      // expect times <n> <texto>: el texto aparece EXACTAMENTE n veces en el log serie
+            int want = -1; is >> want;
+            std::string n = restAfter(line, 3);
+            if (want < 0 || n.empty()) { scriptError("expect times necesita: <n> <texto>"); return; }
+            std::string log = sim::serialLog(); int cnt = 0;
+            for (size_t p = log.find(n); p != std::string::npos; p = log.find(n, p + n.size())) cnt++;
+            check(cnt == want, "serial contiene \"" + n + "\" " + std::to_string(want) + " veces (son " + std::to_string(cnt) + ")");
+        }
+        else if (sub == "sentdoodle") {   // expect sentdoodle <msgId> <pixeles> [x y]: algun TX reciente es un dibujo con ese msgId y esos pixeles (y el (x,y) encendido)
+            int mid = 0, px = 0, x = -1, y = -1;
+            if (!(is >> mid >> px)) { scriptError("expect sentdoodle necesita: <msgId> <pixeles> [x y]"); return; }
+            is >> x >> y;
+            auto ring = simLoraSentRing();
+            bool found = false; int lastCount = -1;
+            for (auto it = ring.rbegin(); it != ring.rend() && !found; ++it) {
+                String dec = SimpleCrypto_decrypt(String(it->c_str()));
+                if (dec.length() != 75 || dec[0] != 0x04 || (uint8_t)dec[2] != (uint8_t)mid) continue;
+                int cnt = 0;
+                for (int i = 3; i < 75; i++) cnt += __builtin_popcount((unsigned char)dec[i]);
+                lastCount = cnt;
+                if (cnt != px) continue;
+                if (x >= 0 && y >= 0) {
+                    unsigned char b = (unsigned char)dec[3 + y * 3 + (x >> 3)];
+                    if (!((b >> (7 - (x & 7))) & 1)) continue;
+                }
+                found = true;
+            }
+            char b[200];
+            if (found) snprintf(b, sizeof(b), "un TX reciente es el dibujo msg %d con %d pixeles%s", mid, px, x >= 0 ? " (y el pixel pedido encendido)" : "");
+            else       snprintf(b, sizeof(b), "ningun TX reciente es el dibujo msg %d con %d pixeles%s (ultimo visto: %d pixeles)", mid, px, x >= 0 ? " y el pixel pedido encendido" : "", lastCount);
+            check(found, b);
         }
         else if (sub == "rx") {       // expect rx heard|lost|crc|<motivo> [=|>=|<=] <n>   (desde "radio mark")
             std::string what, op = "=", nstr; is >> what >> nstr;

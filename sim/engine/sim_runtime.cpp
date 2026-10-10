@@ -40,7 +40,14 @@ std::mt19937 g_rng(12345u);
 // placa (RNG por hardware): dos equipos arrancados a la vez no deben sortear lo mismo.
 const bool g_rngSeeded = [] {
     const char *e = getenv("SIM_CHIPID");
-    if (e) g_rng.seed(12345u + (uint32_t)strtoul(e, nullptr, 0) * 7919u);
+    uint32_t seed = 12345u;
+    if (e) seed += (uint32_t)strtoul(e, nullptr, 0) * 7919u;
+    // SIM_SEED: otra secuencia aleatoria SIN cambiar la identidad del equipo. Sirve para ejecutar un test con
+    // muchas secuencias (retardos de ACK, dispersion de reintentos y balizas) y descubrir los que solo pasan
+    // con una combinacion afortunada de tiempos.
+    const char *sd = getenv("SIM_SEED");
+    if (sd) seed += (uint32_t)strtoul(sd, nullptr, 0) * 104729u;
+    g_rng.seed(seed);
     return true;
 }();
 void (*g_pump)(uint32_t) = nullptr;   // hook del modo interactivo (teclado + render + ritmo)

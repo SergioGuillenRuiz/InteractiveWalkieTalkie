@@ -9,6 +9,8 @@
 #  (Device_id del sim = 137; peer #50.)
 # ============================================================
 wait 600
+waitfor serial 0 6000 [Chat] Baliza        # la baliza de arranque (a los 2-4 s) fuera de en medio: el equipo no oye mientras emite
+waitfor txend
 
 # --- Sin haber oido a nadie: ni icono ni aviso ---
 expect pixel 102 1 off

@@ -29,6 +29,9 @@ static uint32_t    g_lastWatch = 0;
 #define SX_REG_MODEM_STAT  0x18    // bits 0..3: señal detectada / sincronizada / recibiendo / cabecera válida
 #define SX_REG_PKT_RSSI    0x1A
 #define SX_IRQ_RX_DONE     0x40
+#define SX_IRQ_TX_DONE     0x08
+#define SX_OPMODE_MASK     0x07    // bits de modo de RegOpMode
+#define SX_OPMODE_TX       0x03
 #define SX_IRQ_CRC_ERROR   0x20
 #define SX_OPMODE_RXCONT   0x85    // LoRa + recepción continua
 
@@ -103,6 +106,25 @@ static void stashPending() {
   g_rxqN++;
 }
 
+// ---- Emision asincrona ----
+// LoRa.endPacket() espera a que acabe la emision (120-700 ms segun la trama): el equipo quedaria sordo a los
+// botones todo ese tiempo (una pulsacion corta se pierde: el antirrebote mide desde que la ve) y las
+// animaciones se pararian. Se emite en modo asincrono (endPacket(true)): el chip emite solo y el firmware
+// sigue con su bucle. Al acabar hay que volver a escuchar (la radio no oye mientras emite): lo hace
+// txBusy(), que se consulta en cada entrada de esta capa (envio, lectura, vigilancia...).
+static bool g_txActive = false;
+
+static bool txBusy() {
+  if (!g_txActive) return false;
+  if ((sxRead(SX_REG_OP_MODE) & SX_OPMODE_MASK) == SX_OPMODE_TX) return true;   // (LoRa.isTransmitting() es privada)
+  sxWrite(SX_REG_IRQ_FLAGS, SX_IRQ_TX_DONE);   // acabo: se borra la bandera TxDone (se borra escribiendo 1)
+  g_txActive = false;
+  if (g_policy == RP_LISTEN) LoRa.receive();
+  return false;
+}
+
+static void waitTxEnd() { while (txBusy()) delay(1); }
+
 // El modem esta recibiendo una trama (senal detectada / sincronizada / recibiendo / cabecera valida).
 static bool channelBusy() { return (sxRead(SX_REG_MODEM_STAT) & 0x0F) != 0; }
 
@@ -159,6 +181,7 @@ void Lora_begin() {
 
   // Marcar como listo y empezar a escuchar
   g_rxqN = 0;
+  g_txActive = false;
   g_deepSleepMs = LORA_DEEP_SLEEP;
   loraReady = true;
   g_policy = RP_LISTEN;
@@ -176,6 +199,7 @@ void Lora_begin() {
 
 void Lora_listen() {
   if (!loraReady) return;
+  waitTxEnd();
   bool wasAsleep = (g_policy == RP_SLEEP);
   g_policy = RP_LISTEN;
   if (wasAsleep) { LoRa.idle(); delay(2); }   // salir de sleep: el oscilador necesita un instante
@@ -185,6 +209,7 @@ void Lora_listen() {
 
 void Lora_sleep() {
   if (!loraReady) return;
+  waitTxEnd();
   g_policy = RP_SLEEP;
   LoRa.sleep();
 }
@@ -194,13 +219,14 @@ bool Lora_isListening() { return loraReady && g_policy == RP_LISTEN; }
 void     Lora_setDeepSleepMs(uint32_t ms) { g_deepSleepMs = ms; }
 uint32_t Lora_deepSleepMs()               { return g_deepSleepMs; }
 
-bool Lora_busy() { return loraReady && g_policy == RP_LISTEN && channelBusy(); }
+bool Lora_busy() { return loraReady && g_policy == RP_LISTEN && (txBusy() || channelBusy()); }
 bool Lora_isAsleep()    { return loraReady && g_policy == RP_SLEEP; }
 
 // HippoRadar: largo alcance (SF10 y +20 dBm) mientras dura el radar y vuelta a los parámetros del
 // chat. Se mantiene la política vigente (si escuchaba, sigue escuchando con los parámetros nuevos).
 void Lora_setRangeMode(bool on) {
   if (!loraReady) return;
+  waitTxEnd();
   LoRa.idle();
   LoRa.setSpreadingFactor(on ? 10 : LORA_SPREADING);
   LoRa.setTxPower(on ? 20 : LORA_POWER);
@@ -229,14 +255,14 @@ bool Lora_send(const String &message) {
   Serial.print("[LoRa] Encriptado: ");
   Serial.println(encrypted);
 
+  waitTxEnd();             // la emision anterior, si sigue en el aire
   waitChannelClear();      // escuchar antes de hablar (y guardar lo ya recibido: la FIFO es la misma)
   stashPending();
 
   LoRa.beginPacket();
   LoRa.print(encrypted);
-  LoRa.endPacket();        // bloquea el tiempo en el aire; al acabar el chip queda en STDBY
-
-  LoRa.receive();          // y hay que volver a escuchar (la radio no oye mientras emite)
+  LoRa.endPacket(true);    // asincrono: el chip emite solo; txBusy() vuelve a escuchar cuando acaba
+  g_txActive = true;
   return true;
 }
 
@@ -246,6 +272,7 @@ bool Lora_send(const String &message) {
 
 bool Lora_hasMessage() {
   if (!loraReady || g_policy != RP_LISTEN) return false;
+  if (txBusy()) return false;              // emitiendo: la radio no oye
 
   if (g_rxqN == 0) stashPending();
   if (g_rxqN == 0) return false;
@@ -288,6 +315,7 @@ int Lora_lastRssi() { return lastRssi; }
 // "cree" escuchar y no lo hace es el peor fallo (el equipo parece vivo pero no recibe nada).
 void Lora_update() {
   if (!loraReady || g_policy != RP_LISTEN) return;
+  if (txBusy()) return;                    // emitiendo (o recien terminado: ya esta de nuevo escuchando)
   uint32_t now = millis();
   if (now - g_lastWatch < 500) return;
   g_lastWatch = now;

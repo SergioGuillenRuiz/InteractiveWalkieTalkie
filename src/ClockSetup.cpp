@@ -107,7 +107,6 @@ void startClockSetup() {
     int hour = v[0], minute = v[1] * 10 + v[2];
     int32_t step = Clock_setTimeOfDay(hour, minute);
     History_shiftTimestamps(step);      // las antiguedades no cambian aunque el epoch salte
-    Doodle_shiftTimestamps(step);
     Chat_beaconSoon();                  // el companero adopta la hora ya, no a los 30 s
     Serial.print("[Clock] puesta a mano: "); Serial.println(Clock_hhmm());
 

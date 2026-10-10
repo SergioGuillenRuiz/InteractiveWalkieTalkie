@@ -15,26 +15,22 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
 | Área | Funcionalidad |
 |---|---|
 | Menú | Menú principal (Enviar / Historial / Juegos) con el hipopótamo animado y dormido por inactividad; el cursor se repinta en cada vuelta (no desaparece tras dormir/despertar ni tras las animaciones) y las etiquetas del menú de juegos no se cortan |
-| Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24) |
+| Enviar | **Morse**, **Instant** (8 iconos), **Rueda** de letras (hasta 60 caracteres), **Frase** (3 categorías + piezas propias guardadas en EEPROM), **Dibujar** (lienzo 24×24: se confirma con ACK como un mensaje, se reintenta hasta que llega y muestra "Enviado" → "Entregado!" / "(sin confirmar)") |
 | Mensajería | Identificador por equipo, cifrado AES-128 con IV aleatorio, confirmación "Entregado", 3 reintentos, cola de pendientes persistente y descarte de duplicados |
-| Historial | 10 mensajes guardados en EEPROM, enviados marcados con "Tu:", vista completa y borrado con confirmación. Los recibidos entran como **no leídos** (bit persistente): insignia con el recuento sobre el icono "Hist" (9+), punto de "nuevo" en la fila y se marcan como leídos al abrirlos o al salir de la lista si su fila llegó a verse |
+| Historial | 10 mensajes guardados en EEPROM (los **dibujos**, enviados y recibidos, también: el lienzo vive en su registro, así que sobrevive a reinicios y sigue a su registro al desplazarse o borrarse), enviados marcados con "Tu:", vista completa y borrado con confirmación. Los recibidos entran como **no leídos** (bit persistente): insignia con el recuento sobre el icono "Hist" (9+), punto de "nuevo" en la fila y se marcan como leídos al abrirlos o al salir de la lista si su fila llegó a verse |
 | Aviso | Mensaje o dibujo nuevo: el hipopótamo persigue el corazón en el menú principal; con la pantalla apagada (suspensión) se enciende 8 s con vista previa (**A** = leer, abre el Historial; **B** = cerrar; sin pulsar se apaga sola) y esas pulsaciones no cuentan para el despertar de 3 pulsaciones |
 | Hora | Se pone a mano (mantener **B** 1,5 s en el menú principal → "Poner la hora": horas / decenas / unidades de minuto con el pote), se muestra en el menú principal y en el Historial, se difunde y es **autoritativa** entre equipos (generación de ajuste en la baliza: la última hora puesta gana aunque se corrija hacia atrás), persiste en EEPROM y las antigüedades del historial no cambian al saltar el reloj. Es la hora local (sin zona horaria: al cambiar la hora de verano/invierno hay que volver a ponerla). No se puede por puerto serie: el SCL del OLED va al pin RX |
 | Presencia | Baliza cada 30 s ±3 s (aleatoria, para que dos equipos encendidos a la vez no se tapen) y corazón en pantalla cuando hay algún compañero en alcance. Recuerda hasta 4 compañeros **por separado** (id, último oído, batería); a la izquierda del corazón se muestra el nivel de batería **más bajo** de los que están en alcance (y "!" si alguno avisa de batería baja), no el del último que emitió |
 | Suspensión | A los 5 min: apaga la pantalla, WiFi apagado; se despierta con 3 pulsaciones |
 | Juegos | Tetris Coop (contra CPU y 2 jugadores), Poker contra CPU, RefillGame, Choose4Me, HippoRadar y Tres en raya por LoRa. No queda ningún "Próximamente" accesible |
-| Radio | La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
-| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 37 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 5 escenas) es determinista y tarda ~2 s |
+| Radio | La emisión es **asíncrona** (el equipo sigue atendiendo botones y animaciones mientras la trama está en el aire). La radio **escucha siempre** en recepción continua (menús, juegos, esperas bloqueantes y tras cada emisión), con vigilancia que la re-arma si el chip cae. La FIFO se lee por SPI sin salir de recepción (leer una trama no corta la siguiente) y una trama ya recibida no se pierde al emitir (cola de recepción). **Escuchar antes de hablar**: si entra una trama se espera a que acabe y a una pausa aleatoria. Los **ACK** salen tras un retardo aleatorio de 10-300 ms (varios equipos no se pisan) y los **reintentos** se reparten ±1,5 s. Las balizas esperan si el canal está ocupado. CRC activado en el paquete |
+| Simulador | Windows (`sim/`) + Linux (`sim/linux/`), 38 tests, multi-dispositivo y demos. **Modelo de radio realista** (por defecto): ejecuta la librería LoRa real sobre un chip SX1276 simulado a nivel de registros (modos, IRQ, FIFO, tiempo en el aire real, transmitir bloquea, solo se oye lo que llega mientras se escucha, colisiones, CRC); autotest en `scripts/radio_model.sim`. **Varios equipos con el mismo tiempo** (`--nodes N`, Linux): los procesos avanzan juntos ms a ms, así las colisiones entre equipos son las reales y la prueba (`net_test.sh`, 6 escenas) es determinista y tarda ~2 s |
 
 ---
 
 ## 🟡 A medias
 
 - [ ] **Batería.** En la placa, la lectura siempre devuelve 100 % (`src/Battery.cpp:13`), porque el único ADC del ESP8266 lo usa el potenciómetro. Hace falta hardware (y, por tanto, también el nivel que envía la baliza es siempre 100 %).
-- [ ] **Dibujos.**
-  - Solo se guarda el último recibido, y solo en RAM (`src/Doodle.cpp:119`). Tras reiniciar sale "(ya no guardado)".
-  - Los dibujos enviados no aparecen en el historial.
-  - No tienen confirmación ni reintentos, a diferencia del texto.
 - [ ] **"Recibir en todo momento" no se cumple en tres modos.**
   - Tres en raya y Tetris 2 jugadores descartan cualquier paquete que no sea del juego (`src/TresEnRaya.cpp:61`, `src/TetrisCoop.cpp:349`).
   - HippoRadar guarda en el historial los paquetes en crudo (`src/HippoRadar.cpp:106`), así que confirmaciones y balizas aparecerían como texto basura.
@@ -49,7 +45,6 @@ Leyenda: ✅ terminado · 🟡 a medias · ⚪ sin implementar · 🔴 riesgo si
   - La clave AES está fija en el código y es la misma para todos los equipos.
   - No hay autenticación de mensajes (cualquiera con el firmware podría suplantar a otro equipo).
   - No hay protección contra reenvíos de paquetes antiguos.
-- [ ] Dibujos guardados en EEPROM.
 - [ ] Manual de usuario: el README solo tiene la lista de componentes y el simulador.
 - [ ] Zumbador o vibración (opcional; no está en la lista de componentes).
 
@@ -89,9 +84,8 @@ Nada de esto se ha cambiado hasta que lo decidas (el código está preparado en 
    - bajar el ritmo de Tetris 2J y HippoRadar a algo que quepa en el canal.
 3. [ ] **Batería real** (hardware + calibración) y mostrar la del compañero.
 4. [ ] **Recepción dentro de los juegos.**
-5. [ ] **Dibujos:** persistentes, en el historial y con confirmación.
-6. [ ] **Seguridad:** emparejamiento y clave por pareja.
-7. [ ] **Pulido:** un manual de usuario.
+5. [ ] **Seguridad:** emparejamiento y clave por pareja.
+6. [ ] **Pulido:** un manual de usuario.
 
 ---
 

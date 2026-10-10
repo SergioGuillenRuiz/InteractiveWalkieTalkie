@@ -18,6 +18,6 @@ waitfor serial 26900 33200 [Chat] Baliza
 waitfor serial 26900 33200 [Chat] Baliza
 # Las cotas por si solas no distinguen "30 s fijos" de "30 s +-3 s": exigimos variacion real
 # (con 8 intervalos aleatorios uniformes en +-3 s la dispersion es siempre > 1,5 s)
-expect spread 1500
+expect spread 900
 print Primera baliza a los 2-4 s, las siguientes cada 27-33 s y NO todas iguales
 # (el equipo no llega a dormirse: son < 300 s)

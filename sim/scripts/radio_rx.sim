@@ -15,6 +15,7 @@
 # ============================================================
 radio ideal off
 waitfor serial 0 5000 [Chat] Baliza        # la 1a baliza (2-4 s): a partir de aqui hay ~27 s sin otra
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 wait 400
 expect radiomode rxcont
 print Tras el arranque y la 1a baliza la radio escucha en continuo
@@ -23,16 +24,16 @@ print Tras el arranque y la 1a baliza la radio escucha en continuo
 radio mark
 in 500 chatmsg 50 1 m1
 in 1800 chatmsg 50 2 m2
-in 2400 chatmsg 60 1 m3
+in 2700 chatmsg 60 1 m3
 in 4000 chatmsg 50 3 m4
 in 5000 chatmsg 50 4 m5
-in 5700 chatmsg 60 2 m6
+in 6000 chatmsg 60 2 m6
 in 7300 chatmsg 50 5 m7
 in 8800 chatmsg 50 6 m8
-in 9300 chatmsg 60 3 m9
+in 9700 chatmsg 60 3 m9
 in 11000 chatmsg 50 7 m10
 in 12500 chatmsg 50 8 m11
-in 13100 chatmsg 60 4 m12
+in 13500 chatmsg 60 4 m12
 in 15000 chatmsg 50 9 m13
 in 16200 chatmsg 50 10 m14
 in 17900 chatmsg 60 5 m15
@@ -48,10 +49,12 @@ print 15 mensajes en el menu principal: ninguno se pierde, todos confirmados
 
 # --- 2) Justo despues de transmitir el ACK se vuelve a escuchar ---
 waitfor serial 0 33000 [Chat] Baliza       # espera a que pase la siguiente baliza (para no coincidir con ella)
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 wait 500
 radio mark
 chatmsg 50 20 primero
-in 800 chatmsg 50 21 segundo                # llega ~100 ms despues de acabar de enviar el ACK del 1o
+waitfor serial 0 1000 ACK a #50 msg 20      # el ACK (con su retardo aleatorio) EMPIEZA a emitirse...
+in 125 chatmsg 50 21 segundo                # ...y el 2o mensaje empieza 7 ms despues de que ACABE (118 ms)
 run 2500
 expect rx lost = 0
 expect serial Guardado: primero

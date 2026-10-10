@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 #include "EepromMap.h"
 #include "Clock.h"
+#include "Doodle.h"
 
 // ============================================================
 // CONFIGURACION
@@ -25,6 +26,10 @@ static_assert(EEPROM_SIZE == EE_HISTORIAL_END, "EE_HISTORIAL_END no coincide con
 
 #define FLAG_OUTGOING  0x01                       // bit0: el mensaje lo envie yo
 #define FLAG_UNREAD    0x02                       // bit1: recibido y aun sin leer (persistente)
+#define FLAG_DOODLE    0x04                       // bit2: es un dibujo: el hueco del texto guarda el lienzo (DOODLE_BYTES)
+
+static_assert(DOODLE_BYTES <= MAX_MSG_LENGTH - 1, "el lienzo de un dibujo no cabe en el hueco del texto del registro");
+static const char DOODLE_TEXT[] = "[dibujo]";         // lo que ve la lista del historial
 
 // Historial en RAM (cronologico): 0 = mas antiguo, count-1 = mas reciente.
 // (la API expone el indice 0 como el mas RECIENTE)
@@ -32,6 +37,7 @@ static String        messageHistory[MAX_MESSAGES];
 static unsigned long messageTime[MAX_MESSAGES];
 static uint8_t       messageFlags[MAX_MESSAGES];
 static uint8_t       messageSender[MAX_MESSAGES];
+static uint8_t       messageDoodle[MAX_MESSAGES][DOODLE_BYTES];   // lienzo de los registros con FLAG_DOODLE
 static bool          messageThisBoot[MAX_MESSAGES];   // RAM: recibido/enviado en esta sesion
 static int           messageCount = 0;
 
@@ -40,7 +46,8 @@ static int           messageCount = 0;
 // ============================================================
 static int slotAddr(int slot) { return HDR_SIZE + slot * MSG_SLOT_SIZE; }
 
-static void writeSlot(int slot, const String &msg, unsigned long ts, uint8_t flags, uint8_t sender) {
+static void writeSlot(int slot, const String &msg, unsigned long ts, uint8_t flags, uint8_t sender,
+                      const uint8_t *doodle = nullptr) {
     int addr = slotAddr(slot);
 
     EEPROM.write(addr++, (ts >> 24) & 0xFF);
@@ -51,6 +58,13 @@ static void writeSlot(int slot, const String &msg, unsigned long ts, uint8_t fla
     EEPROM.write(addr++, flags);
     EEPROM.write(addr++, sender);
 
+    if ((flags & FLAG_DOODLE) && doodle) {             // dibujo: el lienzo ocupa el hueco del texto
+        EEPROM.write(addr++, DOODLE_BYTES);
+        for (uint8_t i = 0; i < DOODLE_BYTES; i++) EEPROM.write(addr + i, doodle[i]);
+        EEPROM.write(addr + DOODLE_BYTES, '\0');
+        return;
+    }
+
     uint8_t len = (uint8_t)min((size_t)msg.length(), (size_t)(MAX_MSG_LENGTH - 1));
     EEPROM.write(addr++, len);
 
@@ -58,7 +72,7 @@ static void writeSlot(int slot, const String &msg, unsigned long ts, uint8_t fla
     EEPROM.write(addr + len, '\0');
 }
 
-static bool readSlot(int slot, String &msg, unsigned long &ts, uint8_t &flags, uint8_t &sender) {
+static bool readSlot(int slot, String &msg, unsigned long &ts, uint8_t &flags, uint8_t &sender, uint8_t *doodle) {
     int addr = slotAddr(slot);
 
     ts  = (unsigned long)EEPROM.read(addr++) << 24;
@@ -73,6 +87,13 @@ static bool readSlot(int slot, String &msg, unsigned long &ts, uint8_t &flags, u
 
     uint8_t len = EEPROM.read(addr++);
     if (len == 0 || len > MAX_MSG_LENGTH - 1) return false;
+
+    if (flags & FLAG_DOODLE) {                         // dibujo: bytes del lienzo (pueden valer 0)
+        if (len != DOODLE_BYTES) return false;
+        for (uint8_t i = 0; i < DOODLE_BYTES; i++) doodle[i] = EEPROM.read(addr + i);
+        msg = DOODLE_TEXT;
+        return true;
+    }
 
     msg = "";
     for (uint8_t i = 0; i < len; i++) {
@@ -98,7 +119,7 @@ static void saveAll() {
     EEPROM.begin(EE_TOTAL_SIZE);   // tamano total: preservar la region del Frasero
     writeHeader();
     for (int i = 0; i < MAX_MESSAGES; i++) {
-        if (i < messageCount) writeSlot(i, messageHistory[i], messageTime[i], messageFlags[i], messageSender[i]);
+        if (i < messageCount) writeSlot(i, messageHistory[i], messageTime[i], messageFlags[i], messageSender[i], messageDoodle[i]);
         else                  writeSlot(i, "", 0xFFFFFFFF, 0, 0);   // marcar vacio
     }
     EEPROM.commit();
@@ -125,7 +146,7 @@ void History_load() {
 
     for (int i = 0; i < MAX_MESSAGES; i++) {
         String msg; unsigned long ts; uint8_t flags, sender;
-        if (readSlot(i, msg, ts, flags, sender)) {
+        if (readSlot(i, msg, ts, flags, sender, messageDoodle[messageCount])) {
             messageHistory[messageCount] = msg;
             messageTime[messageCount]    = ts;
             messageFlags[messageCount]   = flags;
@@ -142,8 +163,19 @@ void History_load() {
 }
 
 // Nucleo de insercion: anade un mensaje con sus metadatos y lo persiste.
-static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
+// Mueve el registro 'src' al hueco 'dst' (todas sus columnas, lienzo incluido).
+static void moveEntry(int dst, int src) {
+    messageHistory[dst]  = messageHistory[src];
+    messageTime[dst]     = messageTime[src];
+    messageFlags[dst]    = messageFlags[src];
+    messageSender[dst]   = messageSender[src];
+    messageThisBoot[dst] = messageThisBoot[src];
+    if (messageFlags[src] & FLAG_DOODLE) memcpy(messageDoodle[dst], messageDoodle[src], DOODLE_BYTES);
+}
+
+static void addEntry(const String &msg, uint8_t flags, uint8_t sender, const uint8_t *doodle = nullptr) {
     if (msg.length() == 0) return;
+    if (doodle) flags |= FLAG_DOODLE;
 
     String shortMsg = msg;
     if (shortMsg.length() > MAX_MSG_LENGTH - 1)
@@ -163,33 +195,41 @@ static void addEntry(const String &msg, uint8_t flags, uint8_t sender) {
         messageFlags[i]    = flags;
         messageSender[i]   = sender;
         messageThisBoot[i] = true;
+        if (doodle) memcpy(messageDoodle[i], doodle, DOODLE_BYTES);
         messageCount++;
 
         EEPROM.begin(EE_TOTAL_SIZE);   // tamano total: preservar la region del Frasero
         writeHeader();
-        writeSlot(i, shortMsg, ts, flags, sender);
+        writeSlot(i, shortMsg, ts, flags, sender, doodle);
         EEPROM.commit();
         EEPROM.end();
     } else {
         // Buffer lleno: descartar el mas antiguo y desplazar el resto
-        for (int i = 0; i < MAX_MESSAGES - 1; i++) {
-            messageHistory[i]  = messageHistory[i + 1];
-            messageTime[i]     = messageTime[i + 1];
-            messageFlags[i]    = messageFlags[i + 1];
-            messageSender[i]   = messageSender[i + 1];
-            messageThisBoot[i] = messageThisBoot[i + 1];
-        }
+        for (int i = 0; i < MAX_MESSAGES - 1; i++) moveEntry(i, i + 1);
         int last = MAX_MESSAGES - 1;
         messageHistory[last]  = shortMsg;
         messageTime[last]     = ts;
         messageFlags[last]    = flags;
         messageSender[last]   = sender;
         messageThisBoot[last] = true;
+        if (doodle) memcpy(messageDoodle[last], doodle, DOODLE_BYTES);
         saveAll();
     }
 
     Serial.print("[Historial] Guardado: ");
     Serial.println(shortMsg);
+}
+
+void History_addIncomingDoodle(const uint8_t *bitmap, uint8_t sender) { addEntry(DOODLE_TEXT, FLAG_UNREAD, sender, bitmap); }
+void History_addOutgoingDoodle(const uint8_t *bitmap)                 { addEntry(DOODLE_TEXT, FLAG_OUTGOING, 0, bitmap); }
+
+bool History_isDoodle(int index) {
+    if (index < 0 || index >= messageCount) return false;
+    return (messageFlags[messageCount - 1 - index] & FLAG_DOODLE) != 0;
+}
+
+const uint8_t *History_getDoodle(int index) {
+    return History_isDoodle(index) ? messageDoodle[messageCount - 1 - index] : nullptr;
 }
 
 void History_addIncoming(const String &msg, uint8_t sender) { addEntry(msg, FLAG_UNREAD, sender); }
@@ -272,13 +312,7 @@ void History_deleteMessage(int index) {
 
     int realIndex = messageCount - 1 - index;
 
-    for (int i = realIndex; i < messageCount - 1; i++) {
-        messageHistory[i]  = messageHistory[i + 1];
-        messageTime[i]     = messageTime[i + 1];
-        messageFlags[i]    = messageFlags[i + 1];
-        messageSender[i]   = messageSender[i + 1];
-        messageThisBoot[i] = messageThisBoot[i + 1];
-    }
+    for (int i = realIndex; i < messageCount - 1; i++) moveEntry(i, i + 1);
 
     messageCount--;
     messageHistory[messageCount]  = "";

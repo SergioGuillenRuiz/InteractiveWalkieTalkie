@@ -8,10 +8,10 @@ expect serial Equipo #137
 # --- DEDUP: el mismo (emisor 50, msgId 7) dos veces -> se guarda UNA sola vez,
 #     pero se ACKea las DOS (el peer repite porque perdio nuestro ACK). ---
 chatmsg 50 7 hola
-run 300
+run 800                          # (el ACK sale tras un retardo aleatorio de hasta 300 ms: el repetido no debe pisarlo)
 expect serial Guardado: hola
 chatmsg 50 7 hola
-run 300
+run 800
 expect serial Duplicado descartado
 print Dedup: el mensaje repetido no se duplica en el historial
 
@@ -33,8 +33,7 @@ in 1100 finish down
 in 1220 finish up
 run 1700
 expect serial Enviando: kissy
-run 5200
-expect serial Reintento msg 1
+waitfor serial 1700 5300 Reintento msg 1   # el reintento sale a los 3,5-6,5 s del envio (5 s +-1,5 s de dispersion; ya pasaron ~1,8 s)
 print Reintento: el mensaje sin confirmar se retransmite
 
 # --- OUTBOX PERSISTENTE: el pendiente sobrevive a un reinicio en frio ---
@@ -43,6 +42,7 @@ wait 300
 expect serial Outbox cargada, pendientes: 1
 run 2600
 expect serial Reintento msg 1
+wait 1500                        # deja pasar la baliza de arranque (a los 2-4 s): el ACK no debe coincidir con ella
 print Outbox: el mensaje pendiente persiste y se reintenta tras reiniciar
 
 # --- ENTREGA: al llegar el ACK, sale de la outbox. Tras un reinicio, la pantalla

@@ -22,7 +22,7 @@ extern String lastReceived;
 //  Funciones Lora
 //
 //  La radio ESCUCHA en recepción continua en todos los estados (menús, juegos, esperas bloqueantes) y
-//  tras cada emisión vuelve a escuchar. Solo se apaga (Lora_sleep) en suspensión prolongada.
+//  tras cada emisión vuelve a escuchar. Solo se apaga (Lora_sleep) si se activa el ahorro opcional.
 // ============================================================
 
 void Lora_begin();
@@ -48,7 +48,10 @@ void Lora_setRangeMode(bool on);   // HippoRadar: SF10 y +20 dBm (largo alcance)
 
 // Emite un mensaje (cifrado). ESCUCHA ANTES DE HABLAR: si entra una trama espera a que acabe (ver
 // CSMA_* en Config.h) y no pisa una trama ya recibida y aun sin leer (la guarda en una cola).
-// Bloquea el tiempo en el aire de la trama.
+// La emision es ASINCRONA: vuelve en cuanto el chip empieza a emitir (la trama tarda 120-700 ms en el
+// aire) para que el equipo siga atendiendo botones y animaciones; mientras emite no oye, y al acabar
+// vuelve solo a escuchar (se atiende en Lora_update/Lora_hasMessage/Lora_send). Una nueva emision espera
+// a que acabe la anterior.
 bool Lora_send(const String &msg);
 
 // Hay un mensaje recibido y descifrado listo para Lora_readMessage().

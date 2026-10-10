@@ -1,10 +1,16 @@
 # ============================================================
-#  Tier 2 - Lienzo (doodle 24x24): dibujar y enviar (5o modo de ENVIAR);
-#  recibir (va al Historial como un mensaje mas) y verlo abriendo su registro.
-#  Editor: pote=fila(Y), pulsar A pinta, mantener B envia. 72 bytes (0x04).
-#  (Device_id del sim = 137.)
+#  Lienzo (doodle 24x24): dibujar y enviar (5o modo de ENVIAR) con CONFIRMACION, y recibir.
+#    - Editor: pote=fila(Y), pulsar A pinta, mantener B envia. 72 bytes (0x04) + emisor + msgId.
+#    - Tras enviar sale la pantalla de resultado ("Enviado" -> "Entregado!" o "(sin confirmar)"), como la de
+#      un mensaje de texto, y el dibujo entra en el Historial como ENVIADO con su lienzo.
+#    - Sin ACK se reintenta solo (outbox persistente); un dibujo recibido se confirma y no se duplica.
+#  El editor y la pantalla de resultado son bloqueantes: se comprueba la pantalla con "in <ms> expect ..."
+#  (comprobaciones diferidas que se evaluan en ese instante, dentro del bucle).
+#  (Device_id del sim = 137; el primer envio -> msgId 1.)
 # ============================================================
 wait 300
+waitfor serial 0 6000 [Chat] Baliza
+waitfor txend
 
 # --- IDLE -> ENVIAR -> Dibujar (idx4 de 0..4, pot 880) ---
 pot 80
@@ -16,24 +22,83 @@ pot 880
 wait 250
 expect text Dibujar
 
-# --- Entrar al editor, pintar y ENVIAR (mantener B), todo en un mismo run
-#     porque el editor es bloqueante. (El contenido pintado es indiferente.) ---
+# --- 1) Entrar al editor, pintar UN pixel y ENVIAR (mantener B); el otro equipo lo confirma ---
 in 0 morse down        # selecciona "Dibujar" y entra al editor
 in 120 morse up
-in 700 morse down      # pulsar A (corto): pinta el pixel del cursor
+in 700 morse down      # pulsar A (corto): pinta el pixel del cursor (col 0, fila 20)
 in 820 morse up
-in 1400 finish down    # mantener B (>=1500 ms): envia
+in 1400 finish down    # mantener B (>=1500 ms): envia (a los 2900 ms)
 in 3100 finish up
-run 3600
-expect serial Dibujo] enviado
-print Dibujo: editor (5o modo de Enviar), pinta y envia OK
+in 3400 expect text Enviado
+in 3400 expect text esperando
+in 3400 expect serial Dibujo] enviado msg 1
+in 3400 shot doodle_enviado
+in 3600 chatack 137 1  # el otro equipo lo confirma (su ACK: el msgId del dibujo)
+in 4300 expect text Entregado!
+in 4300 expect serial Confirmado: entregado
+in 4300 expect serial Entregado msg 1
+in 4300 shot doodle_entregado
+in 4400 finish down    # B: salir de la pantalla de resultado
+in 4550 finish up
+run 5500
+expect text Env        # de vuelta en el menu principal
+expect sentdoodle 1 1 0 20    # el paquete emitido lleva el lienzo: 1 pixel encendido, el (0,20)
+print 1) Dibujo: editor, envio, pantalla de resultado y confirmacion (Entregado!) OK
 
-# --- RX: recibir un dibujo de #50 -> va al Historial (NO interrumpe) ---
-wait 400
+# --- 2) SIN confirmacion: tras 3 s "(sin confirmar)" y se reintenta solo ---
+pot 80
+wait 200
+tap morse
+wait 200
+pot 880
+wait 250
+in 0 morse down
+in 120 morse up
+in 700 morse down
+in 820 morse up
+in 1400 finish down
+in 3100 finish up
+in 3400 expect text esperando
+in 6300 expect text (sin confirmar)
+in 6300 expect serial Dibujo] enviado msg 2
+in 9500 expect serial Reintento msg 2 (1)    # el reintento sale a los 3,5-6,5 s del envio
+in 9500 shot doodle_sin_confirmar
+in 9600 finish down
+in 9750 finish up
+run 10500
+expect text Env
+expect sentdoodle 2 1 0 20
+print 2) Sin ACK: "(sin confirmar)" y el dibujo se reintenta solo
+
+# --- 3) Los dos dibujos enviados estan en el Historial como ENVIADOS, con su lienzo ---
+pot 512
+wait 200
+tap morse
+wait 300
+expect text Historial
+expect text Tu:[dibujo]
+in 0 morse down        # abrir el mas reciente (idx 0)
+in 200 morse up
+run 700
+expect text Enviado
+expect pixel 17 101 on         # celda (0,20) -> x=16+0*4+1, y=20+20*4+1
+expect pixel 21 101 off        # celda (1,20)
+expect pixel 17 97 off         # celda (0,19)
+shot doodle_enviado_historial
+print 3) El dibujo enviado queda en el Historial con su lienzo
+
+# --- 4) RX: recibir un dibujo de #50 -> va al Historial (NO interrumpe) y se confirma ---
+in 0 finish down
+in 150 finish up
+run 500
+in 0 finish down
+in 150 finish up
+run 500
 settime 79380
-doodle 50
-run 400
+doodle 50 10 heart
+run 1000
 expect serial Dibujo] de #50
+expect serial ACK a #50 msg 10
 
 # --- Verlo: IDLE -> Historial -> abrir el registro "[dibujo]" (idx 0) ---
 pot 512
@@ -42,9 +107,13 @@ tap morse
 wait 300
 expect text Historial
 expect text dibujo
+pot 0                          # el mas reciente (arriba del todo)
+wait 400
 in 0 morse down
 in 200 morse up
 run 700
 expect text De #50
+expect pixel 53 21 on          # celda (9,0): borde superior del lienzo recibido
+expect pixel 17 21 off         # celda (0,0)
 shot doodle_recibido
-print Dibujo: recibido al Historial y visible al abrirlo
+print 4) Dibujo: recibido al Historial, confirmado y visible al abrirlo

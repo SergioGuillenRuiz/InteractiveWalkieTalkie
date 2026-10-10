@@ -93,18 +93,22 @@ void backgroundTick() {
             // sincroniza el reloj con su epoch. No es un mensaje (no va al historial).
             Chat_handleBeacon();
         } else if (kind == CHAT_DOODLE) {
-            // Dibujo entrante: se trata como un mensaje mas (NO interrumpe ni
-            // despierta). Va al historial como "[dibujo]" y se guarda con el MISMO
-            // sello de tiempo que su registro para poder abrirlo/verlo desde alli.
+            // Dibujo entrante: se trata como un mensaje mas (NO interrumpe ni despierta): se confirma con un
+            // ACK (siempre, aunque sea repetido), no se duplica y va al historial como "[dibujo]" con su
+            // lienzo dentro del propio registro (se abre/ve desde alli y sobrevive a un reinicio).
             if (sender != Device_id()) {
                 Chat_noteHeard(sender);
-                uint8_t buf[DOODLE_BYTES];
-                for (int i = 0; i < DOODLE_BYTES; i++)
-                    buf[i] = (i + 2 < (int)raw.length()) ? (uint8_t)raw[i + 2] : 0;
-                History_addIncoming("[dibujo]", sender);
-                Doodle_onReceived(sender, buf, History_getTimestamp(0));   // idx 0 = el recien anadido
-                Serial.print("[Dibujo] de #"); Serial.println(sender);
-                onNewIncoming(sender, "(un dibujo)");
+                Chat_queueAck(sender, msgId);
+                if (!Chat_seenBefore(sender, msgId)) {
+                    uint8_t buf[DOODLE_BYTES];
+                    for (int i = 0; i < DOODLE_BYTES; i++) buf[i] = (uint8_t)raw[DOODLE_PAYLOAD_OFFSET + i];
+                    History_addIncomingDoodle(buf, sender);
+                    Serial.print("[Dibujo] de #"); Serial.println(sender);
+                    onNewIncoming(sender, "(un dibujo)");
+                } else {
+                    Serial.print("[Chat] Duplicado descartado de #"); Serial.print(sender);
+                    Serial.print(" msg "); Serial.println(msgId);
+                }
             }
         } else if (kind == CHAT_MSG) {
             if (sender != Device_id()) {        // ignorar el eco de nuestro propio mensaje
@@ -125,6 +129,7 @@ void backgroundTick() {
             // chat y no deben ensuciar el historial. Los mensajes de usuario siempre
             // viajan con sobre (CHAT_MSG), asi que nunca caen en esta rama.
             bool gamePkt =
+                (raw.length() >= 1 && raw[0] == 0x04) ||   // dibujo con formato no valido (truncado / antiguo)
                 (raw.length() >= 1 && raw[0] == 0x07) ||   // Tres en raya
                 (raw.length() >= 2 && raw[0] == 'T' &&
                  (raw[1] == 'S' || raw[1] == 'I' || raw[1] == 'H' ||
@@ -901,15 +906,12 @@ bool handleHistoryMenu() {
 
                 display.clearDisplay();
                 drawTitleBar(titulo.c_str(), edad.c_str());
-                if (full == "[dibujo]") {
-                    // Registro de un dibujo: mostrar el dibujo REAL (si sigue guardado).
-                    if (Doodle_isStored(History_getSender(selected), History_getTimestamp(selected))) {
-                        Doodle_drawStored(16, 20);                      // lienzo 24x24
-                    } else {
-                        display.setTextColor(SH110X_WHITE);
-                        srCenter("Dibujo recibido", 40, 1);
-                        srCenter("(ya no guardado)", 54, 1);
-                    }
+                if (History_isDoodle(selected)) {
+                    Doodle_draw(History_getDoodle(selected), 16, 20);   // lienzo 24x24 guardado en el registro
+                } else if (full == "[dibujo]") {                        // registro antiguo de un dibujo: no se guardo el lienzo
+                    display.setTextColor(SH110X_WHITE);
+                    srCenter("Dibujo recibido", 40, 1);
+                    srCenter("(ya no guardado)", 54, 1);
                 } else {
                     display.setTextColor(SH110X_WHITE);
                     drawWrappedMessage(full, 20);

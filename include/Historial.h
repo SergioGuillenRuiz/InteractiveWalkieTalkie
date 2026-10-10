@@ -13,6 +13,15 @@ void History_addIncoming(const String &msg, uint8_t sender);  // recibido (sende
 void History_addOutgoing(const String &msg);                  // enviado por mi
 void History_addMessage(const String &msg);                   // compat -> recibido, sender desconocido
 
+// --- Dibujos (lienzo 24x24, DOODLE_BYTES bytes, ver Doodle.h) --------------------------------------
+// Un dibujo es un registro mas del historial (texto "[dibujo]"): lleva su propio sello de tiempo, su
+// emisor y sus flags (enviado / no leido) y el lienzo viaja DENTRO del registro, tanto en RAM como en la
+// EEPROM, asi que se conserva tras reiniciar y se descarta o se borra a la vez que su registro.
+void History_addIncomingDoodle(const uint8_t *bitmap, uint8_t sender);
+void History_addOutgoingDoodle(const uint8_t *bitmap);
+bool           History_isDoodle(int index);          // el registro es un dibujo con su lienzo guardado
+const uint8_t *History_getDoodle(int index);         // DOODLE_BYTES bytes, o nullptr si no es un dibujo
+
 String        History_getMessage(int index);
 unsigned long History_getTimestamp(int index);
 bool          History_isOutgoing(int index);   // true = lo enviaste tu

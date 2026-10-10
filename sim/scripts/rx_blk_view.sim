@@ -8,6 +8,7 @@ wait 200
 # La baliza de arranque (a los 2-4 s) ocupa el canal ~120 ms y el equipo no oye mientras emite: se espera
 # a que salga para que lo que sigue no dependa de esa coincidencia (la siguiente tarda ~30 s).
 waitfor serial 0 6000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 lora rx primero
 wait 400
 expect serial Guardado: primero

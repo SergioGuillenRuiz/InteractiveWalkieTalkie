@@ -51,7 +51,10 @@ struct PendingAck { bool used; uint8_t target; uint8_t msgId; uint32_t dueAt; };
 static PendingAck g_acks[ACK_QUEUE];
 
 // --- Outbox (mensajes enviados sin confirmar) ---
-struct OutItem { uint8_t state; uint8_t msgId; uint8_t target; String text; uint8_t retries; uint32_t nextAt; };
+// state: 0 = libre, 1 = mensaje de texto pendiente (text), 2 = dibujo pendiente (doodle).
+struct OutItem { uint8_t state; uint8_t msgId; uint8_t target; String text; uint8_t retries; uint32_t nextAt; uint8_t doodle[DOODLE_BYTES]; };
+#define OB_TEXT    1
+#define OB_DOODLE  2
 static OutItem g_out[OB_SLOTS];
 static const uint8_t OB_MAGIC[3] = { 'O', 'B', '1' };
 
@@ -70,6 +73,15 @@ static bool txMessage(uint8_t mid, const String &text) {
   p += (char)Device_id();
   p += (char)mid;
   p += text;
+  return Lora_send(p);
+}
+
+static bool txDoodle(uint8_t mid, const uint8_t *bitmap) {
+  String p;
+  p += CHAT_MARK_DOODLE;
+  p += (char)Device_id();
+  p += (char)mid;
+  for (int i = 0; i < DOODLE_BYTES; i++) p += (char)bitmap[i];
   return Lora_send(p);
 }
 
@@ -111,6 +123,12 @@ static void obWriteSlot(int i) {
   EEPROM.write(a + 0, g_out[i].state);
   EEPROM.write(a + 1, g_out[i].msgId);
   EEPROM.write(a + 2, g_out[i].target);
+  if (g_out[i].state == OB_DOODLE) {                // el lienzo ocupa el hueco del texto (bytes crudos)
+    EEPROM.write(a + 3, DOODLE_BYTES);
+    for (uint8_t k = 0; k < DOODLE_BYTES; k++) EEPROM.write(a + 4 + k, g_out[i].doodle[k]);
+    EEPROM.write(a + 4 + DOODLE_BYTES, '\0');
+    return;
+  }
   uint8_t len = (uint8_t)min((size_t)g_out[i].text.length(), (size_t)(OB_MAX_MSG_LEN - 1));
   EEPROM.write(a + 3, len);
   for (uint8_t k = 0; k < len; k++) EEPROM.write(a + 4 + k, (uint8_t)g_out[i].text[k]);
@@ -125,14 +143,15 @@ static void obSaveAll() {
   EEPROM.end();
 }
 
-static void outboxAdd(uint8_t mid, const String &text) {
+static void outboxAdd(uint8_t mid, const String &text, const uint8_t *doodle = nullptr) {
   int slot = -1;
-  for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state != 1) { slot = i; break; }
+  for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state == 0) { slot = i; break; }
   if (slot < 0) { slot = 0; Serial.println("[Chat] Outbox llena: se descarta el pendiente mas antiguo"); }
-  g_out[slot].state   = 1;
+  g_out[slot].state   = doodle ? OB_DOODLE : OB_TEXT;
   g_out[slot].msgId   = mid;
   g_out[slot].target  = Device_id();
   g_out[slot].text    = text;
+  if (doodle) memcpy(g_out[slot].doodle, doodle, DOODLE_BYTES);
   g_out[slot].retries = 0;
   g_out[slot].nextAt  = millis() + nextRetryDelay();
   obSaveAll();
@@ -141,7 +160,7 @@ static void outboxAdd(uint8_t mid, const String &text) {
 static void outboxRemove(uint8_t mid) {
   bool changed = false;
   for (int i = 0; i < OB_SLOTS; i++)
-    if (g_out[i].state == 1 && g_out[i].msgId == mid) { g_out[i].state = 0; g_out[i].text = ""; changed = true; }
+    if (g_out[i].state != 0 && g_out[i].msgId == mid) { g_out[i].state = 0; g_out[i].text = ""; changed = true; }
   if (changed) {
     obSaveAll();
     // Confirmacion de entrega independiente del estado de la pantalla de resultado
@@ -152,10 +171,10 @@ static void outboxRemove(uint8_t mid) {
 
 static void flushOutbox(uint32_t now) {
   for (int i = 0; i < OB_SLOTS; i++)
-    if (g_out[i].state == 1) { g_out[i].retries = 0; g_out[i].nextAt = now; }
+    if (g_out[i].state != 0) { g_out[i].retries = 0; g_out[i].nextAt = now; }
 }
 
-int Chat_pendingCount() { int n = 0; for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state == 1) n++; return n; }
+int Chat_pendingCount() { int n = 0; for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state != 0) n++; return n; }
 
 void Chat_load() {
   // Estado de RAM a valores de arranque. En hardware las estaticas ya arrancan
@@ -187,9 +206,12 @@ void Chat_load() {
     uint8_t tg  = EEPROM.read(a + 2);
     uint8_t len = EEPROM.read(a + 3);
     String t = "";
-    if (st == 1 && len > 0 && len < OB_MAX_MSG_LEN) {
+    if (st == OB_TEXT && len > 0 && len < OB_MAX_MSG_LEN) {
       for (uint8_t k = 0; k < len; k++) t += (char)EEPROM.read(a + 4 + k);
-      g_out[i].state = 1;
+      g_out[i].state = OB_TEXT;
+    } else if (st == OB_DOODLE && len == DOODLE_BYTES) {
+      for (uint8_t k = 0; k < DOODLE_BYTES; k++) g_out[i].doodle[k] = EEPROM.read(a + 4 + k);
+      g_out[i].state = OB_DOODLE;
     } else {
       g_out[i].state = 0;
     }
@@ -204,7 +226,7 @@ void Chat_load() {
   // contador arranca por encima del mayor pendiente (si no, tras un reinicio un
   // envio nuevo reusaria el id de un mensaje aun sin confirmar y el ACK casaria mal).
   uint8_t maxMid = 0;
-  for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state == 1 && g_out[i].msgId > maxMid) maxMid = g_out[i].msgId;
+  for (int i = 0; i < OB_SLOTS; i++) if (g_out[i].state != 0 && g_out[i].msgId > maxMid) maxMid = g_out[i].msgId;
   if (maxMid != 0) { g_nextMsgId = (uint8_t)(maxMid + 1); if (g_nextMsgId == 0) g_nextMsgId = 1; }
 
   Serial.print("[Chat] Outbox cargada, pendientes: "); Serial.println(Chat_pendingCount());
@@ -225,8 +247,9 @@ ChatKind Chat_parse(const String &raw, String &text, uint8_t &sender, uint8_t &m
     msgId  = (uint8_t)raw[2];
     return CHAT_ACK;
   }
-  if (raw.length() >= 2 + DOODLE_BYTES && raw[0] == CHAT_MARK_DOODLE) {
+  if (raw.length() >= DOODLE_PAYLOAD_OFFSET + DOODLE_BYTES && raw[0] == CHAT_MARK_DOODLE) {
     sender = (uint8_t)raw[1];
+    msgId  = (uint8_t)raw[2];
     return CHAT_DOODLE;
   }
   if (raw.length() >= 7 && raw[0] == CHAT_MARK_BEACON) {
@@ -297,13 +320,18 @@ void Chat_queueAck(uint8_t targetId, uint8_t msgId) {
   g_acks[slot].dueAt  = millis() + ACK_DELAY_MIN_MS + (uint32_t)random(ACK_DELAY_MAX_MS - ACK_DELAY_MIN_MS + 1);
 }
 
-void Chat_sendDoodle(const uint8_t *buf32) {
-  String packet;
-  packet += CHAT_MARK_DOODLE;
-  packet += (char)Device_id();
-  for (int i = 0; i < DOODLE_BYTES; i++) packet += (char)buf32[i];
-  Lora_send(packet);
-  Serial.println("[Dibujo] enviado");
+bool Chat_sendDoodle(const uint8_t *bitmap) {
+  uint8_t mid = nextMsgId();
+  if (!txDoodle(mid, bitmap)) return false;
+  Serial.print("[Dibujo] enviado msg "); Serial.println(mid);
+
+  History_addOutgoingDoodle(bitmap);
+  outboxAdd(mid, "", bitmap);    // encolar (persistente) para reintentos/recuperacion, como un mensaje de texto
+
+  g_awaiting   = true;
+  g_delivered  = false;
+  g_lastSentId = mid;
+  return true;
 }
 
 bool Chat_awaitingAck() { return g_awaiting; }
@@ -413,10 +441,7 @@ void Chat_handleBeacon() {
   // Hora del peer. Si es de una generacion de ajuste MAS RECIENTE el reloj salta: se
   // reajustan las marcas de tiempo guardadas para que las antiguedades no cambien.
   int32_t step = Clock_syncFromPeer(s_beaconEpoch, s_beaconGen);
-  if (step != 0) {
-    History_shiftTimestamps(step);
-    Doodle_shiftTimestamps(step);
-  }
+  if (step != 0) History_shiftTimestamps(step);
 }
 
 void Chat_beaconSoon() {
@@ -430,12 +455,18 @@ void Chat_tick() {
   uint32_t now = millis();
   Clock_tickPersist();
 
-  // ACK pendientes cuyo retardo ya paso (uno por vuelta: cada emision bloquea el tiempo en el aire).
+  // Como mucho UNA emision por vuelta: cada una bloquea 120-350 ms (el tiempo en el aire) y encadenar dos
+  // (un ACK y la baliza, p.ej.) dejaria al equipo sordo a los botones el doble: se puede perder una pulsacion
+  // corta. Lo que no cabe espera a la vuelta siguiente (unos ms despues, ya con los botones atendidos).
+  bool txDone = false;
+
+  // ACK pendientes cuyo retardo ya paso.
   if (!Lora_isAsleep()) {
     for (int i = 0; i < ACK_QUEUE; i++) {
       if (!g_acks[i].used || (int32_t)(now - g_acks[i].dueAt) < 0) continue;
       g_acks[i].used = false;
       Chat_sendAck(g_acks[i].target, g_acks[i].msgId);
+      txDone = true;
       break;
     }
   }
@@ -446,9 +477,10 @@ void Chat_tick() {
   bool radioOn = !Lora_isAsleep();    // con la radio dormida (suspension prolongada) no se emite ni se reintenta
   // (Escuchar antes de hablar: si entra una trama o hay un paquete sin leer, la baliza espera unos ms
   //  en vez de destruirlo; g_beaconDue no se toca y se reintenta en la siguiente vuelta.)
-  if (ambient && radioOn && (int32_t)(now - g_beaconDue) >= 0 && !Lora_busy()) {
+  if (ambient && radioOn && !txDone && (int32_t)(now - g_beaconDue) >= 0 && !Lora_busy()) {
     sendBeacon();
     g_beaconDue = now + nextBeaconDelay();
+    txDone = true;
   }
 
   // Presencia, equipo por equipo: al pasar offline->online se avisa y se reactivan los
@@ -474,13 +506,15 @@ void Chat_tick() {
 
   // Reintentos de los mensajes sin confirmar.
   for (int i = 0; i < OB_SLOTS; i++) {
-    if (g_out[i].state != 1 || !radioOn) continue;
+    if (g_out[i].state == 0 || !radioOn) continue;
     if (now < g_out[i].nextAt) continue;
-    if (Lora_busy()) break;               // entra algo: el reintento espera (se vuelve a mirar en la siguiente vuelta)
+    if (txDone || Lora_busy()) break;     // ya se emitio en esta vuelta / entra algo: el reintento espera a la siguiente
     if (g_out[i].retries < MSG_RETRY_MAX) {
-      txMessage(g_out[i].msgId, g_out[i].text);
+      if (g_out[i].state == OB_DOODLE) txDoodle(g_out[i].msgId, g_out[i].doodle);
+      else                             txMessage(g_out[i].msgId, g_out[i].text);
       g_out[i].retries++;
       g_out[i].nextAt = now + nextRetryDelay();
+      txDone = true;
       Serial.print("[Chat] Reintento msg "); Serial.print(g_out[i].msgId);
       Serial.print(" ("); Serial.print(g_out[i].retries); Serial.println(")");
     }

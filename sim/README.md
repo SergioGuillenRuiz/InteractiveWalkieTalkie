@@ -109,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File net_test.ps1     ::  Windows
 
 Escenas: difusión de 1 equipo a 2 (con los ACK de ambos), mensajes en los dos sentidos, **emisión
 simultánea** (las dos tramas se pisan y se recuperan por reintentos), hora puesta a mano que adopta
-otro equipo y tres equipos viéndose por las balizas. Internamente cada equipo corre en modo `--keys`
+otro equipo, tres equipos viéndose por las balizas y un **dibujo** de un equipo a otro (con su confirmación). Internamente cada equipo corre en modo `--keys`
 (con guion de teclas) y comparte el aire con `--air <dir> --node <id>`; su salida serie y el resumen de
 radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
 y se comprueban.
@@ -120,7 +120,7 @@ Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan j
 milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
 oyen los demás desde el ms *t+1* con su instante de inicio exacto, de modo que los tiempos en el aire, el
 half-duplex y las **colisiones son los de la realidad** y el resultado es **determinista**: no depende de la
-velocidad de la máquina ni del azar del arranque (las 5 escenas tardan ~2 s). Sin `--nodes` cada proceso
+velocidad de la máquina ni del azar del arranque (las 6 escenas tardan ~2 s). Sin `--nodes` cada proceso
 lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
 (es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
 la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
@@ -145,7 +145,8 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `presence.sim`     | Presencia del compañero por baliza: online tras oírla, offline tras el timeout |
 | `clock.sim`        | Reloj compartido: hora fijada/sincronizada, antigüedad real y persistencia tras reboot |
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
-| `doodle.sim`       | Lienzo 24×24: dibujar y enviar; recibir y mostrar |
+| `doodle.sim`       | Lienzo 24×24: editor, envío con pantalla de resultado ("Enviado" → "Entregado!" / "(sin confirmar)"), reintentos, el dibujo enviado y el recibido en el Historial |
+| `doodle_store.sim` | Dibujos persistentes: el lienzo vive en su registro del Historial (sobrevive a reinicios, sigue a su registro al desplazarse o borrarse, sin duplicados, outbox persistente con el mismo lienzo) |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
 | `radio_model.sim`  | Autotest del modelo de radio: la librería LoRa real contra el chip simulado (tiempos en el aire del roadmap, bloqueo al transmitir, reglas de recepción) |
@@ -210,10 +211,14 @@ chatack <destino> <msgId>          inyecta un ACK de un peer (confirmación de e
 presence <peerId> [epoch] [batt] [gen]   inyecta una BALIZA de presencia de un peer
                                    (gen = generación de ajuste de su hora; -1 = baliza antigua sin ese byte)
 in <ms> presence <peerId> [epoch] [batt] [gen]   baliza diferida (durante esperas bloqueantes)
-doodle <peerId>                    inyecta un DIBUJO 24x24 de ejemplo de un peer (marco + diagonal)
+doodle <peerId> [msgId] [heart|frame]   inyecta un DIBUJO 24x24 de un peer: "heart" (por defecto, una masa
+                                   en forma de corazón) o "frame" (marco + diagonal); msgId automático si falta
 ttt hello <peerId>                 Tres en raya: inyecta el HELLO de emparejamiento de un peer
 ttt state <peerId> <9digitos> <fin>   Tres en raya: inyecta un ESTADO del tablero (0/1/2 por casilla)
 in <ms> doodle|ttt ...             variantes diferidas (durante el bucle bloqueante de un juego)
+in <ms> expect|shot|print ...      una COMPROBACIÓN, captura o nota diferida: se ejecuta en ese instante, también
+                                   DENTRO de una espera bloqueante (un juego, una pantalla de resultado), donde
+                                   un `expect` normal solo podría mirar al terminar el run
 ```
 
 **Batería / hora / reinicio** (para las features de batería, presencia y reloj)
@@ -239,12 +244,17 @@ expect text <sub>      la pantalla contiene <sub>
 expect notext <sub>    la pantalla NO contiene <sub>
 expect serial <sub>    el log serie contiene <sub>
 expect sent <sub>      el último TX LoRa descifra y contiene <sub>
+expect sentdoodle <msgId> <píxeles> [x y]   algún TX reciente es un dibujo con ese msgId y ese nº de píxeles
+                       encendidos (y, si se dan, el píxel (x,y) encendido)
+expect times <n> <sub>   el log serie contiene <sub> EXACTAMENTE <n> veces
 expect beacon gen|batt|epoch|time <v>   la última BALIZA transmitida lleva ese valor (time = HH:MM)
 expect panel on|off    el panel OLED está encendido/apagado (la suspensión lo apaga)
 expect pixel <x> <y> on|off   estado de un píxel
 waitfor serial <min> <max> <texto>   ejecuta el firmware hasta que <texto> aparezca en el log serie (solo
                        lo nuevo) y comprueba que lo hace entre <min> y <max> ms (ritmo de balizas, reintentos)
 waitfor clear          olvida las esperas registradas;  expect spread <ms>: entre ellas, max-min >= <ms>
+waitfor txend          ejecuta el firmware hasta que la radio termine de emitir (la emisión es asíncrona: tras
+                       `waitfor serial ... [Chat] Baliza` la baliza aún está en el aire)
 watch pixel <x> <y> on|off <ms>   ejecuta el firmware <ms> y comprueba el píxel tras CADA vuelta de loop()
                        (detecta parpadeos que un expect puntual no ve)
 print <texto>          imprime una nota
@@ -292,7 +302,10 @@ Una opción desconocida o sin su valor, o un guion de teclas que no existe, term
 con código 2. Las carpetas de `--shots` y de `--eeprom` se crean si no existen.
 Para dar un id de equipo distinto a cada dispositivo, exporta `SIM_CHIPID` antes de
 lanzarlo (`Device_id()` lo deriva de ahí en el simulador, y también siembra su aleatorio:
-cada equipo sortea distinto, como la placa con su RNG por hardware).
+cada equipo sortea distinto, como la placa con su RNG por hardware). `SIM_SEED=<n>` cambia la secuencia aleatoria
+SIN cambiar la identidad: sirve para ejecutar un test con muchas secuencias (retardos de ACK, dispersión de
+reintentos y balizas) y descubrir los que solo pasan con una combinación afortunada de tiempos
+(`for s in $(seq 1 50); do SIM_SEED=$s ./out/linux/walkie_sim --fresh scripts/x.sim; done`).
 
 ## Modelo de radio (chip SX1276 + librería real)
 
@@ -302,9 +315,10 @@ los pines NSS/RST/DIO0. Reproduce lo que hace el silicio:
 
 - **modos** SLEEP / STDBY / TX / RX continuo / RX único (con su caducidad de 100 símbolos ≈ 102 ms a SF7),
   banderas IRQ que se borran escribiendo 1, FIFO de 256 bytes;
-- **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC) y la
-  librería bloquea ese tiempo (`endPacket()` espera a TxDone): 64 B a SF7 = 118 ms, 224 B = 348 ms, un ping a
-  SF10 = 698 ms; mientras transmite **no escucha** (half-duplex);
+- **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC): 64 B a
+  SF7 = 118 ms, 224 B = 348 ms, un ping a SF10 = 698 ms. `endPacket()` de la librería bloquea ese tiempo; el
+  firmware emite en modo asíncrono (`endPacket(true)`) y sigue con su bucle. Mientras transmite **no escucha**
+  (half-duplex);
 - **recibir**: una trama solo se oye si el chip está en un modo de recepción cuando se detecta su preámbulo y
   sigue en él hasta que termina; en STDBY/SLEEP/TX se pierde, con otro SF/BW/frecuencia/sincronismo no se
   demodula, dos tramas solapadas se pierden, con CRC activo una trama corrupta levanta `PayloadCrcError` (sin
@@ -316,15 +330,20 @@ parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal`
 da el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
 
 **Escribir tests con este modelo.** Una trama inyectada ocupa el canal lo que dura en el aire (un mensaje
-corto ~120 ms; uno largo ~300 ms) y el equipo contesta con su ACK (otros ~120 ms): dos inyecciones a la vez,
-o una que coincida con la baliza propia o con un ACK, se pisan y no se oye ninguna, igual que con la radio
-real. Por eso los guiones separan las tramas (`in <ms> chatmsg|lora|presence ...`, una por turno) y, cuando
-inyectan tras un `ff`, esperan antes a la baliza propia con `waitfor serial 0 40000 [Chat] Baliza`
-(justo después el canal queda libre unos 27 s).
+corto ~120 ms; uno largo ~300 ms; un dibujo ~300 ms) y el equipo contesta con su ACK, que sale entre 10 y 300 ms
+después de recibir y dura otros ~120 ms: dos inyecciones a la vez, o una que llegue mientras el equipo
+emite su ACK, se pisan y no se oye ninguna, igual que con la radio real. Por eso los guiones separan los
+mensajes (≥ 800 ms entre uno y el siguiente, con `in <ms> chatmsg|lora|presence ...` o con `run`) y, antes de inyectar
+tras un `ff` o justo tras el arranque, esperan a la baliza propia y a que acabe de emitirse
+(`waitfor serial 0 40000 [Chat] Baliza` + `waitfor txend`; justo después el canal queda libre unos 27 s).
+Los equipos inyectados son **educados**: no empiezan a emitir mientras el firmware está emitiendo, sino que
+esperan a que acabe (`radio peer polite off` lo desactiva). Queda la ventana física que ningún equipo evita:
+si el firmware empieza a emitir en los ~3 ms (3 símbolos de preámbulo) que tarda en detectar una trama ajena,
+las dos se pisan; es muy improbable y por eso conviene probar los tests con varias semillas (`SIM_SEED`).
 
 ```
 radio ideal on|off     cambia de modelo durante un guion
-radio peer sf|bw|crc|preamble|sync|freq <v>|reset   parámetros con que emiten los "otros equipos" inyectados
+radio peer sf|bw|crc|preamble|sync|freq <v>|polite on|off|reset   parámetros con que emiten los "otros equipos" inyectados
 radio deepsleep <ms>   ahorro opcional (Lora_setDeepSleepMs): la radio se duerme tras <ms> sin oír nada en suspensión (0 = nunca, el valor por defecto)
 radio mark             punto de partida de los contadores (expect rx / expect tx)
 radio report           resumen: tramas emitidas y su tiempo en el aire, destino de las recibidas, consumo

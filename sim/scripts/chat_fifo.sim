@@ -6,6 +6,7 @@ wait 300
 # La baliza de arranque (a los 2-4 s) ocupa el canal ~120 ms y el equipo no oye mientras emite: si
 # coincidiera con una trama que llega, esa se perderia. Se espera a que salga (la siguiente tarda ~30 s).
 waitfor serial 0 6000 [Chat] Baliza
+waitfor txend                              # (la baliza sigue en el aire: la emision es asincrona)
 
 # Una trama por turno: cada mensaje ocupa ~120 ms en el aire y el equipo contesta con su ACK (tras un
 # retardo aleatorio de hasta 300 ms y otros ~120 ms de emision); si llegara otra trama mientras tanto, o varias

@@ -44,6 +44,12 @@ bool dio0Level();               // nivel del pin DIO0 (RxDone/TxDone segun RegDi
 void setIdeal(bool on);
 bool ideal();
 void setLoopback(bool on);                   // lo transmitido vuelve como recibido (al acabar de emitirse)
+// "Compañero educado": un equipo inyectado por el guion no empieza a emitir mientras el firmware esta
+// emitiendo (escucha antes de hablar): su trama espera a que acabe la emision del firmware. Un compañero
+// real hace lo mismo (y reintenta si no recibe el ACK); sin esto, los tests dependerian de que la
+// baliza/ACK/reintento del firmware, que salen en instantes aleatorios, no coincidan con la inyeccion.
+void setPolite(bool on);
+bool polite();
 AirFrame &peerFrame();                       // parametros por defecto de las tramas inyectadas
 void inject(const std::string &payload, int rssi = -42, bool corrupt = false);   // trama que empieza AHORA
 void resetWorld();                           // reinicio en frio del reloj virtual: se olvidan tramas en vuelo
