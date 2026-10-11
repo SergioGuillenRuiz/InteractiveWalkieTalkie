@@ -40,9 +40,13 @@ bool Lora_isAsleep();
 // (no oye ni emite hasta despertar el equipo). 0 = nunca. Valor inicial: LORA_DEEP_SLEEP (Config.h).
 void     Lora_setDeepSleepMs(uint32_t ms);
 uint32_t Lora_deepSleepMs();
-// true si el modem esta recibiendo una trama ahora mismo (el canal esta ocupado): emitir ahora la
-// destruiria. Las emisiones que pueden esperar (balizas, reintentos) lo comprueban; Lora_send() ya
-// escucha antes de hablar por su cuenta.
+// Acceso al canal SIN BLOQUEAR. true = ahora NO conviene emitir: la radio esta emitiendo, el modem esta
+// recibiendo una trama (emitir la destruiria) o se espera la pausa aleatoria (1..CSMA_BACKOFF_MS) que sigue a
+// ver el canal ocupado (dos equipos que esperaban lo mismo no deben salir a la vez). Las emisiones periodicas o
+// que pueden esperar (balizas, reintentos, estado y entrada de los juegos) la consultan y, si esta ocupado, lo
+// reintentan en su siguiente vuelta: asi el bucle sigue atendiendo botones. Lora_send() tambien escucha antes
+// de hablar por su cuenta, pero BLOQUEA hasta que el canal se libera (centenas de ms): un toque corto de un
+// boton se pierde si cae dentro de esa espera.
 bool Lora_busy();
 void Lora_setRangeMode(bool on);   // HippoRadar: SF10 y +20 dBm (largo alcance) / vuelta al chat
 // true mientras dura el modo de largo alcance (SF10): la radio solo oye y emite en SF10, asi que NO oye el

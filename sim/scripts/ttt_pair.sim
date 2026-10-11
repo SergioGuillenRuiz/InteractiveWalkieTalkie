@@ -1,0 +1,71 @@
+# ============================================================
+#  Tres en raya - emparejamiento y aislamiento (un equipo + rivales inyectados; el cruce entre DOS firmwares
+#  reales esta en la escena H de net_test.sh).
+#    1) Quien ya esta emparejado contesta a cada HELLO de su rival con su ESTADO: si no, el rival que oyo
+#       "despues" seguia en "Buscando rival" hasta que el primero jugara.
+#    2) Un tercer equipo cercano (otro emisor) no pisa la partida ni recibe respuesta.
+#    3) Con la partida terminada ya no se contesta (un HELLO nuevo es otra partida).
+#  Un estado propio sale como ".S.": 0x07 'S' + id 137 (no imprimible) en el log de emisiones.
+#  Es logica pura del protocolo y se cuenta cada respuesta: se usa la radio ideal (sin perdidas por la ventana sorda
+#  que sigue a una emision propia ni por la ocupacion del canal). Con la radio realista, y dos firmwares reales
+#  que reintentan, lo cubre la escena H de net_test.sh.
+#  (Device_id del sim = 137.)
+# ============================================================
+radio ideal on
+wait 300
+waitfor serial 0 8000 [Chat] Baliza           # la primera baliza ya paso: no se mezcla con lo que se cuenta
+waitfor txend
+
+# --- Escena 1: soy X (rival #200 > 137) ---
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 1000 ttt hello 200                         # el rival me busca: me empareja
+in 1700 expect serial emparejado con #200
+in 1700 expect times 1 Enviando: .S.          # y le contesto con mi estado
+in 2400 ttt hello 200                         # sigue buscando (no oyo mi respuesta): se la repito
+in 3100 expect times 2 Enviando: .S.
+# Un tercer equipo (#77) juega a lo suyo en la misma sala: ni pisa mi tablero ni le contesto
+in 3400 ttt state 77 222222222 1
+in 3600 ttt hello 77
+in 4300 expect text Tu turno (X)              # mi tablero sigue vacio y es mi turno
+in 4300 expect times 2 Enviando: .S.
+in 4300 expect times 0 rival juega
+# El rival de verdad si cuenta: 2 fichas (la mia y la suya) -> vuelve a mover X
+in 4600 ttt state 200 100020000 0
+in 5300 expect times 1 rival juega, fichas: 2
+in 5300 expect text Tu turno (X)
+in 5800 finish down                           # salir: B largo
+in 6800 finish up
+run 7600
+expect text Env                               # de vuelta en el menu principal
+print Tres en raya: contesta al HELLO del rival emparejado y no hace caso a terceros
+
+# --- Escena 2: soy O (rival #50 < 137) y pierdo; con la partida terminada no contesto a otro HELLO ---
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 700 ttt hello 50                           # me empareja (soy O) y contesto con mi estado
+in 1400 ttt state 50 111000000 1              # fila completa del rival: fin
+in 2200 expect text Pierdes
+in 2400 ttt hello 50                          # el rival reentra: ya no es esta partida
+in 3300 expect times 3 Enviando: .S.          # 2 de la escena 1 + 1 de esta: ninguna respuesta tras el fin
+in 3300 expect text Pierdes
+in 3600 finish down                           # con la partida terminada basta un B corto
+in 3800 finish up
+run 4800
+expect text Env
+print Tres en raya: terminada la partida no contesta a un HELLO nuevo

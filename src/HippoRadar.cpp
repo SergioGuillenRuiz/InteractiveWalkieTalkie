@@ -95,7 +95,7 @@ static void sendPing() {
 // Lee los paquetes de juego: los "HR" del companero actualizan la senal. backgroundTick() atiende el resto
 // de la radio (el chat va en SF7 y en el radar, en SF10, no llega; pero lo que esperaba sigue su curso).
 static void rxTick() {
-  backgroundTick();
+  backgroundTick(false);                                    // (el radar ya vuelca su fotograma en cada vuelta)
   String m; int r = 0;
   while (Game_nextPacket(m, &r)) {
     if (m.length() >= 2 && m[0] == 'H' && m[1] == 'R') {
@@ -239,7 +239,7 @@ void startHippoRadar() {
     bool a = isMorsePressed();
 
     // radio: pings frecuentes para reaccionar al girar
-    if (now >= nextPing) { sendPing(); nextPing = now + RADAR_PING_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1); }
+    if (now >= nextPing && !Lora_busy()) { sendPing(); nextPing = now + RADAR_PING_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1); }
     rxTick();
     if (now - lastHeard > 3500) haveLink = false;
     if (haveLink) distM = estDistance(rssiEMA);

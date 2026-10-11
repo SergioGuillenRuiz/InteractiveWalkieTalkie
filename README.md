@@ -151,7 +151,7 @@ La hora se usa para la antigüedad de los mensajes ("hace 3m").
 
 | Juego | Cómo se juega |
 |---|---|
-| **Tetris Coop** | Tablero **cooperativo** compartido. Modos: *Jugar con CPU*, *2 Jug: Crear* (anfitrión) y *2 Jug: Unirse* (invitado, con otro equipo por radio). **Potenciómetro** = columna de la pieza, **A** = girar, **B corta** = caída rápida, **mantén B** = salir. |
+| **Tetris Coop** | Tablero **cooperativo** compartido. Modos: *Jugar con CPU*, *2 Jug: Crear* (anfitrión) y *2 Jug: Unirse* (invitado, con otro equipo por radio). **Potenciómetro** = columna de la pieza, **A** = girar, **B corta** = caída rápida, **mantén B** = salir (en *Buscando partida…* B cancela). Cada uno ve **su** pieza maciza (leyenda *Tu*) y la del otro hueca. |
 | **Poker** | Texas Hold'em contra la CPU (1000 fichas, ciegas 10/20). **B** cambia de acción (igualar/pasar, subir, retirarse) y **A** confirma. |
 | **RefillGame** | "La Cervecería": llegan jarras; el **potenciómetro** regula el caudal del grifo y **A** para y entrega la jarra. Gana puntos cuanto más cerca de la marca; desbordar o quedarse corto cuesta una vida (3). |
 | **Choose4Me** | Una bola mágica: piensa una pregunta, **A** para preguntar; **B** sale. |
@@ -205,8 +205,10 @@ En **Linux (GNOME)** hay una versión equivalente y separada en [`sim/linux/`](s
 
 ```bash
 cd sim/linux
-./run_tests.sh           # compila y ejecuta toda la batería de tests (42 suites)
-./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido
+./run_tests.sh           # compila y ejecuta toda la batería de tests (44 suites)
+./seed_tests.sh 1 50     # la misma batería con 50 secuencias aleatorias (descubre tests que dependen de la suerte)
+./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido (10 escenas, incluidas partidas
+                         # de 3 en raya, Tetris y HippoRadar entre dos firmwares reales)
 ./run.sh                 # modo interactivo (abre una ventana de GNOME Terminal)
 ```
 

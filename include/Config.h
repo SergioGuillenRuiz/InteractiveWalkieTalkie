@@ -92,6 +92,10 @@
 // encendidos a la vez no deben emitir SIEMPRE juntos (la radio no oye mientras emite:
 // se taparian la baliza una y otra vez y no se verian nunca).
 #define BEACON_JITTER_MS     3000UL
+// Baliza "ya": al volver del radar, poner la hora o despertar el equipo se anuncia enseguida, pero tras una pausa
+// aleatoria 0..BEACON_SOON_JITTER_MS: dos equipos que vuelven a la vez (los dos salen del radar, o se ponen la hora)
+// emitirian en el mismo ms y se pisarian siempre.
+#define BEACON_SOON_JITTER_MS 300UL
 // Companeros que se recuerdan a la vez (presencia, bateria): con mas, se sustituye el
 // que lleva mas tiempo sin oirse.
 #define MAX_PEERS            4

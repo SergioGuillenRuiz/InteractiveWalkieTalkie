@@ -1,0 +1,29 @@
+# ============================================================
+#  HIPPORADAR entre DOS firmwares reales (escena J): equipo B (#201); ver hippo_a.sim. B sale del radar 1,5 s
+#  despues que A, y anuncia su vuelta al chat (A, ya en SF7, la oye).
+# ============================================================
+wait 300
+pot 1023
+wait 350
+tap morse
+wait 300
+pot 768
+wait 350
+expect text HippoRadar
+in 0 morse down                 # entrar al juego: pantalla de inicio
+in 150 morse up
+in 600 morse down               # A: empezar -> radar (largo alcance)
+in 750 morse up
+in 7000 expect text GIRA        # los dos se oyen: enlace establecido
+in 7000 expect notext BUSCANDO
+in 7000 shot hippo_duo_b_turn
+in 24000 expect text VE HACIA
+in 24000 expect airtime 45 20000
+in 26400 radio mark
+in 26500 finish down            # B: salir
+in 26700 finish up
+run 35000
+expect text Env
+expect tx 1 3                   # se anuncia al volver al chat
+print HippoRadar (B): se enlaza, se bloquea, sale y se anuncia
+wait 1000

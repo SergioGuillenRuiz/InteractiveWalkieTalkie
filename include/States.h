@@ -49,8 +49,10 @@ extern SendSubState sendSubState;
 
 // Atiende la radio (recibe y guarda mensajes) y refresca la pantalla.
 // Llamar en el bucle principal y en cualquier espera bloqueante para poder
-// recibir mensajes en todo momento.
-void backgroundTick();
+// recibir mensajes en todo momento. Los bucles que ya vuelcan su propio fotograma
+// a la pantalla en cada vuelta (juegos con animacion) pasan refreshDisplay=false:
+// el volcado periodico seria un volcado I2C de mas (~45 ms cada uno).
+void backgroundTick(bool refreshDisplay = true);
 
 // Paquetes de JUEGO (Tetris 'T..', Tres en raya 0x07, HippoRadar "HR"). backgroundTick() es el UNICO que lee
 // la radio: atiende ella los paquetes de chat (mensajes, ACK, balizas, dibujos) y deja aqui los de juego para

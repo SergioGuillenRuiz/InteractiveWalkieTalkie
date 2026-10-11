@@ -10,6 +10,8 @@ tap morse
 wait 200
 expect text Enviar
 lora rx uno
+wait 300
+lora rx uno   # (la trama se repite: si la 1a cayera justo al acabar una emision propia, cuando el chip aun no escucha, llega la 2a)
 wait 400
 expect serial Guardado: uno
 tap finish
@@ -25,6 +27,8 @@ wait 200
 tap morse
 wait 250
 lora rx dos
+wait 300
+lora rx dos
 wait 400
 expect serial Guardado: dos
 tap finish
@@ -38,6 +42,8 @@ wait 200
 tap morse
 wait 250
 lora rx tres
+wait 300
+lora rx tres
 wait 400
 expect serial Guardado: tres
 tap finish
@@ -49,6 +55,8 @@ wait 200
 tap morse
 wait 300
 expect text Historial
+lora rx cuatro
+wait 300
 lora rx cuatro
 wait 400
 expect serial Guardado: cuatro
@@ -71,6 +79,8 @@ expect serial Guardado: siete
 ff 600000
 wait 200
 expect notext Env
+lora rx ocho
+wait 300
 lora rx ocho
 wait 500
 expect serial Guardado: ocho

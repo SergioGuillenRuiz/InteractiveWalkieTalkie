@@ -21,3 +21,34 @@ waitfor serial 26900 33200 [Chat] Baliza
 expect spread 900
 print Primera baliza a los 2-4 s, las siguientes cada 27-33 s y NO todas iguales
 # (el equipo no llega a dormirse: son < 300 s)
+
+# --- Baliza "ya" (Chat_beaconSoon: al volver del radar, al poner la hora, al despertar): el equipo se anuncia
+#     enseguida, pero tras una pausa aleatoria 0..300 ms. Dos equipos que vuelven a la vez (los dos salen del radar,
+#     o se ponen la hora a la vez) no deben emitir en el mismo ms: se pisarian siempre. ---
+waitfor txend
+waitfor clear
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+waitfor txend
+beaconsoon
+waitfor serial 0 450 [Chat] Baliza
+expect spread 50                      # no sale siempre en el mismo instante
+print Baliza "ya": sale en menos de 0,45 s y con una pausa distinta cada vez

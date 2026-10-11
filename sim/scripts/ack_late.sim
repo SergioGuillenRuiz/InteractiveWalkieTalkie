@@ -25,7 +25,8 @@ expect text kissy
 in 0 morse down
 in 120 morse up
 in 4000 chatack 137 1
-run 4600
+in 4300 chatack 137 1                          # (el receptor confirma de nuevo cada reintento; si el 1o cayera justo al acabar una emision propia, cuando el chip aun no escucha, este llega)
+run 4900
 
 expect serial Enviando: kissy
 expect serial Confirmado: entregado

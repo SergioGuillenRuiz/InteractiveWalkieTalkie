@@ -30,6 +30,7 @@
 #include "EEPROM.h"
 #include "SimpleCrypto.h"      // String SimpleCrypto_encrypt/decrypt
 #include "Clock.h"             // Clock_set/Clock_now (comando settime)
+#include "Chat.h"              // Chat_beaconSoon (comando beaconsoon)
 #include <Adafruit_SH110X.h>   // tipo del display
 
 #undef min
@@ -146,6 +147,29 @@ static void runFor(uint32_t ms, uint32_t slack = SLACK) {
     if (timeout) fprintf(stderr, "[sim] aviso: espera bloqueante (deadline alcanzado)\n");
 }
 
+// Ejecuta el firmware hasta que la radio termine de emitir lo que tenga en el aire (maximo 4 s) y unas vueltas mas
+// para que vuelva a escuchar (la emision es asincrona y el firmware la da por acabada al consultar la radio).
+// Devuelve false si la emision no acabo a tiempo.
+static bool settleTx() {
+    uint32_t t0 = sim::now(), limit = t0 + 4000;
+    sim::setDeadline(limit + SLACK);
+    bool ended = false;
+    try {
+        while (sim::now() < limit) {
+            sx::sync();
+            if (sx::currentMode() != 3) { ended = true; break; }
+            uint32_t before = sim::now();
+            loop();
+            if (sim::now() == before) sim::advance(2);
+        }
+    } catch (sim::Timeout &) {}
+    if (ended) {                 // unas vueltas mas: el firmware vuelve a poner la radio a escuchar al acabar de emitir
+        try { for (int i = 0; i < 10; i++) { loop(); sim::advance(2); } } catch (sim::Timeout &) {}
+    }
+    sim::clearDeadline();
+    return ended;
+}
+
 static void fastForward(uint32_t ms) {
     uint32_t target = sim::now() + ms;
     sim::setDeadline(target + SLACK);
@@ -162,6 +186,7 @@ static void fastForward(uint32_t ms) {
         }
     } catch (sim::Timeout &) {}
     sim::clearDeadline();
+    settleTx();                  // (pasos de 200 ms sin consultar la radio: puede haber una emision a medias)
 }
 
 static void tap(sim::EvKind k, uint32_t durMs) {
@@ -564,23 +589,7 @@ static void execLine(const std::string &raw) {
         if (what == "txend") {      // waitfor txend: ejecuta el firmware hasta que la radio termine de emitir lo que tenga en el aire
             // (la emision es asincrona: el firmware sigue con su bucle mientras el chip emite. Un guion que
             //  espera "[Chat] Baliza" tiene la baliza aun en el aire; inyectar una trama ahora la pisaria.)
-            uint32_t t0 = sim::now(), limit = t0 + 4000;
-            sim::setDeadline(limit + SLACK);
-            bool ended = false;
-            try {
-                while (sim::now() < limit) {
-                    sx::sync();
-                    if (sx::currentMode() != 3) { ended = true; break; }
-                    uint32_t before = sim::now();
-                    loop();
-                    if (sim::now() == before) sim::advance(2);
-                }
-            } catch (sim::Timeout &) {}
-            if (ended) {                 // unas vueltas mas: el firmware vuelve a poner la radio a escuchar al acabar de emitir
-                try { for (int i = 0; i < 10; i++) { loop(); sim::advance(2); } } catch (sim::Timeout &) {}
-            }
-            sim::clearDeadline();
-            check(ended, "radio: la emision en curso termina en menos de 4 s");
+            check(settleTx(), "radio: la emision en curso termina en menos de 4 s");
             return;
         }
         if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear | txend)"); return; }
@@ -680,6 +689,7 @@ static void execLine(const std::string &raw) {
         }
         else scriptError("accion desconocida en in: \"" + what + "\"");
     }
+    else if (cmd == "beaconsoon") { Chat_beaconSoon(); }   // el equipo se anuncia "ya" (como al volver del radar o poner la hora)
     else if (cmd == "reboot") { setup(); }
     else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
     else if (cmd == "battery") { int pct; if (!(is >> pct)) { scriptError("battery necesita un % 0-100"); return; } sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
@@ -867,6 +877,11 @@ static void execLine(const std::string &raw) {
             double pct = 100.0 * sx::txAirtimeBetween(t0, t1) / (double)win;
             char b[160]; snprintf(b, sizeof(b), "ocupacion del canal por este equipo en los ultimos %u ms: %.1f %% (maximo %.1f %%)", (unsigned)win, pct, maxPct);
             check(pct <= maxPct, b);
+        }
+        else if (sub == "busy") {      // expect busy on|off: Lora_busy() (acceso al canal sin bloquear: emitiendo, canal ocupado o pausa)
+            std::string st; is >> st;
+            if (st != "on" && st != "off") { scriptError("expect busy necesita on|off"); return; }
+            check(Lora_busy() == (st == "on"), std::string("Lora_busy() = ") + st);
         }
         else if (sub == "listening") { // expect listening on|off: la radio esta en recepcion ahora mismo
             std::string st; is >> st;

@@ -55,6 +55,8 @@ expect serial Guardado: happy
 
 # El peer confirma la entrega (destino = mi id 137, msgId = 1 = primer envio)
 chatack 137 1
+wait 200
+chatack 137 1                   # (el receptor confirma de nuevo cada reintento; si el 1o cayera justo al acabar una emision propia, cuando el chip aun no escucha, este llega)
 wait 300
 expect serial Confirmado: entregado
 

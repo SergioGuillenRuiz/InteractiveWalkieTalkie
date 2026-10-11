@@ -45,13 +45,16 @@ in 120 morse up
 in 700 expect text Buscando rival
 # 1) Buscando rival: llega un mensaje de chat, una baliza y un ACK ajeno
 in 800 chatmsg 50 1 hola desde el juego
+in 1500 chatmsg 50 1 hola desde el juego       # (el emisor repite si no recibe el ACK: mismo msgId, no se duplica)
 in 2200 expect serial Guardado: hola desde el juego
 in 2200 expect serial ACK a #50 msg 1
 in 2200 expect text Buscando rival            # la pantalla del juego sigue ahi
 in 2400 presence 60 0 80
+in 2700 presence 60 0 80                      # (si la 1a cayera justo al acabar una emision propia del juego, cuando el chip aun no escucha, esta llega)
 in 3000 expect serial equipo #60 en alcance
 in 3200 chatack 99 5                          # ACK para otro equipo: no es un mensaje
 in 3600 ttt hello 200                         # el rival (#200): empareja
+in 3900 ttt hello 200                         # (el rival repite su HELLO mientras no me oye)
 in 4400 expect serial emparejado con #200
 in 4400 expect serial soy X
 # 2) Ya en partida (mi turno): mover y recibir otro mensaje a mitad de partida
@@ -60,6 +63,7 @@ in 4900 morse down
 in 5020 morse up
 in 5600 expect serial juego casilla
 in 6000 chatmsg 50 2 mensaje a mitad de partida
+in 6700 chatmsg 50 2 mensaje a mitad de partida   # (idem)
 in 7500 expect serial Guardado: mensaje a mitad de partida
 in 7500 expect serial ACK a #50 msg 2
 in 7500 expect text Turno del rival           # sigue en el tablero, esperando al rival

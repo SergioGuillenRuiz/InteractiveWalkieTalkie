@@ -131,7 +131,18 @@ void setBatteryRaw(int raw) { g_battRaw = raw < 0 ? 0 : (raw > 1023 ? 1023 : raw
 int  getBatteryRaw() { return g_battRaw; }
 void resetClock() { g_now = 0; g_events.clear(); g_deadline = 0xFFFFFFFFu; sx::resetWorld(); }
 
-void serialPut(char c) { g_serial += c; }
+void serialPut(char c) {
+    g_serial += c;
+    // SIM_TRACE=1: cada linea del puerto serie tambien sale por stderr con su instante virtual (depurar escenas
+    // de varios equipos, donde interesa saber CUANDO ocurrio cada cosa). No afecta al log que ven los tests.
+    static const bool trace = getenv("SIM_TRACE") != nullptr;
+    static bool bol = true;
+    if (trace) {
+        if (bol) fprintf(stderr, "[%7u] ", (unsigned)g_now);
+        fputc(c, stderr);
+        bol = (c == '\n');
+    }
+}
 std::string serialLog() { return g_serial; }
 void serialClear() { g_serial.clear(); }
 
@@ -141,7 +152,14 @@ void serialClear() { g_serial.clear(); }
 // Tiempo (Arduino)
 // ---------------------------------------------------------------------------
 unsigned long millis() { return g_now; }
-unsigned long micros() { return (unsigned long)g_now * 1000UL; }
+// Cada placa real tiene su propio micros() (desde que arranco): dos equipos NO leen el mismo valor. El simulador los
+// desfasa por identidad (<1 ms, sin romper micros()/1000 == millis()), asi codigo como randomSeed(analogRead ^ micros())
+// no da la misma semilla a dos equipos que entran en un juego en el mismo ms.
+static const unsigned long g_microOffset = [] {
+    const char *e = getenv("SIM_CHIPID");
+    return e ? (unsigned long)((strtoul(e, nullptr, 0) * 7919ul) % 1000ul) : 0ul;
+}();
+unsigned long micros() { return (unsigned long)g_now * 1000UL + g_microOffset; }
 void delay(unsigned long ms) { sim::advance((uint32_t)ms); }
 void delayMicroseconds(unsigned int us) { sim::advance(us / 1000u); }
 void yield() { sim::applyDue(); }

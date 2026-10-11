@@ -48,5 +48,6 @@ in 13000 finish down
 in 14000 finish up
 run 15500
 expect text Env
+expect times 3 Enviando: TQ                    # el aviso de salida va 3 veces (no se confirma: si el unico se perdia, el invitado se quedaba con el tablero congelado)
 expect times 2 Historial] Guardado:            # solo los dos mensajes de chat: sin basura de balizas, ACK ni paquetes del juego
 print Tetris Coop (anfitrion): chat en el lobby y en la partida, entrada del invitado y ocupacion del canal < 55 %

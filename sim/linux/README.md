@@ -12,7 +12,8 @@ y los lanzadores, que viven separados en esta carpeta:
 | `run.bat`                   | `run.sh`                       | Modo interactivo o un script |
 | `run_tests.bat`             | `run_tests.sh`                 | Toda la batería de tests |
 | `net.bat` + `net.ps1`       | `net.sh`                       | N dispositivos interactivos comunicados por radio |
-| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (7 escenas). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~2 s); `net_test.ps1` usa el modelo de radio ideal |
+| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (10 escenas: chat, hora, dibujos y las partidas de 3 en raya, Tetris y HippoRadar entre dos firmwares reales, cada una con 16 semillas). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~13 s); `net_test.ps1` usa el modelo de radio ideal (solo las escenas de chat) |
+| —                           | `seed_tests.sh`                | Toda la batería con muchas secuencias aleatorias (`./seed_tests.sh [desde] [hasta] [paralelo]`) |
 | `engine/console_win.cpp`    | `console_linux.cpp`            | Ajuste de la consola para píxeles cuadrados |
 | `<conio.h>`, `<process.h>`  | `platform_linux.h`             | Teclado sin eco (termios), pid, ruta del ejecutable |
 
@@ -74,7 +75,10 @@ SIM_SEED=7 ../out/linux/walkie_sim --fresh ../scripts/peers.sim   # otra secuenc
 ```
 
 Para descubrir tests que solo pasan con una combinación afortunada de tiempos, ejecútalos con muchas semillas:
-`for s in $(seq 1 50); do SIM_SEED=$s ../out/linux/walkie_sim --fresh ../scripts/x.sim; done`.
+`./seed_tests.sh 1 50` (toda la batería, 4 procesos en paralelo) o
+`for s in $(seq 1 50); do SIM_SEED=$s ../out/linux/walkie_sim --fresh ../scripts/x.sim; done` (una suite).
+`SIM_TRACE=1` vuelca cada línea del puerto serie por la salida de error con su instante virtual (`[  12345] ...`): sirve para ver
+CUÁNDO pasó cada cosa en una escena de varios equipos.
 
 ## Notas de implementación
 

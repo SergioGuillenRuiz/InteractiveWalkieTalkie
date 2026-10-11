@@ -5,7 +5,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <deque>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -420,6 +422,16 @@ AirFrame &peerFrame() { return g_peer; }
 void setPolite(bool on) { g_polite = on; }
 bool polite() { return g_polite; }
 
+// Pausa aleatoria (ms) con que un par que esperaba a que el canal se librara vuelve a emitir: la misma que usa el
+// firmware (CSMA_BACKOFF_MS = 80). Con su propio generador para no alterar la secuencia aleatoria del firmware.
+static double peerBackoffMs() {
+    static std::mt19937 rng([] {
+        const char *sd = getenv("SIM_SEED");
+        return (unsigned)(777u + (sd ? strtoul(sd, nullptr, 0) * 31337u : 0u));
+    }());
+    return 1.0 + (double)(rng() % 80u);
+}
+
 void inject(const std::string &payload, int rssi, bool corrupt) {
     AirFrame a = g_peer;
     a.payload = payload;
@@ -427,7 +439,9 @@ void inject(const std::string &payload, int rssi, bool corrupt) {
     double start = nowMs();
     if (g_polite && !g_ideal) {
         advanceTo(start);                                          // poner el chip al dia: (esta emitiendo ahora?)
-        if (c.mode == MODE_TX && c.txEnd > start) start = c.txEnd + 1.0;   // espera a que el firmware termine de emitir
+        // Espera a que el firmware termine de emitir y, como un equipo real que escucha antes de hablar, una pausa
+        // aleatoria: emitir justo al acabar el firmware (cuando su chip aun no ha vuelto a escuchar) no es lo normal.
+        if (c.mode == MODE_TX && c.txEnd > start) start = c.txEnd + peerBackoffMs();
     }
     frames.push_back(mkFrame(a, start, corrupt));
 }

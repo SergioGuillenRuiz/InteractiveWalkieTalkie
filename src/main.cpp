@@ -22,6 +22,14 @@ void setup() {
   Serial.begin(115200);
 
 #if defined(ESP8266)
+  // random() reparte los retardos que evitan que dos equipos emitan a la vez (ACK, reintentos, balizas, pausas de
+  // escucha-antes-de-hablar). Si arrancara con la misma semilla en todas las placas, dos equipos encendidos a la vez
+  // sortearian lo mismo y chocarian siempre: se siembra con el RNG por hardware (el mismo que usa el cifrado) y el
+  // identificador del chip.
+  randomSeed(RANDOM_REG32 ^ ESP.getChipId());
+#endif
+
+#if defined(ESP8266)
   // El proyecto NO usa WiFi, pero el ESP8266 enciende el modem al arrancar
   // (gasta ~decenas de mA para nada). Apagarlo (modo NULL) es el mayor ahorro
   // de batería y no afecta a nada del firmware.

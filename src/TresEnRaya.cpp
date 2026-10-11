@@ -15,13 +15,21 @@
 //    HELLO:  0x07 'H' | emisor               (emparejamiento)
 //    ESTADO: 0x07 'S' | emisor | tablero[9] | fin(1)   (1 byte por casilla)
 //
-//  Emparejamiento: ambos difunden HELLO; al oir al rival se fija el rol por id
-//  (id menor = X, mueve primero). La sincronizacion es por ESTADO: quien mueve
-//  difunde el tablero completo y el rival lo adopta (robusto ante perdidas).
+//  Emparejamiento: ambos difunden HELLO (con jitter, para que dos equipos en fase no choquen
+//  siempre); al oir al rival se fija el rol por id (id menor = X, mueve primero) y quien ya
+//  esta emparejado contesta a cada HELLO con su ESTADO, asi el otro tambien se entera. La
+//  sincronizacion es por ESTADO: quien mueve difunde el tablero completo y el rival lo adopta
+//  (robusto ante perdidas). Solo se hace caso al rival emparejado: otro equipo cercano que
+//  juegue a lo suyo no pisa la partida.
 // ============================================================
 
 static const char TTT_MARK = 0x07;
 static const unsigned long HELLO_EVERY = 500;
+static const unsigned long HELLO_JITTER = 250;   // + aleatorio: con periodo fijo, dos equipos en fase chocaban para siempre
+// La respuesta a un HELLO sale tras una pausa: quien acaba de emitir no vuelve a escuchar hasta que su bucle consulta
+// la radio (un fotograma de la OLED son decenas de ms) y una respuesta inmediata se perderia siempre (igual que los ACK).
+static const unsigned long REPLY_MIN_MS = 120;
+static const unsigned long REPLY_JITTER_MS = 180;
 
 static uint8_t board[9];     // 0 vacio, 1 = X, 2 = O
 static uint8_t myRole;       // 1 = X, 2 = O, 0 = sin emparejar
@@ -54,26 +62,33 @@ static void sendState() {
   p += (char)(over ? 1 : 0);
   Lora_send(p);
 }
-// Devuelve 0 (nada), 'H' o 'S'; rellena 'sender'. Adopta el tablero si es 'S'.
+// Devuelve 0 (nada), 'H' o 'S'; rellena 'sender' y, si es un estado, el tablero recibido (nb) y su bandera de fin.
 // backgroundTick() atiende el chat (mensajes, ACK, balizas) y deja aqui solo los paquetes de juego.
-static char recvPkt(uint8_t &sender) {
-  backgroundTick();
+static char recvPkt(uint8_t &sender, uint8_t *nb, bool &nover) {
+  backgroundTick(false);                // (el juego ya vuelca su fotograma en cada vuelta)
   String m;
   if (!Game_nextPacket(m)) return 0;
   if (m.length() < 3 || m[0] != TTT_MARK) return 0;   // no es de este juego: descartar
   char type = m[1];
   sender = (uint8_t)m[2];
-  if (type == 'S' && m.length() >= 13) {
-    uint8_t nb[9]; int fin = 0;
-    for (int i = 0; i < 9; i++) { nb[i] = (uint8_t)m[3 + i]; if (nb[i]) fin++; }
-    // Adoptar solo estados igual o MAS nuevos (mas fichas): asi un re-envio antiguo
-    // no hace retroceder la partida y un estado perdido se recupera con el reenvio.
-    if (fin >= filled(board)) {
-      for (int i = 0; i < 9; i++) board[i] = nb[i];
-      over = (m[12] != 0) || winnerOf(board) || boardFull(board);
-    }
+  if (type == 'S') {
+    if (m.length() < 13) return 0;                    // estado truncado
+    for (int i = 0; i < 9; i++) nb[i] = (uint8_t)m[3 + i];
+    nover = (m[12] != 0);
   }
   return type;
+}
+
+// Adopta un estado del rival solo si es igual o MAS nuevo (mas fichas): asi un re-envio antiguo
+// no hace retroceder la partida y un estado perdido se recupera con el reenvio.
+static void adoptState(const uint8_t *nb, bool nover) {
+  int fin = 0;
+  for (int i = 0; i < 9; i++) if (nb[i]) fin++;
+  if (fin < filled(board)) return;
+  bool news = fin > filled(board);
+  for (int i = 0; i < 9; i++) board[i] = nb[i];
+  over = nover || winnerOf(board) || boardFull(board);
+  if (news) { Serial.print("[3enRaya] rival juega, fichas: "); Serial.println(fin); }
 }
 
 // --- Dibujo ---
@@ -132,7 +147,8 @@ void startTresEnRaya() {
   memset(board, 0, sizeof(board));
   myRole = 0; peerId = 0; paired = false; over = false; cursor = 4;
 
-  unsigned long lastHello = 0, lastResend = 0;
+  unsigned long lastHello = 0, helloGap = 0, lastResend = 0, resendGap = 1800, replyAt = 0;
+  bool replyPending = false;
   bool mWas = false, fWas = false;
   unsigned long fStart = 0; bool fLong = false;
 
@@ -143,12 +159,23 @@ void startTresEnRaya() {
     unsigned long now = millis();
 
     // --- Radio entrante ---
-    uint8_t sender = 0;
-    char t = recvPkt(sender);
-    if (t && !paired && sender != Device_id()) {   // emparejar al oir al rival
-      peerId = sender; myRole = (Device_id() < peerId) ? 1 : 2; paired = true;
+    uint8_t sender = 0, nb[9]; bool nover = false;
+    char t = recvPkt(sender, nb, nover);
+    if (t && sender == Device_id()) t = 0;         // (nunca hacerme caso a mi mismo)
+    if (t && !paired) {                            // emparejar al oir al rival
+      peerId = sender; myRole = (Device_id() < peerId) ? 1 : 2; paired = true; lastResend = now;
       Serial.print("[3enRaya] emparejado con #"); Serial.print(peerId);
       Serial.print(" soy "); Serial.println(myRole == 1 ? "X" : "O");
+    }
+    if (t && sender == peerId) {                   // solo hago caso a mi rival
+      if (t == 'S') adoptState(nb, nover);
+      else if (t == 'H' && !over && !replyPending) {   // HELLO: sigue buscando; contestarle (con pausa) para que sepa que estoy aqui
+        replyPending = true; replyAt = now + REPLY_MIN_MS + random(REPLY_JITTER_MS + 1);
+      }
+    }
+    if (replyPending && (long)(now - replyAt) >= 0 && !Lora_busy()) {
+      replyPending = false;
+      if (!over) { sendState(); lastResend = now; }
     }
 
     // --- Salir: FINISH largo ---
@@ -158,7 +185,7 @@ void startTresEnRaya() {
     bool fShort = (!fNow && fWas) && !fLong; fWas = fNow;
 
     if (!paired) {
-      if (now - lastHello >= HELLO_EVERY) { sendHello(); lastHello = now; }
+      if (now - lastHello >= helloGap && !Lora_busy()) { sendHello(); lastHello = now; helloGap = HELLO_EVERY + random(HELLO_JITTER + 1); }
       display.clearDisplay();
       display.setTextSize(1); display.setTextColor(SH110X_WHITE);
       tttCenter("3 en raya", 2);
@@ -177,8 +204,8 @@ void startTresEnRaya() {
     // --- Robustez: mientras espero al rival, reenvio mi estado cada ~2 s (con
     //     jitter) por si se perdio mi ultima jugada. El rival solo adopta estados
     //     igual o mas nuevos, asi que el reenvio nunca hace retroceder la partida. ---
-    if (!over && !myTurn && now - lastResend > (unsigned long)(1800 + random(400))) {
-      sendState(); lastResend = now;
+    if (!over && !myTurn && now - lastResend > resendGap && !Lora_busy()) {
+      sendState(); lastResend = now; resendGap = 1800 + random(400);
     }
 
     // --- Mi jugada ---

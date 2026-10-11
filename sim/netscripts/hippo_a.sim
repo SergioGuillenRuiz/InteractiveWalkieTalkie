@@ -1,0 +1,36 @@
+# ============================================================
+#  HIPPORADAR entre DOS firmwares reales (net_test.sh, escena J): equipo A (#101); el otro es hippo_b.sim.
+#  Los dos entran al radar a la vez (largo alcance, SF10 +20 dBm), se oyen por los pings "HR" (cada ~1,35 s, 453 ms
+#  en el aire) y, sin moverse, el radar pasa de BUSCANDO a GIRA DESPACIO y, al relajarse a los 18 s, a VE HACIA AQUI.
+#  Los pings ocupan menos del 45 % del canal. Al salir (B) la radio vuelve a SF7 y el equipo se anuncia enseguida
+#  ('Chat_beaconSoon'). A sale primero (a los 25 s): su baliza cae mientras el otro sigue en SF10 y no la oye, pero
+#  cuando el otro sale (a los 26,5 s) y se anuncia, A (ya en SF7) si la oye: el chat funciona otra vez.
+# ============================================================
+wait 300
+pot 1023
+wait 350
+tap morse
+wait 300
+pot 768
+wait 350
+expect text HippoRadar
+in 0 morse down                 # entrar al juego: pantalla de inicio
+in 150 morse up
+in 600 morse down               # A: empezar -> radar (largo alcance)
+in 750 morse up
+in 7000 expect text GIRA        # los dos se oyen: enlace establecido
+in 7000 expect notext BUSCANDO
+in 7000 shot hippo_duo_a_turn
+in 24000 expect text VE HACIA   # quietos: tras ~18 s se relaja el umbral y se bloquea
+in 24000 expect airtime 45 20000
+in 24000 shot hippo_duo_a_locked
+in 25000 radio mark
+in 25100 finish down            # B: salir (la radio vuelve al chat)
+in 25300 finish up
+run 35000
+expect text Env                 # de vuelta en el menu principal
+expect tx 1 3                   # me anuncio (baliza) sin saturar el canal
+expect rx heard >= 1            # y oigo la baliza del otro equipo cuando sale del radar
+expect serial Presencia] equipo #201 en alcance
+print HippoRadar (A): se enlaza, se bloquea, sale y vuelve a oir el chat del otro equipo
+wait 1000

@@ -50,6 +50,7 @@ static Piece P1, P2;
 static long  score;
 static int   lines;
 static bool  p2isBot;
+static bool  clientView;          // el cliente (2 jugadores) pinta el estado del anfitrion desde SU punto de vista: su pieza (P2) maciza
 static int   bag[7], bagN;
 
 // ---- temporizadores ----
@@ -316,8 +317,8 @@ static void drawGame() {
   for (int y = 0; y < BH; y++)
     for (int x = 0; x < BW; x++)
       if (board[y][x]) cellFilled(x, y);
-  drawPiece(P1, true);    // tu pieza: solida
-  drawPiece(P2, false);   // la otra: hueca
+  drawPiece(clientView ? P2 : P1, true);    // tu pieza: solida (el cliente maneja la P2 del anfitrion)
+  drawPiece(clientView ? P1 : P2, false);   // la otra: hueca
   // HUD derecha (compacto)
   int hx = BX + BW * CELL + 4;
   display.setTextSize(1); display.setTextColor(SH110X_WHITE);
@@ -328,7 +329,7 @@ static void drawGame() {
   display.setCursor(hx, 64);  display.print(p2isBot ? "CPU" : "COOP");
   // leyenda piezas
   display.fillRect(hx, 86, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 86); display.print("Tu");
-  display.drawRect(hx, 98, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 98); display.print(p2isBot ? "CPU" : "P2");
+  display.drawRect(hx, 98, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 98); display.print(p2isBot ? "CPU" : (clientView ? "P1" : "P2"));
   display.display();
 }
 
@@ -345,9 +346,14 @@ static bool gameOverScreen();
 static void putB(String &s, int v) { s += (char)(v & 0xFF); }
 static int  getB(const String &s, int &i) { return (uint8_t)s[i++]; }
 
+// Los envios periodicos (lobby, estado, entrada) solo salen con el canal libre (Lora_busy): si Lora_send() esperara a que
+// se libere, el bucle del juego se quedaria parado centenas de ms y se tragaria los toques cortos de los botones.
 static void tcSend(const String &m) { Lora_send(m); }
+// "Salgo de la partida": se manda varias veces (como TS_GO) porque no se confirma; si el unico se perdia, el otro
+// equipo se quedaba con el tablero congelado hasta que su jugador saliera a mano.
+static void tcQuit() { for (int k = 0; k < 3; k++) tcSend("TQ"); }
 static String tcRecv() {
-  backgroundTick();                                  // chat, ACK, balizas y reintentos tambien durante la partida
+  backgroundTick(false);                             // chat, ACK, balizas y reintentos tambien durante la partida (el juego ya vuelca su fotograma)
   String m;
   while (Game_nextPacket(m)) if (m.length() && m[0] == 'T') return m;
   return "";
@@ -409,8 +415,14 @@ static bool lobby(bool host) {
     centerPrint("B: cancelar", 100, 1);
     display.display();
     String m = tcRecv();
-    if (host)  { if (m == "TJ") { for (int k = 0; k < 3; k++) tcSend("TS_GO"); return true; } if (now - t > 600) { tcSend("TH"); t = now; } }
-    else       { if (m == "TH") { for (int k = 0; k < 4; k++) tcSend("TJ"); return true; } if (now - t > 700) { tcSend("TJ"); t = now; } }
+    if (host)  { if (m == "TJ") { for (int k = 0; k < 3; k++) tcSend("TS_GO"); return true; } if (now - t > 600 && !Lora_busy()) { tcSend("TH"); t = now; } }
+    else {
+      if (m == "TH") { for (int k = 0; k < 4; k++) tcSend("TJ"); return true; }
+      // El anfitrion puede haber oido mi TJ de busqueda y empezar sin que yo oyera su TH (deja de emitirlo al salir del
+      // lobby): su TS_GO o su estado tambien me meten en la partida; si no, me quedaba buscando para siempre.
+      if (m == "TS_GO" || (m.startsWith("TS") && m.length() > 10)) return true;
+      if (now - t > 700 && !Lora_busy()) { tcSend("TJ"); t = now; }
+    }
     if (isFinishPressed()) { delay(40); if (isFinishPressed()) return false; }
     delay(25);
   }
@@ -435,9 +447,9 @@ static void clientGame() {
     if (a && !pa) rotC++;
     if (b && !pb) bHold = now;
     if (!b && pb && now - bHold < 500) dropC++;
-    if (b && now - bHold > 800) { tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
+    if (b && now - bHold > 800) { tcQuit(); mainState = STATE_IDLE; Display_clear(); return; }
     pa = a; pb = b;
-    if (now - lastInput > TETRIS_INPUT_MS) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
+    if (now - lastInput > TETRIS_INPUT_MS && !Lora_busy()) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
 
     if (started) { drawGame(); if (over) { if (!gameOverScreen()) { mainState = STATE_IDLE; Display_clear(); return; } resetBoard(); over = false; started = false; } }
     else { display.clearDisplay(); centerPrint("Conectando...", 56, 1); display.display(); }
@@ -531,6 +543,8 @@ void startTetrisCoop() {
 
   int mode = modeSelect();
   if (mode < 0) { mainState = STATE_IDLE; Display_clear(); return; }
+  p2isBot = false;                                   // (los estaticos sobreviven de una partida a otra: un cliente que antes
+  clientView = (mode == 2);                          //  jugo contra la CPU veia "CPU" en el marcador)
 
   if (mode == 2) {                                   // unirse: cliente
     if (lobby(false)) clientGame();
@@ -559,7 +573,7 @@ void startTetrisCoop() {
       now = millis();
 
       if (twoBots) { if (P1.alive && now >= bot1ActAt) { botStep(P1, &P2, botA, p1FallAt); bot1ActAt = now + 90; } }
-      else if (playerControl(now) == 1) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
+      else if (playerControl(now) == 1) { if (host) tcQuit(); mainState = STATE_IDLE; Display_clear(); return; }
 
       if (p2isBot && P2.alive && now >= botActAt) { botStep(P2, &P1, botB, p2FallAt); botActAt = now + 90; }
       if (host) applyRemoteToP2(now);
@@ -567,7 +581,7 @@ void startTetrisCoop() {
       if (P1.alive && now >= p1FallAt) { if (gravityStep(P1, &P2, over, 1)) botA.planned = false; p1FallAt = now + gravMs; }
       if (P2.alive && now >= p2FallAt) { if (gravityStep(P2, &P1, over, 5)) botB.planned = false; p2FallAt = now + gravMs; }
 
-      if (host && now - lastBcast > TETRIS_STATE_MS) { tcSend(encodeState(over)); lastBcast = now; }
+      if (host && now - lastBcast > TETRIS_STATE_MS && !Lora_busy()) { tcSend(encodeState(over)); lastBcast = now; }
 
       // anti-atasco: si nada se mueve durante un rato, el tablero esta bloqueado
       if (lines != prevLines || P1.y != prevP1y || P2.y != prevP2y) {
@@ -579,6 +593,6 @@ void startTetrisCoop() {
     }
 
     if (host) tcSend(encodeState(true));
-    if (!gameOverScreen()) { if (host) tcSend("TQ"); mainState = STATE_IDLE; Display_clear(); return; }
+    if (!gameOverScreen()) { if (host) tcQuit(); mainState = STATE_IDLE; Display_clear(); return; }
   }
 }

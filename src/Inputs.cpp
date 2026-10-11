@@ -3,15 +3,28 @@
 #include "Inputs.h"  
 #include "Display.h" 
 
-ButtonState morseButton  = { HIGH, HIGH, 0 };
-ButtonState finishButton = { HIGH, HIGH, 0 };
+ButtonState morseButton  = { HIGH, HIGH, 0, 0 };
+ButtonState finishButton = { HIGH, HIGH, 0, 0 };
 
 // ------------------------------------------------------------
 // Antirrebote
 // ------------------------------------------------------------
 
 static bool readButton(ButtonState &btn, uint8_t pin) {
+  unsigned long now = millis();
   bool raw = digitalRead(pin); 
+
+  // Boton que nadie consulto en un buen rato (otra pantalla o un bucle de juego tenia el control): si se dio por
+  // pulsado y ya esta suelto, el estado guardado esta caducado. Sin esto la 1a lectura devolvia una pulsacion FANTASMA
+  // de ~50 ms (el antirrebote tarda en aceptar el cambio) que, por ejemplo, reabria el menu de juegos al cancelar un
+  // lobby con B despues de haber elegido el modo con A.
+  if ((unsigned long)(now - btn.lastPoll) > BUTTON_DEBOUNCE_TIME_MS && btn.currentState == LOW && raw == HIGH) {
+    btn.currentState = HIGH;
+    btn.lastState = HIGH;
+    btn.lastChange = now;
+  }
+  btn.lastPoll = now;
+
   if (raw != btn.lastState) {
     btn.lastChange = millis();
     btn.lastState = raw;

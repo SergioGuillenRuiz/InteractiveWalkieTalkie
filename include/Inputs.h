@@ -14,6 +14,7 @@ struct ButtonState {
   bool currentState;        
   bool lastState;           
   unsigned long lastChange; 
+  unsigned long lastPoll;   // ultima vez que alguien consulto el boton (detecta un estado caducado)
 };
 
 // Instancias de botones 

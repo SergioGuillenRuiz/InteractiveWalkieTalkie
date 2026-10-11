@@ -1,0 +1,31 @@
+# ============================================================
+#  TETRIS COOP entre DOS firmwares reales (escena I): el CLIENTE ("2 Jug: Unirse", #201). Ver tetris_a.sim.
+#  Suelta su pieza en la columna 6 (pote al maximo): la pieza se mueve en el tablero del anfitrion; aqui se ve por
+#  el estado que este difunde. Al salir el anfitrion ('TQ') el cliente vuelve solo al menu.
+# ============================================================
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down                 # entrar al juego: seleccion de modo
+in 120 morse up
+in 400 pot 900                  # opcion 2 = "2 Jug: Unirse"
+in 700 expect text Unirse
+in 1200 morse down              # A: elegir -> busca partida
+in 1320 morse up
+in 2000 pot 1023                # columna objetivo de mi pieza: la 6 (la mas a la derecha)
+in 8000 expect text PTS         # recibo el estado del anfitrion: pinto la partida
+in 8000 expect pixel 13 123 off
+in 9000 finish down             # caida rapida de mi pieza: se la pido al anfitrion ('TI')
+in 9150 finish up
+in 10000 expect pixel 13 123 on # la pieza del anfitrion (columna 1), que me llega en su estado
+in 12000 expect pixel 55 123 on # y la mia (columna 7), fijada por el anfitrion
+in 12000 expect airtime 40 8000 # mi entrada (72 ms) cada ~0,3 s: ~26 % del canal
+in 12000 shot tetris_duo_client
+run 17000                       # el anfitrion sale hacia los 13-14 s y me avisa: vuelvo al menu
+expect text Env
+print Tetris Coop (cliente): ve las piezas fijadas, su entrada llega al anfitrion y vuelve al menu al salir este
+wait 1000

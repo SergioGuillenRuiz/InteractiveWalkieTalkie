@@ -15,8 +15,15 @@
 #
 #  Escena C (2 equipos, hora): #1 pone la hora a mano (y la corrige hacia atras)
 #                              y #2 la adopta por radio.
+#  Escena D (3 equipos): se ven por las balizas.   Escena E (2 equipos): emision simultanea (colision) y
+#                              recuperacion por reintentos.   Escena F (2 equipos): un dibujo con su ACK.
+#  Escena G (4 equipos): tres ACK a la vez que no se pisan.
+#  Escenas H, I, J (2 equipos REALES jugando entre si, cada uno con su guion de netscripts/ y sus propias
+#                              comprobaciones, 16 semillas cada una): tres en raya, Tetris Coop (anfitrion y
+#                              cliente) y HippoRadar. Ver run_duo.
 #
-#  Plantilla para testear futuras funciones de comunicacion multi-dispositivo.
+#  Todo en modo sincronizado (--nodes N): los procesos comparten el tiempo virtual, el resultado es
+#  determinista. Plantilla para testear futuras funciones de comunicacion multi-dispositivo.
 #  Uso:  ./net_test.sh
 # ============================================================
 set -uo pipefail
@@ -41,6 +48,43 @@ start_node() {
   SIM_CHIPID="$3" "$EXE" --keys "$WORK/$5" --air "$1" --node "$2" --nodes "$NODES" \
       --eeprom "$WORK/net_$2.bin" --fresh --shots "$WORK" </dev/null >"$6" 2>&1 &
   NODE_PID=$!
+}
+
+# start_script <air> <node> <chip> <guion .sim> <log>  -> deja el PID en $NODE_PID
+# Un equipo que ejecuta un GUION del DSL (con sus expect) en vez de teclas; todos comparten el tiempo virtual (--nodes).
+start_script() {
+  SIM_CHIPID="$3" "$EXE" --air "$1" --node "$2" --nodes "$NODES" \
+      --eeprom "$WORK/net_$2.bin" --fresh --shots "$WORK" "$4" </dev/null >"$5" 2>&1 &
+  NODE_PID=$!
+}
+
+# duo_ok <log>: el guion termino con comprobaciones y ninguna fallo.
+duo_ok() {
+  local line; line="$(grep -F 'Resultado:' "$1" | tail -1)"
+  [[ "$line" =~ ([0-9]+)\ PASS,\ 0\ FAIL ]] && (( ${BASH_REMATCH[1]} > 0 ))
+}
+
+# run_duo <titulo> <guion A> <guion B> <semilla>...
+# Dos firmwares REALES (#1 = id 101, #2 = id 201), cada uno con su guion y sus propias comprobaciones, en el mismo
+# tiempo virtual. Se repite con varias semillas (otra secuencia aleatoria por equipo, misma identidad): un
+# protocolo que solo funciona con una combinacion afortunada de retardos (emparejamiento, respuestas...) falla
+# en alguna. Con SIM_SEED=<n> se reproduce una sola; con SIM_TRACE=1 el serie de cada equipo sale por stderr.
+run_duo() {
+  local title="$1" sa="$2" sb="$3"; shift 3
+  local air="$WORK/air_duo" seed bad=0 n=0 p1 p2
+  NODES=2
+  for seed in "$@"; do
+    clear_air "$air"
+    SIM_SEED=$seed start_script "$air" 1 100 "$sa" "$WORK/_duo1.out"; p1=$NODE_PID
+    SIM_SEED=$seed start_script "$air" 2 200 "$sb" "$WORK/_duo2.out"; p2=$NODE_PID
+    wait_all 90 "$p1" "$p2"
+    n=$((n + 1))
+    if ! duo_ok "$WORK/_duo1.out" || ! duo_ok "$WORK/_duo2.out"; then
+      bad=$((bad + 1)); echo "  [FAIL] $title con la semilla $seed"
+      grep -hF '[FAIL]' "$WORK/_duo1.out" "$WORK/_duo2.out" | head -6 | sed 's/^/         /'
+    fi
+  done
+  if (( bad == 0 )); then echo "  [PASS] $title ($n semillas, ambos equipos sin fallos)"; else fail=$((fail + 1)); fi
 }
 
 # Espera a los procesos dados con un limite de segundos (los mata si se pasa).
@@ -324,6 +368,32 @@ for k in 2 3 4; do
 done
 check "#1 recibe la confirmacion"       "$(has "$WORK/_g1.out" 'Confirmado: entregado')"
 check "sin reintentos: los ACK no se pisan" "$(hasnot "$WORK/_g1.out" 'Reintento')"
+
+# ============================================================
+#  ESCENA H: TRES EN RAYA entre dos firmwares reales (netscripts/ttt_a.sim y ttt_b.sim): se emparejan por radio
+#  (A, id menor, es X y mueve primero), se turnan sin perder jugadas y A gana la fila superior; B ve "Pierdes".
+#  Con 16 semillas: el emparejamiento (HELLO, respuesta del que ya esta emparejado) depende de retardos aleatorios.
+# ============================================================
+echo
+echo "==== Escena H: tres en raya entre dos equipos reales ===="
+run_duo "tres en raya: #1 (X) gana, #2 (O) pierde" "$SIM/netscripts/ttt_a.sim" "$SIM/netscripts/ttt_b.sim" $(seq 1 16)
+
+# ============================================================
+#  ESCENA I: TETRIS COOP entre dos firmwares reales (netscripts/tetris_a.sim = anfitrion, tetris_b.sim = cliente):
+#  lobby (TH/TJ/TS_GO), estado del anfitrion ('TS') y entrada del cliente ('TI') con el canal compartido, las dos
+#  piezas fijadas en las dos pantallas, ocupacion del canal acotada y salida con 'TQ'.
+# ============================================================
+echo
+echo "==== Escena I: tetris coop entre dos equipos reales ===="
+run_duo "tetris coop: anfitrion y cliente" "$SIM/netscripts/tetris_a.sim" "$SIM/netscripts/tetris_b.sim" $(seq 1 16)
+
+# ============================================================
+#  ESCENA J: HIPPORADAR entre dos firmwares reales (netscripts/hippo_a.sim y hippo_b.sim): largo alcance (SF10),
+#  pings "HR" que se oyen entre si, fases del radar, ocupacion del canal y vuelta al chat al salir (A sale antes).
+# ============================================================
+echo
+echo "==== Escena J: hipporadar entre dos equipos reales ===="
+run_duo "hipporadar: los dos equipos se enlazan y vuelven al chat" "$SIM/netscripts/hippo_a.sim" "$SIM/netscripts/hippo_b.sim" $(seq 1 16)
 
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""

@@ -1,0 +1,106 @@
+# ============================================================
+#  Tetris Coop (cliente "2 Jug: Unirse"): el lobby. El anfitrion sale del suyo en cuanto OYE un 'TJ' (el cliente
+#  lo manda cada 0,7 s mientras busca) y deja de emitir su 'TH': si el cliente no habia oido ningun 'TH', antes se
+#  quedaba buscando PARA SIEMPRE con el anfitrion ya jugando (el cliente solo salia del lobby con 'TH'). Ahora el
+#  'TS_GO' del anfitrion, o su primer estado ('TS'), tambien lo meten en la partida.
+#  Es logica pura del protocolo: radio ideal (con la realista y dos firmwares reales lo cubre la escena I de
+#  net_test.sh, que fallaba en ~1 de cada 20 semillas antes del arreglo).
+#  (Device_id del sim = 137.)
+# ============================================================
+radio ideal on
+wait 300
+
+# --- 0) Una partida contra la CPU antes (deja el marcador "CPU" puesto: el cliente no debe heredarlo) ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 400 pot 0                    # opcion 0 = "Jugar con CPU"
+in 700 expect text CPU
+in 1200 morse down
+in 1320 morse up
+in 3000 expect text CPU         # el marcador de la partida dice CPU
+in 3200 finish down             # salir: B largo
+in 4200 finish up
+run 5000
+expect text Env
+
+# --- 1) El anfitrion contesta con 'TS_GO' (sin que yo oyera su 'TH'): entro y espero su estado ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 400 pot 900                  # opcion 2 = "2 Jug: Unirse"
+in 700 expect text Unirse
+in 1200 morse down
+in 1320 morse up
+in 1800 expect text Buscando
+in 2000 lora TS_GO              # el anfitrion ya empezo
+in 2600 expect text Conectando  # dentro de la partida, esperando el primer estado
+# Estado del anfitrion con sus dos piezas: P1 (la del anfitrion) = pieza O en la columna 0 y P2 (la MIA, la del
+# cliente) = pieza O en la columna 6, las dos arriba del todo. TS + tablero(23 B vacio) + P1(tipo,rot,x+2,y+2,viva)
+# + P2 + puntos(3 B) + lineas + fin
+in 2800 lorabin 54530000000000000000000000000000000000000000000000010002020101000802010000000000
+in 3600 expect text PTS         # y con el estado pinta el tablero
+in 3600 expect pixel 55 4 on    # MI pieza (P2, columna 7 de la celda de arriba) esta maciza: la leyenda "Tu" es la mia
+in 3600 expect pixel 13 4 off   # la del anfitrion (P1) esta hueca: solo el borde
+in 3600 expect text COOP        # y el marcador no dice "CPU" aunque antes hubiera jugado contra ella
+in 3600 expect text P1          # la hueca es la P1 (la del anfitrion), no "P2" como en el anfitrion
+in 3800 finish down             # salir: B largo
+in 4800 finish up
+run 5600
+expect text Env
+
+# --- 2) El primer paquete que oigo ya es un estado ('TS'): tambien entro ---
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 400 pot 900
+in 700 expect text Unirse
+in 1200 morse down
+in 1320 morse up
+in 1800 expect text Buscando
+in 2000 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+in 2600 expect text Conectando  # el estado me saco del lobby; el siguiente pinta el tablero
+in 2800 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+in 3600 expect text PTS
+in 3800 finish down
+in 4800 finish up
+run 5600
+expect text Env
+
+# --- 3) Un 'TQ' ajeno o un 'TS_GO' muy corto en el lobby: no hacen nada raro (siguen buscando) ---
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+in 0 morse down
+in 120 morse up
+in 400 pot 900
+in 1200 morse down
+in 1320 morse up
+in 1800 expect text Buscando
+in 2000 lora TQ                 # no es una partida que empiece
+in 2200 lora TI
+in 2800 expect text Buscando    # sigo buscando
+in 3000 finish down             # cancelar la busqueda
+in 3300 finish up
+run 4200
+expect text Env
+print Tetris Coop (cliente): entra al oir TS_GO o el primer estado del anfitrion; un TQ/TI suelto no lo mueve del lobby

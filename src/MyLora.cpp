@@ -232,7 +232,19 @@ bool Lora_isListening() { return loraReady && g_policy == RP_LISTEN; }
 void     Lora_setDeepSleepMs(uint32_t ms) { g_deepSleepMs = ms; }
 uint32_t Lora_deepSleepMs()               { return g_deepSleepMs; }
 
-bool Lora_busy() { return loraReady && g_policy == RP_LISTEN && (txBusy() || channelBusy()); }
+// Acceso al canal sin bloquear (ver MyLora.h). La pausa aleatoria posterior a ver el canal ocupado se guarda
+// en g_holdUntil: la consulta es barata (un par de lecturas SPI) y se hace en cada vuelta del bucle.
+static uint32_t g_holdUntil = 0;     // no emitir antes de este instante
+static bool     g_sawBusy = false;   // se vio el canal ocupado desde la ultima vez que se programo la pausa
+
+bool Lora_busy() {
+  if (!loraReady || g_policy != RP_LISTEN) return false;
+  if (txBusy()) return true;
+  uint32_t now = millis();
+  if (channelBusy()) { g_sawBusy = true; return true; }
+  if (g_sawBusy) { g_sawBusy = false; g_holdUntil = now + 1 + (uint32_t)random(CSMA_BACKOFF_MS); }
+  return (int32_t)(now - g_holdUntil) < 0;
+}
 bool Lora_isAsleep()    { return loraReady && g_policy == RP_SLEEP; }
 
 // HippoRadar: largo alcance (SF10 y +20 dBm) mientras dura el radar y vuelta a los parámetros del

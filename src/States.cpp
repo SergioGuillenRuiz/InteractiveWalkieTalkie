@@ -106,7 +106,7 @@ void Game_dropPackets() {
 // mensajes, así que basta con llamarlo desde el bucle principal y desde
 // cualquier espera bloqueante (menús, juegos...) para poder recibir en todo
 // momento, esté donde esté el usuario.
-void backgroundTick() {
+void backgroundTick(bool refreshDisplay) {
     Lora_update();
 
     if (Lora_hasMessage()) {
@@ -185,7 +185,7 @@ void backgroundTick() {
         else if (!low)        warned = false;
     }
 
-    Display_update();
+    if (refreshDisplay) Display_update();
 }
 
 //=============================================================

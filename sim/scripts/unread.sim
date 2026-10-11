@@ -148,6 +148,20 @@ chatmsg 50 35 m5
 run 800
 chatmsg 50 36 m6
 run 800
+# (el emisor repite lo que no se confirmo: mismo msgId, no cuenta dos veces; si alguno cayera justo al acabar una
+#  emision propia, cuando el chip aun no escucha, entra ahora)
+chatmsg 50 31 m1
+run 300
+chatmsg 50 32 m2
+run 300
+chatmsg 50 33 m3
+run 300
+chatmsg 50 34 m4
+run 300
+chatmsg 50 35 m5
+run 300
+chatmsg 50 36 m6
+run 300
 expect serial no leidos: 6
 pot 350                         # columna Hist del menu; en la lista cae en la fila 3 (no hace falta desplazarse)
 wait 300

@@ -1,0 +1,37 @@
+# ============================================================
+#  TETRIS COOP entre DOS firmwares reales (net_test.sh, escena I). Este es el ANFITRION ("2 Jug: Crear", #101);
+#  el cliente es tetris_b.sim. Los dos comparten el tablero: el anfitrion simula y difunde el estado ('TS'), el
+#  cliente manda su entrada ('TI'). Cada uno suelta su pieza con una caida rapida (toque de B) en una columna
+#  distinta y se comprueba, con los pixeles del fondo del tablero (celda (col, 17) = x 3+7*col+1.., y 121..126),
+#  que las DOS piezas quedan fijadas en las DOS pantallas: la del anfitrion (columna 1 del fondo, x=13) y la del
+#  cliente (columna 7, x=55: su entrada viajo por radio y su pieza se movio en el tablero del anfitrion).
+#  Una pieza con rotacion 0 siempre ocupa la columna x+1 de su fila de abajo, sea cual sea la pieza del saco.
+# ============================================================
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down                 # entrar al juego: seleccion de modo
+in 120 morse up
+in 400 pot 512                  # opcion 1 = "2 Jug: Crear"
+in 700 expect text Crear
+in 1200 morse down              # A: elegir -> lobby de anfitrion
+in 1320 morse up
+in 2000 pot 0                   # columna objetivo de mi pieza: la 0
+in 8000 expect text PTS         # el cliente se unio (TJ): la partida esta en marcha
+in 8000 expect pixel 13 123 off # el fondo del tablero aun esta vacio
+in 8500 finish down             # caida rapida de mi pieza (toque corto de B: 150 ms; el antirrebote pide 50 ms estables
+in 8650 finish up               #   y el bucle del juego da una vuelta cada 25 ms: un toque de 100 ms ya es marginal)
+in 10000 expect pixel 13 123 on # ... queda fijada abajo, columna 1
+in 12000 expect pixel 55 123 on # y la del companero (columna 7): su entrada llego por radio
+in 12000 expect airtime 55 8000 # el anfitrion ocupa menos del 55 % del canal (estado ~35 % + ACK)
+in 12000 shot tetris_duo_host
+in 13000 finish down            # salir: B largo; avisa al companero ('TQ')
+in 14000 finish up
+run 16000
+expect text Env                 # de vuelta en el menu principal
+print Tetris Coop (anfitrion): sus dos piezas y la del cliente quedan fijadas; sale y avisa
+wait 1000

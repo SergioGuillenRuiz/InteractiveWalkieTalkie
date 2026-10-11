@@ -1,0 +1,39 @@
+# ============================================================
+#  TRES EN RAYA entre DOS firmwares reales (equipo A = #101, equipo B = #201), con el mismo tiempo virtual
+#  (net_test.sh, escena H). A tiene el id menor: juega con la X y mueve primero. Jugadas (casillas 0..8):
+#  A: 0, 1, 2 (gana la fila superior);  B: 3, 4. Cada jugada difunde el tablero y el rival lo adopta; si un
+#  paquete se pierde, el reenvio periodico lo recupera. (Este es el guion de A; el de B es ttt_b.sim.)
+# ============================================================
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 3000 expect text Tu turno (X)                # emparejados: A (id menor) es X y mueve primero
+in 3300 pot 57                                  # casilla 0
+in 3600 morse down
+in 3720 morse up
+in 4400 expect text Turno del rival
+in 7500 pot 171                                 # casilla 1 (B jugo la 3 hacia los 5,7 s)
+in 7800 morse down
+in 7920 morse up
+in 11500 pot 285                                # casilla 2 (B jugo la 4 hacia los 9,7 s): fila superior completa
+in 11800 morse down
+in 11920 morse up
+in 13000 expect text GANAS
+in 13000 shot ttt_duo_a
+in 14000 finish down                            # fin de partida: B corta sale
+in 14200 finish up
+run 15500
+expect text Env
+expect serial emparejado con #201
+expect serial soy X
+expect times 3 juego casilla
+expect times 2 rival juega
+print Tres en raya (A): gana la fila superior contra un firmware real
+wait 2000

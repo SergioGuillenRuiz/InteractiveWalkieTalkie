@@ -115,13 +115,21 @@ otro equipo, tres equipos viéndose por las balizas, un **dibujo** de un equipo 
 radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
 y se comprueban.
 
+Las escenas **H, I y J** (solo Linux) enfrentan **dos firmwares reales jugando entre sí**: *Tres en raya* (se emparejan, se
+turnan y uno gana), *Tetris Coop* (anfitrión y cliente: lobby, estado, entrada del cliente, las dos piezas fijadas en las
+dos pantallas, ocupación del canal, salida) y *HippoRadar* (los dos radares en SF10 se enlazan, se bloquean y al salir vuelve
+el chat). Cada equipo ejecuta **su propio guion** de `netscripts/*.sim` (el mismo DSL, con sus `expect`) y la escena exige que
+los dos acaben sin fallos. Cada una se repite con **16 semillas** (`SIM_SEED`): lo que se prueba depende de retardos aleatorios
+(HELLO, respuestas, pausas de escucha-antes-de-hablar) y un protocolo que solo funciona con una combinación afortunada falla en
+alguna. Para reproducir una: `SIM_SEED=<n> SIM_TRACE=1` con los dos procesos (ver `run_duo` en `linux/net_test.sh`).
+
 #### Tiempo sincronizado entre procesos (`--nodes N`, Linux/macOS)
 
 Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan juntos milisegundo a
 milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
 oyen los demás desde el ms *t+1* con su instante de inicio exacto, de modo que los tiempos en el aire, el
 half-duplex y las **colisiones son los de la realidad** y el resultado es **determinista**: no depende de la
-velocidad de la máquina ni del azar del arranque (las 7 escenas tardan ~2 s). Sin `--nodes` cada proceso
+velocidad de la máquina ni del azar del arranque (las 10 escenas tardan ~13 s). Sin `--nodes` cada proceso
 lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
 (es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
 la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
@@ -148,22 +156,24 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `battery.sim`      | Aviso de batería baja con histéresis (medidor + "!" en la barra de estado) |
 | `doodle.sim`       | Lienzo 24×24: editor, envío con pantalla de resultado ("Enviado" → "Entregado!" / "(sin confirmar)"), reintentos, el dibujo enviado y el recibido en el Historial |
 | `ttt_rx.sim`       | Chat DENTRO de Tres en raya: mensaje guardado y confirmado sin interrumpir la partida, baliza, ACK ajeno y paquetes de otros juegos sin basura en el historial, balizas y reintentos durante la partida |
-| `tetris_rx.sim`    | Lo mismo dentro de Tetris Coop (cliente): lobby y partida, con la ocupación del canal (~26 %) |
+| `tetris_rx.sim`    | Lo mismo dentro de Tetris Coop (cliente): lobby y partida, con la ocupación del canal (~26 %) y el aviso de salida (`TQ`) por triplicado |
 | `tetris_host.sim`  | Tetris Coop como anfitrión: chat en el lobby y en la partida, entrada del invitado y ocupación del canal por debajo del 55 % (el estado sale cada 340 ms con paquetes de 118 ms) |
+| `tetris_lobby.sim` | Tetris Coop como cliente, el lobby: entra también con `TS_GO` o con el primer estado del anfitrión (antes solo con `TH` y se quedaba buscando para siempre si el anfitrión ya había salido de su lobby), un `TQ`/`TI` suelto no lo mueve, B cancela y vuelve al **menú principal** (antes reabría el de juegos: pulsación fantasma de A), y el cliente ve su pieza maciza y el marcador "COOP" (no hereda "CPU") |
 | `hippo_rx.sim`     | HippoRadar (SF10) y el chat: pings por la cola de juego, el chat (SF7) no se oye durante el radar, sin balizas ni reintentos mientras dura, y al salir se anuncia y el chat vuelve |
 | `doodle_store.sim` | Dibujos persistentes: el lienzo vive en su registro del Historial (sobrevive a reinicios, sigue a su registro al desplazarse o borrarse, sin duplicados, outbox persistente con el mismo lienzo) |
 | `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
 | `radio_model.sim`  | Autotest del modelo de radio: la librería LoRa real contra el chip simulado (tiempos en el aire del roadmap, bloqueo al transmitir, reglas de recepción) |
 | `radio_rx.sim`     | La radio escucha SIEMPRE (menú, juegos, esperas bloqueantes, tras emitir), vigilancia que re-arma un chip caído, sueño de la radio solo en suspensión prolongada y consumo |
-| `radio_csma.sim`   | Acceso al canal: escuchar antes de hablar, no destruir una trama sin leer al emitir, leer una trama sin abortar la siguiente, ACK con retardo aleatorio y reintentos con dispersión |
+| `radio_csma.sim`   | Acceso al canal: escuchar antes de hablar, no destruir una trama sin leer al emitir, leer una trama sin abortar la siguiente, ACK con retardo aleatorio, reintentos con dispersión y `Lora_busy()` (acceso sin bloquear: ocupado con la trama en el aire y una pausa aleatoria al quedar libre) |
 | `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
 | `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
 | `peers.sim`        | Varios equipos: tabla de compañeros (presencia por equipo, batería mínima, tabla llena, mismo msgId de emisores distintos, dedup de 16, reactivar reintentos) |
-| `beacon_jitter.sim`| Balizas con jitter: primera a los 2-4 s y siguientes cada 27-33 s, no todas iguales |
+| `beacon_jitter.sim`| Balizas con jitter: primera a los 2-4 s y siguientes cada 27-33 s, no todas iguales; y la baliza "ya" (`Chat_beaconSoon`) sale en menos de 0,45 s con una pausa distinta cada vez |
 | `peer_batt.sim`    | Batería del compañero junto al corazón de presencia (nivel, "!" de batería baja, oculta fuera de alcance) |
 | `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
+| `ttt_pair.sim`     | Tres en raya, emparejamiento: quien ya está emparejado contesta a cada HELLO del rival con su estado (así el otro también se entera), un tercer equipo no pisa la partida ni recibe respuesta, y terminada la partida ya no se contesta (radio ideal: lógica pura; con la realista, la escena H) |
 
 Ejecutar uno con salida detallada:
 
@@ -199,7 +209,7 @@ in <ms> pot <v>                 programa un cambio de potenciómetro
 wait <ms>    avanza ejecutando el firmware
 run <ms>     alias de wait (estilo timeline)
 blind <ms>   el reloj avanza pero el firmware NO corre (como si estuviera ocupado en otra cosa)
-ff <ms>      avance rápido (para timeouts largos, p.ej. el sueño de 5 min)
+ff <ms>      avance rápido (para timeouts largos, p.ej. el sueño de 5 min); al terminar deja acabar la emisión en curso
 ```
 
 **LoRa**
@@ -312,7 +322,12 @@ lanzarlo (`Device_id()` lo deriva de ahí en el simulador, y también siembra su
 cada equipo sortea distinto, como la placa con su RNG por hardware). `SIM_SEED=<n>` cambia la secuencia aleatoria
 SIN cambiar la identidad: sirve para ejecutar un test con muchas secuencias (retardos de ACK, dispersión de
 reintentos y balizas) y descubrir los que solo pasan con una combinación afortunada de tiempos
-(`for s in $(seq 1 50); do SIM_SEED=$s ./out/linux/walkie_sim --fresh scripts/x.sim; done`).
+(`for s in $(seq 1 50); do SIM_SEED=$s ./out/linux/walkie_sim --fresh scripts/x.sim; done`; en Linux, toda la
+batería: `linux/seed_tests.sh [desde] [hasta] [paralelo]`).
+`SIM_TRACE=1` vuelca cada línea del puerto serie por la salida de error con su instante virtual (`[  12345] ...`): en una
+escena de varios equipos es la forma de ver CUÁNDO pasó cada cosa. Como en la placa, cada equipo tiene además su
+propio `micros()` (desfasado por identidad, menos de 1 ms): dos equipos que entran en un juego en el mismo ms no
+reciben la misma semilla de `randomSeed(analogRead(A0) ^ micros())`.
 
 ## Modelo de radio (chip SX1276 + librería real)
 
@@ -345,7 +360,11 @@ mensajes (≥ 800 ms entre uno y el siguiente, con `in <ms> chatmsg|lora|presenc
 tras un `ff` o justo tras el arranque, esperan a la baliza propia y a que acabe de emitirse
 (`waitfor serial 0 40000 [Chat] Baliza` + `waitfor txend`; justo después el canal queda libre unos 27 s).
 Los equipos inyectados son **educados**: no empiezan a emitir mientras el firmware está emitiendo, sino que
-esperan a que acabe (`radio peer polite off` lo desactiva). Queda la ventana física que ningún equipo evita:
+esperan a que acabe y añaden la misma pausa aleatoria (1-80 ms) que usa un equipo real al ver el canal libre
+(`radio peer polite off` lo desactiva). Ojo: tras terminar de emitir el chip queda en reposo hasta que el firmware
+consulta la radio (cada vuelta del bucle: ~2 ms en el menú, 20-25 ms en un juego), así que **una trama que empieza
+justo al acabar el firmware se pierde** ("sorda") y una respuesta inmediata no sirve: los ACK y la respuesta al HELLO
+del Tres en raya salen con retardo por eso. Queda la ventana física que ningún equipo evita:
 si el firmware empieza a emitir en los ~3 ms (3 símbolos de preámbulo) que tarda en detectar una trama ajena,
 las dos se pisan; es muy improbable y por eso conviene probar los tests con varias semillas (`SIM_SEED`).
 
@@ -362,6 +381,8 @@ expect tx <min> <max>             tramas emitidas desde la marca
 expect txstart <min> <max>        la 1a emisión desde la marca empieza entre min y max ms después de ella
 expect airtime <max%> <ventanaMs> ocupación del canal por este equipo en la última ventana (se puede diferir: in <ms> expect airtime ...)
 expect listening on|off           la radio está en recepción ahora mismo
+expect busy on|off                `Lora_busy()`: la radio emite, el canal está ocupado o se espera la pausa aleatoria posterior
+beaconsoon                        el equipo se anuncia "ya" (`Chat_beaconSoon()`: lo que hace al volver del radar o al poner la hora)
 expect radiomode sleep|stdby|tx|rxcont|rxsingle
 ```
 
@@ -412,5 +433,11 @@ Consejos para que no sea frágil (la radio es realista: ver "Modelo de radio"):
 - Si un paquete que llega **justo cuando el equipo empieza a emitir** (una ventana de unos ms) rompería el test, **repítelo** como
   haría un emisor real que no recibe el ACK (mismo `msgId`: no se duplica).
 - Para las ocupaciones del canal usa `expect airtime <max%> <ventanaMs>`.
-- **Pruébalo con varias semillas** (`SIM_SEED=1..50`) antes de darlo por bueno.
+- **Pruébalo con varias semillas** (`SIM_SEED=1..50`, o `linux/seed_tests.sh`) antes de darlo por bueno.
+- Una suite de **lógica pura de un protocolo** (se cuentan respuestas, nada depende de pérdidas de radio) puede usar `radio ideal on`
+  al principio: es determinista. Lo que depende de la radio real (retardos, colisiones, pausas) se prueba con dos firmwares en `netscripts/`.
+- Para **dos firmwares jugando entre sí**: escribe `netscripts/<juego>_a.sim` y `_b.sim` (cada uno con sus `expect`) y añade una
+  llamada a `run_duo` en `linux/net_test.sh`. Los guiones de un juego bloqueante van con `in <ms> ...` (el juego no deja volver al
+  guion); repite las pulsaciones que dependan de la suerte y usa toques de ≥ 150 ms (el antirrebote pide 50 ms estables y el bucle
+  de un juego da una vuelta cada 20-25 ms).
 - `demos/` contiene guiones de demostración (capturas de cada pantalla); no forman parte de la batería.

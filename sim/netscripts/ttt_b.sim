@@ -1,0 +1,30 @@
+# (Guion de B, id #201: juega con la O; ver ttt_a.sim.)
+wait 300
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 3000 expect text Turno del rival              # B (id mayor) es O y espera a que mueva A
+in 6000 pot 398                                  # casilla 3 (A jugo la 0 hacia los 4,9 s)
+in 6300 morse down
+in 6420 morse up
+in 10000 pot 512                                 # casilla 4 (A jugo la 1 hacia los 8,9 s)
+in 10300 morse down
+in 10420 morse up
+in 13000 expect text Pierdes
+in 13000 shot ttt_duo_b
+in 14000 finish down
+in 14200 finish up
+run 15500
+expect text Env
+expect serial emparejado con #101
+expect serial soy O
+expect times 2 juego casilla
+expect times 3 rival juega
+print Tres en raya (B): pierde contra la fila superior de A
+wait 2000

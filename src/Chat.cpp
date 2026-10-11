@@ -444,7 +444,7 @@ void Chat_handleBeacon() {
 }
 
 void Chat_beaconSoon() {
-  g_beaconDue = millis();                         // ya toca emitir
+  g_beaconDue = millis() + (uint32_t)random(BEACON_SOON_JITTER_MS + 1);   // ya toca emitir (con una pausa aleatoria corta)
 }
 
 // ============================================================

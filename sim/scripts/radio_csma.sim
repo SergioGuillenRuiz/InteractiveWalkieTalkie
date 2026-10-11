@@ -7,7 +7,10 @@
 #    D) los ACK salen tras un retardo ALEATORIO (10..300 ms): varios equipos que reciben el mismo mensaje
 #       no deben confirmarlo a la vez (los ACK se pisarian en el emisor);
 #    E) los reintentos de un mensaje sin confirmar se reparten +-1,5 s alrededor de 5 s: dos equipos
-#       que perdieron su mensaje a la vez (colision) no deben reintentarlo otra vez a la vez.
+#       que perdieron su mensaje a la vez (colision) no deben reintentarlo otra vez a la vez;
+#    F) Lora_busy() (acceso al canal SIN bloquear, lo usan las balizas y los envios periodicos de los juegos): ocupado
+#       mientras entra una trama, y tras quedar libre sigue ocupado una pausa aleatoria 1..80 ms (dos equipos que
+#       esperaban lo mismo no deben salir a la vez).
 #  (El recorrido entre varios equipos de verdad esta en sim/linux/net_test.sh.)
 #  Una trama de 64 B ocupa 118 ms (SF7/125 kHz); el preambulo se detecta a los ~6 ms.
 # ============================================================
@@ -102,3 +105,19 @@ waitfor serial 3400 6800 Reintento msg 1 (2)
 waitfor serial 3400 6800 Reintento msg 1 (3)
 expect spread 100                         # cada intervalo es distinto (5 s +-1,5 s), no un metronomo
 print E) los reintentos se reparten en 3,5..6,5 s con dispersion
+
+# --- F) Lora_busy(): ocupado con la trama en el aire y una pausa aleatoria al quedar libre ---
+# (la trama de 72 ms acaba a los 72 ms; sin la pausa, Lora_busy() pasaria a "libre" en el mismo instante)
+# Se parte de una EEPROM limpia y tras la baliza de arranque: sin mensajes pendientes (sus reintentos tambien consultan
+# Lora_busy() y adelantarian la pausa) y con la siguiente baliza a ~27 s.
+reset-eeprom
+waitfor serial 0 6000 [Chat] Baliza
+waitfor txend
+lora rx hola
+run 30
+expect busy on                            # se esta recibiendo: no conviene emitir
+run 60                                    # (t=90 ms: la trama acabo a los 72 ms)
+expect busy on                            # ... y sigue ocupado: pausa aleatoria 1..80 ms tras quedar libre
+run 100                                   # (t=190 ms: la pausa, de 80 ms como maximo, ya paso)
+expect busy off
+print F) Lora_busy(): ocupado con la trama en el aire y una pausa aleatoria al quedar libre

@@ -53,5 +53,6 @@ in 14200 finish down
 in 15200 finish up
 run 16700
 expect text Env
+expect times 3 Enviando: TQ                    # el aviso de salida va 3 veces (ver tetris_host.sim)
 expect times 2 Historial] Guardado:            # solo los dos mensajes de chat (el repetido no se duplica): sin basura de balizas, ACK ni paquetes del juego
 print Recibir en todo momento dentro de Tetris Coop (cliente) OK
