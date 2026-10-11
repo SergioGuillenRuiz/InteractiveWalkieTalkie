@@ -12,12 +12,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <csignal>
-#ifdef _WIN32
-#include <conio.h>
-#include <process.h>
-#else
 #include "platform_linux.h"   // sim/linux: _kbhit/_getch/_getpid... sobre termios
-#endif
 #include <thread>
 #include <chrono>
 #include <filesystem>
@@ -47,8 +42,8 @@ extern void setup();
 extern void loop();
 extern Adafruit_SH1107 display;   // definido en src/Display.cpp
 
-// Configuracion de consola (Windows): fija fuente/tamano para pixeles cuadrados.
-// Devuelve el tamano resultante en caracteres (0 si no aplica, p.ej. en WT).
+// Configuracion de la consola (console_linux.cpp): tamano del terminal para pixeles cuadrados.
+// Devuelve el tamano resultante en caracteres (0 si no aplica).
 extern "C" void simSetupConsole(int wantCols, int wantRows, int *outCols, int *outRows);
 
 // ---------------------------------------------------------------------------
@@ -1116,14 +1111,6 @@ static void execLine(const std::string &raw) {
 // que las esperas bloqueantes de los juegos/menus reciben las pulsaciones en
 // directo. El render y el ritmo en tiempo real tambien viven en el pump.
 // ---------------------------------------------------------------------------
-// Sube la resolucion del temporizador de Windows a 1 ms (por defecto ~15 ms),
-// para que los sleep cortos del ritmo en tiempo real no se pasen de largo.
-#ifdef _WIN32
-extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int);
-extern "C" __declspec(dllimport) unsigned int __stdcall timeEndPeriod(unsigned int);
-#pragma comment(lib, "winmm.lib")
-#endif
-
 static int  g_iPot = 512;
 static bool g_iRunning = true;
 static std::chrono::steady_clock::time_point g_iLastRender;
@@ -1131,8 +1118,7 @@ static std::chrono::steady_clock::time_point g_iRealEpoch;   // ancla de tiempo 
 static uint32_t g_iVirtEpoch = 0;                            // ancla de tiempo virtual
 
 // --- Encuadre: alto/ancho REALES del terminal ---
-// La API de consola da valores erroneos bajo Windows Terminal, asi que medimos
-// con la secuencia DSR: mover el cursor al fondo-derecha y preguntar su posicion.
+// Se mide el terminal con la secuencia DSR: mover el cursor al fondo-derecha y preguntar su posicion.
 static int g_termRows = 0, g_termCols = 0;
 static std::chrono::steady_clock::time_point g_lastProbe;
 
@@ -1339,9 +1325,6 @@ static void interactivePump(uint32_t ms) {
 static void iRestoreOnSignal(int) { fputs("\x1b[?25h", stdout); fflush(stdout); _exit(0); }
 
 static void interactive() {
-#ifdef _WIN32
-    system("chcp 65001 > nul");
-#endif
     if (!g_keysScripted) { printf("\x1b[?25l"); signal(SIGINT, iRestoreOnSignal); }   // ocultar cursor (evita parpadeos del DSR)
     printf("\x1b[2J");
     g_iPot = 512;
@@ -1353,23 +1336,21 @@ static void interactive() {
     g_ksArmed = false;
     g_iRealEpoch = std::chrono::steady_clock::now();
     g_iVirtEpoch = sim::now();
-    // Ajustar la consola (consola clasica): fija fuente y tamano para que quepa
-    // el render cuadrado (128x68) sin tocar el zoom a mano. En Windows Terminal
-    // es no-op y caemos a medir por DSR. Luego pintamos YA el primer frame para
-    // que no se quede en negro hasta pulsar una tecla.
+    // Ajustar el terminal para que quepa el render cuadrado (128x68) sin tocar el zoom a mano
+    // (si no se puede, se mide por DSR). Luego pintamos YA el primer frame para que no se quede
+    // en negro hasta pulsar una tecla.
     g_lastProbe = std::chrono::steady_clock::now();
     if (!g_keysScripted) {
         int cc = 0, rr = 0;
         simSetupConsole(130, 70, &cc, &rr);
         if (cc >= 128 && rr >= 68) { g_termCols = cc; g_termRows = rr; }
         else {
-            fputs("\x1b[8;70;132t", stdout); fflush(stdout);   // pedir tamano a Windows Terminal
+            fputs("\x1b[8;70;132t", stdout); fflush(stdout);   // pedir el tamano al terminal
             queryTermSize(150);
         }
         printf("\x1b[2J");
         iRender();          // primer frame inmediato
     }
-    if (!g_keysScripted) timeBeginPeriod(1);   // temporizador fino (solo en interactivo real)
     sim::clearDeadline();                 // sin deadline: el firmware puede bloquearse esperando al usuario
     sim::setPumpHook(interactivePump);
     while (g_iRunning) {
@@ -1398,7 +1379,6 @@ static void interactive() {
     }
     sim::setPumpHook(nullptr);
     sim::clearDeadline();
-    if (!g_keysScripted) timeEndPeriod(1);
     if (!g_keysScripted) printf("\x1b[?25h");   // restaurar cursor
     if (g_keysScripted) {
         printf("\n[serial]\n%s\n", sim::serialLog().c_str());
@@ -1416,28 +1396,20 @@ static void interactive() {
 // main
 // ---------------------------------------------------------------------------
 int main(int argc, char **argv) {
-#ifdef _WIN32
-    system("chcp 65001 > nul");   // consola en UTF-8 para los bloques del render
-#endif
-
     // Directorio del ejecutable (sim/out) -> base para EEPROM y capturas.
     std::string base = ".";
     {
         char *pgm = nullptr;
         if (_get_pgmptr(&pgm) == 0 && pgm) {
             std::string p(pgm);
-            size_t s = p.find_last_of("\\/");
+            size_t s = p.find_last_of('/');
             if (s != std::string::npos) base = p.substr(0, s);
         }
     }
     g_shotsDir = base;
 
     std::string scriptPath;
-#ifdef _WIN32
-    std::string eepromPath = base + "\\eeprom.bin";
-#else
     std::string eepromPath = base + "/eeprom.bin";
-#endif
     bool interactiveMode = false, fresh = false;
     std::string airDir, airNode;
     int airRssi = -50;

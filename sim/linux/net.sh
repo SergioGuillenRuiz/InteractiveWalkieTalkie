@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  Lanzador MULTI-DISPOSITIVO interactivo (equivalente Linux de net.bat/net.ps1).
+#  Lanzador MULTI-DISPOSITIVO interactivo.
 #
 #  Abre N ventanas de GNOME Terminal, cada una un dispositivo REAL e
 #  independiente (firmware + EEPROM propios) que se comunican por radio simulada

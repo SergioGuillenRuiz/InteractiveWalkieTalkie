@@ -142,7 +142,7 @@ static void drawBoard(bool myTurn) {
     s += "   B: salir";
   } else s = myTurn ? (myRole == 1 ? "Tu turno (X)" : "Tu turno (O)") : "Turno del rival...";
   tttCenter(s, 117);
-  display.display();
+  Display_flush();
 }
 
 void startTresEnRaya() {
@@ -197,7 +197,7 @@ void startTresEnRaya() {
       display.drawCircle(78, 56, 9, SH110X_WHITE);
       tttCenter("Buscando rival...", 80);
       tttCenter("manten B para salir", 117);
-      display.display();
+      Display_flush();
       delay(20);
       continue;
     }

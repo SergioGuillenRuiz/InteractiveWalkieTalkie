@@ -123,7 +123,7 @@ static void drawSearch(unsigned long now) {
   display.fillCircle(cx, cy, 3, SH110X_WHITE);
   centerPrint("BUSCANDO", 80, 2);
   centerPrint("Acerca los equipos", 106, 1);
-  display.display();
+  Display_flush();
 }
 
 // ============================================================
@@ -162,7 +162,7 @@ static void drawTurn(unsigned long now) {
   }
 
   centerPrint("B salir", 116, 1);
-  display.display();
+  Display_flush();
 }
 
 // ============================================================
@@ -183,7 +183,7 @@ static void drawLocked(unsigned long now) {
   else if (distTrend >  0.05f) centerPrint("te alejas", 104, 1);
 
   centerPrint("A buscar  B salir", 116, 1);
-  display.display();
+  Display_flush();
 }
 
 // ============================================================
@@ -200,7 +200,7 @@ static bool startScreen() {
   centerPrint("equipo. Tu solo", 72);
   centerPrint("sigue la pantalla", 84);
   centerPrint("A: empezar   B: salir", 116);
-  display.display();
+  Display_flush();
 
   static bool pa = false, pb = false;
   while (true) {

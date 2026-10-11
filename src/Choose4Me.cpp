@@ -109,7 +109,7 @@ void animateDecisionMaking() {
     display.print("Pensando");
     int dots = frame % 4;
     for (int i = 0; i < dots; i++) display.print(".");
-    display.display();
+    Display_flush();
 
     unsigned long fs = millis();
     while (millis() - fs < FRAME) {
@@ -132,7 +132,7 @@ static void drawStartScreen() {
   centerPrint("Piensa tu pregunta", 70);
   centerPrint("A: Preguntar", 96);
   centerPrint("B: Salir", 110);
-  display.display();
+  Display_flush();
 }
 
 static void drawResultScreen(const char *answer) {
@@ -141,7 +141,7 @@ static void drawResultScreen(const char *answer) {
   drawAnswer(answer);
   centerPrint("A: Otra vez", 110);
   centerPrint("B: Salir", 120);
-  display.display();
+  Display_flush();
 }
 
 // ------------------------------------------------------------

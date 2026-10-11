@@ -244,7 +244,7 @@ static void drawTable(bool reveal) {
 static void flashMessage(const String &m, unsigned long ms) {
   msgLine = m;
   drawTable(false);
-  display.display();
+  Display_flush();
   unsigned long t = millis();
   while (millis() - t < ms) { backgroundTick(); delay(10); }
   msgLine = "";
@@ -302,14 +302,14 @@ static int getHumanAction(int call, bool canRaise, int raiseSize) {
   if (selectedAction == ACT_BET_RAISE && !canRaise) selectedAction = ACT_CHECK_CALL;
   drawTable(false);
   drawActionBar(call, canRaise, raiseSize);
-  display.display();
+  Display_flush();
   while (true) {
     char kk = pollButton();
     if (kk == 'B') {
       do { selectedAction = (Action)((selectedAction + 1) % 3); }
       while (selectedAction == ACT_BET_RAISE && !canRaise);
       drawActionBar(call, canRaise, raiseSize);
-      display.display();
+      Display_flush();
     } else if (kk == 'A') {
       return selectedAction;
     }
@@ -430,7 +430,7 @@ static void resultBox(const String &res, const String &l1, const String &l2) {
   centerAt(l1, 62, 1);
   centerAt(l2, 73, 1);
   display.setCursor(8, 118); display.print("A: sigue   B: salir");
-  display.display();
+  Display_flush();
 }
 
 static void awardByFold() {
@@ -488,7 +488,7 @@ void startPoker() {
   centerAt("B: Salir", 78, 1);
   centerAt("En la mesa:", 102, 1);
   centerAt("B cambia / A confirma", 114, 1);
-  display.display();
+  Display_flush();
   while (true) {
     char kk = pollButton();
     if (kk == 'A') break;
@@ -512,7 +512,7 @@ void startPoker() {
       display.setTextColor(SH110X_WHITE);
       centerAt(player.chips > 0 ? "GANASTE" : "BANCARROTA", 36, 2);
       centerAt("A: Otra   B: Salir", 80, 1);
-      display.display();
+      Display_flush();
       while (true) {
         char kk = pollButton();
         if (kk == 'A') { player.chips = START_CHIPS; cpu.chips = START_CHIPS; playerDealer = true; break; }

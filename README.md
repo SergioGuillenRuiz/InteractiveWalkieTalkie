@@ -7,7 +7,7 @@ cuando llega algo y se duerme solo. Incluye varios juegos (Tetris cooperativo, P
 para localizar al otro equipo. Versión del firmware: **V2.0**.
 
 > **Estado.** Todo lo descrito aquí está verificado en el **simulador** (`sim/`, más de 40 tests con la radio y el
-> chip modelados). **Falta probarlo en la placa**: ver [`path.md`](path.md) (hoja de ruta, riesgos y decisiones
+> chip modelados). **Falta compilarlo y probarlo en la placa**: ver [`path.md`](path.md) (hoja de ruta, riesgos y decisiones
 > pendientes).
 
 ---
@@ -190,8 +190,10 @@ La hora se usa para la antigüedad de los mensajes ("hace 3m").
 | **HippoRadar** | Localiza al otro equipo: **ambos** abren el radar (A para empezar). Pasa de *BUSCANDO* a *GIRA DESPACIO* (frío / tibio / caliente) y, al bloquearse, a *VE HACIA AQUÍ* con una flecha y la distancia estimada. **A** reinicia la búsqueda, **B** sale. El radar usa otra configuración de radio de más alcance, en la que no se oye el chat; por eso **cada 4 s vuelve 1,2 s a la del chat** (ventana de chat): ahí se reciben y confirman mensajes, salen las balizas y los reintentos, y no se emiten pings. Un mensaje que llegue fuera de la ventana no se oye (el emisor reintenta). Al salir se anuncia. |
 | **3 en raya** | Para dos equipos. Emparejamiento automático ("Buscando rival…"): el equipo con el número **menor** juega con la **X** y mueve primero. **Potenciómetro** elige la casilla, **A** coloca la ficha; **mantén B** para salir. |
 
-**Los mensajes siguen llegando mientras juegas** (Tetris, Tres en raya, HippoRadar…): se guardan en el Historial y se confirman,
-y los verás como no leídos al salir al menú. (En el radar de HippoRadar, solo en sus ventanas de chat: ver arriba.)
+**Los mensajes siguen llegando mientras juegas** (Tetris, Tres en raya, HippoRadar…): se guardan en el Historial y se confirman.
+Cuando llega uno nuevo aparece una **insignia con un sobre y un número** (los mensajes nuevos desde que empezó la partida; `9+` si hay más
+de 9) en una esquina de la pantalla del juego, y al salir al menú los verás como no leídos. (En el radar de HippoRadar, solo llegan en sus
+ventanas de chat: ver arriba.)
 
 ### La radio
 
@@ -228,25 +230,15 @@ OLED 128×128, simula botones, potenciómetro y la radio (el **chip SX1276 a niv
 half-duplex y colisiones; cifrado AES real), y permite tanto un **modo interactivo por teclado** como **tests automatizados**
 (también con **varios equipos a la vez**, con el mismo tiempo virtual y resultados deterministas).
 
-```bat
-cd sim
-run_tests.bat            :: compila y ejecuta toda la batería de tests
-run.bat                  :: modo interactivo (teclado)
-```
-
-Requiere *Visual Studio Build Tools* (C++). Más detalles en [`sim/README.md`](sim/README.md).
-
-En **Linux (GNOME)** hay una versión equivalente y separada en [`sim/linux/`](sim/linux/):
-
 ```bash
 cd sim/linux
-./run_tests.sh           # compila y ejecuta toda la batería de tests (48 suites)
+./run_tests.sh           # compila y ejecuta toda la batería de tests (49 suites)
 ./seed_tests.sh 1 50     # la misma batería con 50 secuencias aleatorias (descubre tests que dependen de la suerte)
 ./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido (11 escenas, incluidas partidas
                          # de 3 en raya, Tetris y HippoRadar entre dos firmwares reales y el emparejamiento)
 ./run.sh                 # modo interactivo (abre una ventana de GNOME Terminal)
 ```
 
-Requiere `g++`/`gcc`. Más detalles en [`sim/linux/README.md`](sim/linux/README.md).
+El simulador funciona en **Linux** (es la única plataforma que se mantiene). Requiere `g++`/`gcc`. Más detalles en [`sim/README.md`](sim/README.md) y [`sim/linux/README.md`](sim/linux/README.md).
 
 La hoja de ruta (qué está terminado, qué falta, riesgos y decisiones pendientes) está en [`path.md`](path.md).

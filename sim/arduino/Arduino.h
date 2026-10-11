@@ -97,12 +97,6 @@ static inline long map(long x, long in_min, long in_max, long out_min, long out_
 #define sq(x) ((x) * (x))
 #endif
 
-// Builtins de GCC que MSVC no tiene
-#ifdef _MSC_VER
-#define __builtin_bswap16(x) _byteswap_ushort(x)
-#define __builtin_bswap32(x) _byteswap_ulong(x)
-#endif
-
 // ---------------------------------------------------------------------------
 // Tiempo
 // ---------------------------------------------------------------------------

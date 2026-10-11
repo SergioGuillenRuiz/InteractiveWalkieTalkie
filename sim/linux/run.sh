@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  Compila y ejecuta el simulador (equivalente Linux de sim/run.bat).
+#  Compila y ejecuta el simulador.
 #    ./run.sh                       -> modo interactivo en una ventana nueva de
 #                                      GNOME Terminal ya dimensionada
 #    ./run.sh --here                -> modo interactivo en ESTE terminal
@@ -27,7 +27,7 @@ fi
 if [[ $# -eq 0 ]]; then
   if sim_have_gnome_terminal; then
     # Ventana nueva con el tamano y zoom justos para ver pixeles CUADRADOS sin
-    # tocar el zoom a mano (lo mismo que run.bat consigue lanzando conhost).
+    # tocar el zoom a mano.
     gnome-terminal --title="Walkie-Talkie (simulador)" \
       --geometry="${SIM_TERM_COLS}x${SIM_TERM_ROWS}" --zoom="$(sim_zoom)" \
       -- env SIM_SKIP_BUILD=1 "$LNX/run.sh" --here

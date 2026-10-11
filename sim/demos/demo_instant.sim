@@ -4,7 +4,7 @@
 #  rejilla -> elegir 'kissy' -> enviar -> Enviado -> Entregado!
 #  Capturas en cada pantalla relevante. Prefijo: g3_instant_
 #
-#  Ejecutar con: walkie_sim.exe --fresh demo_instant.sim
+#  Ejecutar con: ./out/linux/walkie_sim --fresh demos/demo_instant.sim
 # ============================================================
 wait 400
 

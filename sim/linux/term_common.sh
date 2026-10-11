@@ -13,7 +13,7 @@ sim_have_gnome_terminal() {
 }
 
 # Zoom de GNOME Terminal para que quepan SIM_TERM_ROWS filas en la pantalla:
-# equivalente a la eleccion de fuente de console_win.cpp. Se puede forzar con
+# (el simulador pide un tamano de terminal que quepa). Se puede forzar con
 # la variable SIM_ZOOM (p.ej. SIM_ZOOM=0.6 ./run.sh).
 sim_zoom() {
   if [[ -n "${SIM_ZOOM:-}" ]]; then echo "$SIM_ZOOM"; return; fi

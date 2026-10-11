@@ -62,7 +62,7 @@ void air_poll(std::vector<AirFrame> &out);
 
 // ---- Modo sincronizado ----
 // Activa el modo sincronizado para 'nodes' procesos (cada uno lo llama con el mismo valor) y espera a que
-// arranquen todos. Devuelve false si no esta disponible (Windows) o no se pudo.
+// arranquen todos. Devuelve false si no se pudo.
 bool air_lockstep_enable(int nodes);
 bool air_lockstep();                         // activo en este proceso
 // El proceso acaba de completar el ms 'doneMs' del reloj comun (cuenta ms desde el arranque): espera

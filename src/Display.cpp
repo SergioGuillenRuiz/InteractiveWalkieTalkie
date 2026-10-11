@@ -105,9 +105,45 @@ void Display_update() {
   unsigned long now = millis();
   if (now - lastUpdate >= DISPLAY_REFRESH_MS) {
     lastUpdate = now;
-    display.display();   // volcado periódico (las funciones de dibujo ya
+    Display_flush();     // volcado periódico (las funciones de dibujo ya
                          // refrescan al cambiar su contenido)
   }
+}
+
+// -----------------------------------------------------------------------------
+// Aviso de mensaje nuevo DENTRO de un juego: insignia en la esquina superior derecha (sobre + numero de mensajes
+// llegados desde que empezo la partida). Se dibuja en cada volcado, sobre el fotograma del juego.
+// -----------------------------------------------------------------------------
+static int  s_gameNotices = 0;
+static bool s_gameActive  = false;
+static int  s_noticeY     = 0;
+
+static void drawNoticeBadge() {
+  const int w = 28, h = 11, x = SCREEN_WIDTH - w, y = s_noticeY;
+  display.fillRect(x, y, w, h, SH110X_BLACK);
+  display.drawRect(x, y, w, h, SH110X_WHITE);
+  const int ex = x + 4, ey = y + 2;                      // sobre: 9x7 con la solapa
+  display.drawRect(ex, ey, 9, 7, SH110X_WHITE);
+  display.drawLine(ex, ey, ex + 4, ey + 3, SH110X_WHITE);
+  display.drawLine(ex + 8, ey, ex + 4, ey + 3, SH110X_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(x + 15, y + 2);
+  if (s_gameNotices > 9) display.print("9+"); else display.print(s_gameNotices);
+}
+
+void Display_flush() {
+  if (s_gameActive && s_gameNotices > 0) drawNoticeBadge();
+  display.display();
+}
+
+void GameNotice_begin(int y) { s_gameActive = true; s_gameNotices = 0; s_noticeY = y; }
+void GameNotice_end()   { s_gameActive = false; }
+int  GameNotice_count() { return s_gameNotices; }
+void GameNotice_add() {
+  if (!s_gameActive) return;
+  if (s_gameNotices < 99) s_gameNotices++;
+  if (s_panelOn) Display_flush();                        // ya: las pantallas estaticas no se repintan solas
 }
 
 // -----------------------------------------------------------------------------

@@ -1,17 +1,15 @@
-// Capa de compatibilidad Linux (GNOME Terminal / cualquier terminal VT) para el
-// simulador. Proporciona lo que en Windows dan <conio.h>, <process.h> y winmm:
+// Capa de plataforma del simulador (GNOME Terminal / cualquier terminal VT):
 //
 //   _kbhit / _getch / _ungetch  -> teclado sin eco ni buffer de linea (termios)
 //   _getpid / _get_pgmptr       -> pid y ruta del ejecutable (/proc/self/exe)
-//   timeBeginPeriod / End       -> no-op (el temporizador de Linux ya es fino)
 //
+// (Los nombres son los de <conio.h>, con los que esta escrito el motor.)
 // Las flechas llegan como secuencias VT (ESC [ A / ESC [ B). _getch las traduce
-// al formato de conio (0xE0 seguido de 72/80) para que el motor del simulador
-// funcione igual que en Windows. Cualquier otra secuencia ESC (p.ej. la
-// respuesta DSR "ESC [ fila ; col R" que usa el simulador para medir el
-// terminal) se entrega intacta, byte a byte.
+// al formato de conio (0xE0 seguido de 72/80) que espera el motor del simulador.
+// Cualquier otra secuencia ESC (p.ej. la respuesta DSR "ESC [ fila ; col R" que
+// usa el simulador para medir el terminal) se entrega intacta, byte a byte.
 //
-// Solo lo incluye sim_main.cpp cuando NO es Windows (ver sim/linux/build.sh).
+// Solo lo incluye sim_main.cpp (ver sim/linux/build.sh).
 #pragma once
 
 #include <cstdlib>
@@ -167,5 +165,3 @@ inline int _get_pgmptr(char **out) {
     return 0;
 }
 
-inline unsigned int timeBeginPeriod(unsigned int) { return 0; }
-inline unsigned int timeEndPeriod(unsigned int)   { return 0; }

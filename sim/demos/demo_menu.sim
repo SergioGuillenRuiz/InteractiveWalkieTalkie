@@ -3,7 +3,7 @@
 #  Recorre el menu del hipo: cursor por Enviar / Historial / Juegos,
 #  entra en cada submenu y vuelve, y muestra el hipo dormido por
 #  inactividad. Capturas en cada pantalla relevante.
-#  Ejecutar: walkie_sim.exe --fresh demo_menu.sim
+#  Ejecutar: ./out/linux/walkie_sim --fresh demos/demo_menu.sim
 # ============================================================
 
 # --- Paso 0: arranque, menu principal con el hipo ---

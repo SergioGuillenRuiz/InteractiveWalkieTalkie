@@ -2,7 +2,6 @@
 # ============================================================
 #  Compila el simulador y ejecuta todos los scripts de prueba.
 #  Codigo de salida != 0 si alguna suite falla (util para CI).
-#  Equivalente Linux de sim/run_tests.bat.
 # ============================================================
 set -uo pipefail
 

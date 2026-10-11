@@ -11,31 +11,36 @@ botones, potenciómetro, EEPROM) por una capa *mock* equivalente.
 
 ```
         TU FIRMWARE (../src/*.cpp)  ── sin cambios ──┐
-                                                      │  compila con MSVC
-   capa mock Arduino  (sim/arduino) ─────────────────┤  -> walkie_sim.exe
+                                                      │  compila con g++
+   capa mock Arduino  (sim/arduino) ─────────────────┤  -> out/linux/walkie_sim
    Adafruit_GFX + tiny-AES reales (sim/vendor) ──────┤
    motor del simulador (sim/engine) ─────────────────┘
 ```
 
 ## Requisitos
 
-- **Visual Studio Build Tools** (o Visual Studio) con *"Desktop development with C++"*
-  (proporciona `cl.exe`). El script lo localiza automáticamente con `vswhere`.
-- Windows. (No requiere PlatformIO, ni internet, ni token de Wokwi.)
+Linux es la plataforma del simulador (y la única que se mantiene).
 
-> **¿Linux?** Hay una versión equivalente (GNOME, g++) en [`linux/`](linux/README.md)
-> con sus propios scripts (`build.sh`, `run.sh`, `run_tests.sh`, `net.sh`,
-> `net_test.sh`). Usa el mismo firmware, motor y scripts de prueba que esta.
+- `g++` y `gcc` (C++17). En Debian/Ubuntu: `sudo apt install build-essential`;
+  en Fedora: `sudo dnf install gcc-c++`; en Arch: `sudo pacman -S base-devel`.
+- Para las ventanas del modo interactivo: **GNOME Terminal** (`gnome-terminal`). Sin él, se
+  ejecuta en el terminal actual.
+- Opcional: `xrandr` (calcula el zoom según el monitor) e ImageMagick (convierte las capturas
+  BMP a PNG en `net_test.sh`).
+- No requiere PlatformIO, ni internet, ni token de Wokwi. Detalles de los lanzadores en
+  [`linux/README.md`](linux/README.md).
 
 ## Uso rápido
 
-```bat
-cd sim
+```bash
+cd sim/linux
 
-run_tests.bat          ::  compila y ejecuta TODA la batería de tests
-run.bat                ::  compila y abre el modo INTERACTIVO (teclado)
-run.bat scripts\nav.sim::  compila y ejecuta un script concreto
-build.bat              ::  solo compilar -> out\walkie_sim.exe
+./run_tests.sh            # compila y ejecuta TODA la batería de tests
+./run.sh                  # compila y abre el modo INTERACTIVO (ventana nueva de GNOME Terminal)
+./run.sh --here           # modo interactivo en ESTE terminal
+./run.sh ../scripts/nav.sim   # compila y ejecuta un script concreto
+./build.sh                # solo compilar -> ../out/linux/walkie_sim
+./seed_tests.sh 0 300     # toda la batería con 301 secuencias aleatorias
 ```
 
 ### Modo interactivo (teclado)
@@ -61,7 +66,7 @@ entrar y jugar a cualquier pantalla (Poker, Choose4Me, etc.) sin bloqueos.
 
 ### Reproducir teclas con guion (demos / pruebas)
 
-`run.bat --keys guion.txt` reproduce una secuencia de teclas sin necesidad de
+`./out/linux/walkie_sim --keys guion.txt` reproduce una secuencia de teclas sin necesidad de
 teclado. Cada línea es `<ms> <acción>`, donde `ms` son milisegundos (virtuales)
 desde el arranque y la acción es una tecla (`m`, `n`, `M`, `N`, `r`, `q`) o
 `pot <valor>`. Útil para reproducir un fallo o grabar una demo de un juego.
@@ -86,10 +91,10 @@ caduca a los 10 s y se borra, así el directorio no crece en sesiones largas.
 
 ### Interactivo — varias ventanas que se hablan
 
-```bat
-cd sim
-net.bat 3      ::  abre 3 dispositivos, cada uno en su ventana, comunicados por radio
-net.bat        ::  por defecto, 2 dispositivos
+```bash
+cd sim/linux
+./net.sh 3     # abre 3 dispositivos, cada uno en su ventana, comunicados por radio
+./net.sh       # por defecto, 2 dispositivos
 ```
 
 Cada ventana es un equipo con su teclado (`m`/`n`, mayúsculas para pulsación larga,
@@ -99,14 +104,13 @@ el emisor cuando otro equipo lo recibe.
 
 ### Automatizado — para testear futuras funciones de comunicación
 
-`net_test.sh` (Linux) / `net_test.ps1` (Windows) lanza varios dispositivos en paralelo (sin teclado),
+`net_test.sh` lanza varios dispositivos en paralelo (sin teclado),
 conducen un intercambio y comprueban aserciones sobre lo que cada uno recibió. Son la **plantilla
 para probar futuras funciones** que impliquen a más de un equipo:
 
-```bat
+```bash
 cd sim
-powershell -ExecutionPolicy Bypass -File net_test.ps1     ::  Windows
-./linux/net_test.sh                                       #   Linux
+./linux/net_test.sh
 ```
 
 Escenas: difusión de 1 equipo a 2 (con los ACK de ambos), mensajes en los dos sentidos, **emisión
@@ -117,7 +121,7 @@ otro equipo, tres equipos viéndose por las balizas, un **dibujo** de un equipo 
 radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
 y se comprueban.
 
-Las escenas **H, I, J y K** (solo Linux) enfrentan **dos firmwares reales entre sí**: *Tres en raya* (se emparejan, se
+Las escenas **H, I, J y K** enfrentan **dos firmwares reales entre sí**: *Tres en raya* (se emparejan, se
 turnan y uno gana), *Tetris Coop* (anfitrión y cliente: lobby, estado, entrada del cliente, las dos piezas fijadas en las
 dos pantallas, ocupación del canal, salida) y *HippoRadar* (los dos radares en SF10 se enlazan, se bloquean y al salir vuelve
 el chat) y *Emparejar* (los dos equipos sin clave se buscan, muestran el mismo código de 6 dígitos, el usuario confirma en
@@ -126,7 +130,7 @@ los dos acaben sin fallos. Cada una se repite con **16 semillas** (`SIM_SEED`): 
 (HELLO, respuestas, pausas de escucha-antes-de-hablar) y un protocolo que solo funciona con una combinación afortunada falla en
 alguna. Para reproducir una: `SIM_SEED=<n> SIM_TRACE=1` con los dos procesos (ver `run_duo` en `linux/net_test.sh`).
 
-#### Tiempo sincronizado entre procesos (`--nodes N`, Linux/macOS)
+#### Tiempo sincronizado entre procesos (`--nodes N`)
 
 Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan juntos milisegundo a
 milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
@@ -135,8 +139,7 @@ half-duplex y las **colisiones son los de la realidad** y el resultado es **dete
 velocidad de la máquina ni del azar del arranque (las 11 escenas tardan ~15 s). Sin `--nodes` cada proceso
 lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
 (es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
-la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
-(`net_test.ps1` usa el modelo `--radio ideal`, sin tiempo en el aire, con `--pace`).
+la realidad se pisarían, o no, dependen del azar.
 
 ## Tests automatizados
 
@@ -180,12 +183,13 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `crypto.sim`       | Autotest de la criptografía propia (SHA-256, X25519 y AES-CMAC) contra los vectores oficiales (FIPS 180-4, RFC 7748, RFC 4493) |
 | `security.sim`     | Seguridad del chat con pareja: un paquete legítimo se acepta; repetido, con un bit alterado, de otra pareja o con secuencia antigua se rechaza; tras reiniciar siguen rechazados los anteriores al último tramo guardado y el equipo no reutiliza sus propios números de secuencia; sin pareja no se acepta ni se emite nada y el menú lo avisa |
 | `pairing.sim`      | Emparejamiento (pantalla *Emparejar* con un compañero virtual `pairpeer`): código de 6 dígitos igual al calculado aparte (vectores de referencia en Python), claves nuevas funcionando (lo grabado con la clave vieja deja de valer), ataques (clave que no coincide con el compromiso, clave de orden bajo, confirmación falsa o reflejada) y cancelar con códigos distintos sin cambiar la clave |
+| `game_notice.sim`  | Aviso de mensaje nuevo DENTRO de los juegos: insignia (sobre + número) en una esquina que cuenta los mensajes nuevos de la partida (no los repetidos, ACK, balizas ni paquetes del juego), `9+` a partir de 9, en Tres en raya, Tetris, Poker (a la derecha de las cartas, para no tapar las fichas), Choose4Me (pantalla estática), RefillGame y HippoRadar (solo en su ventana de chat); empieza a cero en cada partida y no sale en los menús |
 | `ttt_pair.sim`     | Tres en raya, emparejamiento: quien ya está emparejado contesta a cada HELLO del rival con su estado (así el otro también se entera), un tercer equipo no pisa la partida ni recibe respuesta, y terminada la partida ya no se contesta (radio ideal: lógica pura; con la realista, la escena H) |
 
 Ejecutar uno con salida detallada:
 
-```bat
-out\walkie_sim.exe --fresh scripts\history.sim
+```bash
+./out/linux/walkie_sim --fresh scripts/history.sim
 ```
 
 ## Lenguaje de scripts
@@ -279,7 +283,7 @@ expect pairvector      derivación de claves, código y confirmación = valores 
 screen              dibuja el OLED en el terminal
 text                imprime el texto dibujado en pantalla
 serial              imprime el log serie del firmware
-shot [nombre]       guarda una captura BMP en out\
+shot [nombre]       guarda una captura BMP en out/linux/
 expect text <sub>      la pantalla contiene <sub>
 expect notext <sub>    la pantalla NO contiene <sub>
 expect serial <sub>    el log serie contiene <sub>
@@ -317,13 +321,13 @@ expect text Selecciona
 ## Opciones del ejecutable
 
 ```
-walkie_sim.exe [script.sim] [opciones]
+walkie_sim [script.sim] [opciones]
   --interactive     modo teclado
   --keys <fich>     modo interactivo reproduciendo teclas con guion
   --fresh           borra la EEPROM al arrancar
   --color           color en el render del terminal
-  --eeprom <fich>   fichero de respaldo de EEPROM (por defecto out\eeprom.bin)
-  --shots <dir>     carpeta de capturas (por defecto la del .exe)
+  --eeprom <fich>   fichero de respaldo de EEPROM (por defecto out/linux/eeprom.bin)
+  --shots <dir>     carpeta de capturas (por defecto la del ejecutable)
   --scale <n>       escala de las capturas BMP (por defecto 4 -> 512×512)
   --air <dir>       conecta este dispositivo al "aire" compartido (radio multi-dispositivo)
   --node <etiqueta> identidad única en el aire (para no oír lo propio)
@@ -331,7 +335,7 @@ walkie_sim.exe [script.sim] [opciones]
   --radio real|ideal  modelo de radio: real (por defecto) = chip SX1276 con tiempo en el aire (la
                     radio solo oye lo que llega mientras escucha, y transmitir bloquea); ideal =
                     siempre escucha y sin tiempo en el aire (comportamiento antiguo)
-  --nodes <N>       modo sincronizado (Linux/macOS): los N procesos que comparten --air avanzan
+  --nodes <N>       modo sincronizado: los N procesos que comparten --air avanzan
                     juntos el mismo tiempo virtual (ver "Tiempo sincronizado entre procesos")
   --pace <x>        con --keys y sin --nodes: tope de velocidad del tiempo virtual (x ms virtuales
                     por ms real; 0 = sin tope). Con varios procesos en el aire compartido y sin
@@ -346,8 +350,8 @@ lanzarlo (`Device_id()` lo deriva de ahí en el simulador, y también siembra su
 cada equipo sortea distinto, como la placa con su RNG por hardware). `SIM_SEED=<n>` cambia la secuencia aleatoria
 SIN cambiar la identidad: sirve para ejecutar un test con muchas secuencias (retardos de ACK, dispersión de
 reintentos y balizas) y descubrir los que solo pasan con una combinación afortunada de tiempos
-(`for s in $(seq 1 50); do SIM_SEED=$s ./out/linux/walkie_sim --fresh scripts/x.sim; done`; en Linux, toda la
-batería: `linux/seed_tests.sh [desde] [hasta] [paralelo]`).
+(`for s in $(seq 1 50); do SIM_SEED=$s ./out/linux/walkie_sim --fresh scripts/x.sim; done`;
+toda la batería: `linux/seed_tests.sh [desde] [hasta] [paralelo]`).
 `SIM_TRACE=1` vuelca cada línea del puerto serie por la salida de error con su instante virtual (`[  12345] ...`): en una
 escena de varios equipos es la forma de ver CUÁNDO pasó cada cosa. Como en la placa, cada equipo tiene además su
 propio `micros()` (desfasado por identidad, menos de 1 ms): dos equipos que entran en un juego en el mismo ms no
@@ -437,16 +441,15 @@ sim/
   scripts/    scripts de prueba (.sim): la batería de tests
   demos/      guiones de demostración que recorren cada pantalla y la capturan
   out/        artefactos de compilación (ignorado por git)
-  build.bat / run.bat / run_tests.bat
-  linux/      versión Linux (GNOME): build.sh, run.sh, run_tests.sh, net.sh,
-              net_test.sh + capa de plataforma (termios). Salida en out/linux/
+  linux/      lanzadores (build.sh, run.sh, run_tests.sh, seed_tests.sh, net.sh, net_test.sh)
+              + capa de plataforma (termios). Salida en out/linux/
 ```
 
 ## Cómo añadir un test
 
 1. Crea `scripts/mi_test.sim` con comandos + `expect ...`.
-2. `run.bat scripts\mi_test.sim` para depurarlo (usa `screen`/`shot`/`text`).
-3. Quedará incluido automáticamente en `run_tests.bat`.
+2. `./out/linux/walkie_sim --fresh scripts/mi_test.sim` para depurarlo (usa `screen`/`shot`/`text`).
+3. Quedará incluido automáticamente en `linux/run_tests.sh` y `linux/seed_tests.sh`.
 
 Consejos para que no sea frágil (la radio es realista: ver "Modelo de radio"):
 

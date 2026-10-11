@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
 #  Prueba automatizada MULTI-DISPOSITIVO sobre el "aire" compartido
-#  (equivalente Linux de sim/net_test.ps1).
 #
 #  Lanza dispositivos REALES concurrentes (procesos independientes, firmware +
 #  EEPROM propios) que se comunican por radio simulada en tiempo real.

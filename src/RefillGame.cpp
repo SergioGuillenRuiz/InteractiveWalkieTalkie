@@ -223,7 +223,7 @@ static void drawGame(bool pouring, float flow) {
     drawMugShape(MUG_X, MUG_Y, MUG_W, MUG_H, 0.0f);
   }
   drawFeedback();
-  display.display();
+  Display_flush();
 }
 
 // ============================================================
@@ -287,7 +287,7 @@ static bool startScreen() {
   centerPrint("POTE: regula caudal", 86, 1);
   centerPrint("A: para y entrega", 98, 1);
   centerPrint("A: Jugar  B: Salir", 116, 1);
-  display.display();
+  Display_flush();
   while (true) {
     char k = pollButton();
     if (k == 'A') return true;
@@ -305,7 +305,7 @@ static bool gameOverScreen(bool barFull) {
   centerPrint(String("Puntos: ") + String(score), 84, 1);
   centerPrint(String("Jarras: ") + String(completed), 96, 1);
   centerPrint("A: Otra  B: Salir", 116, 1);
-  display.display();
+  Display_flush();
   while (true) {
     char k = pollButton();
     if (k == 'A') return true;

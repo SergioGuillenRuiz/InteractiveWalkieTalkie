@@ -1,0 +1,267 @@
+# ============================================================
+#  Aviso de MENSAJE NUEVO dentro de un juego: una insignia (sobre + numero) en una esquina, mientras dura la partida.
+#  Antes el mensaje se guardaba y se confirmaba pero no se veia hasta salir al menu.
+#    - Cuenta los mensajes/dibujos NUEVOS llegados desde que empezo la partida (un repetido no cuenta, ni un ACK, una
+#      baliza o un paquete del juego); a partir de 9 pone "9+".
+#    - Se pinta en cada fotograma de los juegos que se repintan solos y ya, al llegar, en las pantallas estaticas.
+#    - Cada juego pone la insignia donde no tapa nada: arriba a la derecha, salvo en el Poker (fichas) y Choose4Me (titulo).
+#    - Al salir y entrar de nuevo empieza a cero; en el menu de juegos, en el menu principal y en suspension no sale.
+#  La insignia es un recuadro de 28x11 a la derecha: borde en (100,y)..(127,y+10), sobre en (104,y+2), y el numero en
+#  (115,y+2): el "2" tiene el pixel (115,y+3) encendido y el "1" no; el "+" de "9+" enciende (123,y+5).
+#  Los juegos son bloqueantes: todo se programa con "in <ms> ..." dentro de un unico run. (Device_id del sim = 137.)
+# ============================================================
+wait 300
+
+# --- Con el menu de juegos abierto (sin partida) un mensaje no pinta ninguna insignia ---
+pot 1000
+wait 200
+tap morse
+wait 300
+chatmsg 50 1 hola desde el menu de juegos
+run 900
+expect serial Guardado: hola desde el menu
+expect pixel 100 0 off
+expect pixel 127 10 off
+print Sin partida en curso no hay insignia
+
+# --- Tres en raya (esquina superior derecha) ---
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+in 700 expect text Buscando rival
+in 700 expect pixel 100 0 off                     # antes de que llegue nada: sin insignia
+in 800 chatmsg 50 2 uno
+in 1500 chatmsg 50 2 uno                          # (el emisor repite si no recibe el ACK: mismo msgId, no se duplica)
+in 2300 expect serial Guardado: uno
+in 2300 expect pixel 100 0 on                     # borde de la insignia
+in 2300 expect pixel 127 10 on
+in 2300 expect pixel 104 2 on                     # esquina del sobre
+in 2300 expect pixel 101 1 off                    # el interior esta vacio
+in 2300 expect pixel 115 3 off                    # "1": no es un "2"
+in 2300 expect text Buscando rival                # y el juego sigue ahi
+in 2400 chatack 99 5                              # un ACK ajeno y una baliza no son mensajes
+in 2600 presence 60 0 80
+in 2900 presence 60 0 80
+in 3300 expect pixel 115 3 off                    # sigue en "1"
+in 3400 chatmsg 50 3 dos
+in 4100 chatmsg 50 3 dos
+in 4900 expect serial Guardado: dos
+in 4900 expect pixel 115 3 on                     # "2"
+in 4900 shot game_notice_ttt
+in 5200 finish down                               # salir: B largo
+in 6300 finish up
+run 7200
+wait 400                                          # (el menu principal se repinta cada 100 ms: ahi saldria una insignia que se hubiera quedado)
+expect text Env
+expect pixel 100 0 off                            # de vuelta en el menu principal: nada
+expect pixel 127 10 off
+print Tres en raya: la insignia cuenta los mensajes nuevos y no cuenta repetidos, ACK ni balizas
+
+# --- Volver a entrar: empieza a cero ---
+pot 1000
+wait 200
+tap morse
+wait 300
+pot 900
+wait 250
+in 0 morse down
+in 120 morse up
+in 900 expect text Buscando rival
+in 900 expect pixel 100 0 off
+in 1000 finish down
+in 2100 finish up
+run 3000
+expect text Env
+print Una partida nueva empieza sin avisos
+
+# --- Tetris contra la CPU (esquina superior derecha) ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 400 pot 10
+in 900 morse down                                 # "Jugar con CPU"
+in 1020 morse up
+in 2500 expect text PTS
+in 2500 expect pixel 100 0 off
+in 2600 chatmsg 50 4 en tetris
+in 3300 chatmsg 50 4 en tetris
+in 4200 expect serial Guardado: en tetris
+in 4200 expect pixel 100 0 on
+in 4200 expect pixel 104 2 on
+in 4200 expect text PTS                           # la partida sigue
+in 4400 finish down
+in 5500 finish up
+run 7000
+expect text Env
+print Tetris: insignia en la esquina superior derecha
+
+# --- Poker: la insignia va a la derecha de tus cartas (arriba taparia tus fichas) ---
+pot 1000
+wait 200
+tap morse
+pot 220
+wait 250
+expect text Poker
+in 0 morse down
+in 120 morse up
+in 700 morse down                                 # empezar
+in 820 morse up
+in 1800 expect text TU JUGADA
+in 1800 expect pixel 100 92 off
+in 1900 chatmsg 50 5 en poker
+in 2600 chatmsg 50 5 en poker
+in 3500 expect serial Guardado: en poker
+in 3500 expect pixel 100 92 on
+in 3500 expect pixel 104 94 on
+in 3500 expect pixel 127 10 off                   # y NO arriba (junto a las fichas)
+in 3500 expect text TU JUGADA
+in 3700 finish down                               # B: cambia de accion (subir)
+in 3850 finish up
+in 4000 finish down                               # B: retirarse
+in 4150 finish up
+in 4400 morse down                                # A: confirmar -> la mano termina
+in 4550 morse up
+in 7000 finish down                               # B: salir del Poker
+in 7150 finish up
+run 9000
+expect text Env
+print Poker: insignia junto a las cartas, sin tapar las fichas
+
+# --- Choose4Me (pantalla estatica: la insignia sale al llegar el mensaje, sin esperar a repintar) ---
+pot 1000
+wait 200
+tap morse
+pot 512
+wait 250
+expect text Choose4Me
+in 0 morse down
+in 120 morse up
+in 900 expect text CHOOSE4ME
+in 900 expect pixel 100 24 off
+in 1000 chatmsg 50 6 en choose
+in 1700 chatmsg 50 6 en choose
+in 2600 expect serial Guardado: en choose
+in 2600 expect pixel 100 24 on
+in 2600 expect pixel 104 26 on
+in 2600 expect text CHOOSE4ME
+in 3000 finish down
+in 3120 finish up
+run 4500
+expect text Env
+print Choose4Me: pantalla estatica, la insignia sale al llegar
+
+# --- RefillGame (esquina superior derecha) ---
+pot 1000
+wait 200
+tap morse
+pot 420
+wait 250
+in 0 morse down
+in 120 morse up
+in 900 expect pixel 100 0 off
+in 1000 chatmsg 50 7 en la jarra
+in 1700 chatmsg 50 7 en la jarra
+in 2600 expect serial Guardado: en la jarra
+in 2600 expect pixel 100 0 on
+in 2600 expect pixel 104 2 on
+in 3000 finish down
+in 3500 finish up
+run 5000
+expect text Env
+print RefillGame: insignia en la esquina superior derecha
+
+# --- HippoRadar: el chat solo se oye en sus ventanas (SF7); el mensaje de la ventana tambien avisa ---
+pot 1023
+wait 350
+tap morse
+wait 300
+pot 768
+wait 350
+expect text HippoRadar
+radio peer sf 10
+in 0 morse down
+in 150 morse up
+in 600 morse down
+in 750 morse up
+in 1500 expect text BUSCANDO
+in 1500 expect pixel 100 0 off
+in 1900 lora HR
+in 2900 lora HR
+in 3900 lora HR
+in 4500 expect text GIRA
+in 4950 radio peer sf 7
+in 4960 chatmsg 50 8 en el radar
+in 5300 chatmsg 50 8 en el radar
+in 5320 radio peer sf 10
+in 6500 expect serial Guardado: en el radar
+in 6500 expect pixel 100 0 on
+in 6500 expect pixel 104 2 on
+in 6500 expect text GIRA
+in 7000 finish down
+in 7200 finish up
+run 9000
+wait 400
+expect text Env
+expect pixel 100 0 off
+print HippoRadar: el mensaje que cae en la ventana de chat avisa con la insignia
+radio peer sf 7
+
+# --- Mas de 9 mensajes: "9+" (cada mensaje se repite 3 veces con separaciones distintas, como un emisor real que no recibe el ACK: la 1a
+#     puede caer en una emision propia del juego y perderse) ---
+pot 1000
+wait 200
+tap morse
+wait 300
+pot 900
+wait 250
+in 0 morse down
+in 120 morse up
+in 900 expect text Buscando rival
+in 1000 chatmsg 50 11 m1
+in 1700 chatmsg 50 11 m1
+in 2500 chatmsg 50 11 m1
+in 3300 chatmsg 50 12 m2
+in 4000 chatmsg 50 12 m2
+in 4800 chatmsg 50 12 m2
+in 5600 chatmsg 50 13 m3
+in 6300 chatmsg 50 13 m3
+in 7100 chatmsg 50 13 m3
+in 7900 chatmsg 50 14 m4
+in 8600 chatmsg 50 14 m4
+in 9400 chatmsg 50 14 m4
+in 10200 chatmsg 50 15 m5
+in 10900 chatmsg 50 15 m5
+in 11700 chatmsg 50 15 m5
+in 12500 chatmsg 50 16 m6
+in 13200 chatmsg 50 16 m6
+in 14000 chatmsg 50 16 m6
+in 14800 chatmsg 50 17 m7
+in 15500 chatmsg 50 17 m7
+in 16300 chatmsg 50 17 m7
+in 17100 chatmsg 50 18 m8
+in 17800 chatmsg 50 18 m8
+in 18600 chatmsg 50 18 m8
+in 19400 chatmsg 50 19 m9
+in 20100 chatmsg 50 19 m9
+in 20900 chatmsg 50 19 m9
+in 21700 expect serial Guardado: m9
+in 21700 expect pixel 123 5 off                   # 9 mensajes: "9" solo
+in 21800 chatmsg 50 20 m10
+in 22500 chatmsg 50 20 m10
+in 23300 chatmsg 50 20 m10
+in 24100 expect serial Guardado: m10
+in 24100 expect pixel 123 5 on                    # 10 mensajes: "9+"
+in 24100 shot game_notice_9plus
+in 24400 finish down
+in 25500 finish up
+run 26900
+wait 400
+expect text Env
+print Mas de 9 mensajes: 9+

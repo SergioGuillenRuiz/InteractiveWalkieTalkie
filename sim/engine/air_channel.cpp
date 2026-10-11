@@ -13,7 +13,6 @@
 #include <cstring>
 #include <thread>
 
-#ifndef _WIN32
 #include <fcntl.h>
 #include <sched.h>
 #include <signal.h>
@@ -21,7 +20,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 namespace fs = std::filesystem;
 
@@ -93,7 +91,6 @@ static bool fromHex(const std::string &h, std::string &out) {
     return true;
 }
 
-#ifndef _WIN32
 // =====================================================================
 //  Modo sincronizado: tablero en memoria compartida (fichero con mmap) con el reloj de cada proceso y un
 //  anillo de tramas. Ver la cabecera.
@@ -249,18 +246,10 @@ static void lsPoll(std::vector<AirFrame> &out) {
     });
     for (size_t i : idx) out.push_back(got[i]);
 }
-#else
-bool air_lockstep_enable(int) { return false; }
-bool air_lockstep() { return false; }
-void air_lockstep_tick(long long) {}
-void air_lockstep_bye() {}
-#endif
 
 void air_publish(const AirFrame &fr) {
     if (!g_enabled) return;
-#ifndef _WIN32
     if (g_ls) { lsPublish(fr); return; }
-#endif
 
     // Nombre unico y ordenable por tiempo: pkt_<ms>_<node>_<contador>.txt
     char name[256];
@@ -305,9 +294,7 @@ static void cleanup(uint64_t now) {
 
 void air_poll(std::vector<AirFrame> &out) {
     if (!g_enabled) return;
-#ifndef _WIN32
     if (g_ls) { lsPoll(out); return; }
-#endif
 
     uint64_t now = nowMs();
     cleanup(now);

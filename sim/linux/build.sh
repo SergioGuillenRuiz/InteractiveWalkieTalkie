@@ -2,7 +2,7 @@
 # ============================================================
 #  Compila el simulador nativo del walkie-talkie en Linux (g++/clang++).
 #  Compila el firmware REAL de ../../src + la capa mock Arduino.
-#  Salida: sim/out/linux/walkie_sim  (separada de la build de Windows)
+#  Salida: sim/out/linux/walkie_sim
 #
 #  Compilacion incremental: cada fuente se recompila solo si cambio ella o
 #  alguna cabecera del proyecto. Variables: CXX, CC, JOBS.

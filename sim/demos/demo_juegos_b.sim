@@ -2,7 +2,7 @@
 #  g10 - JUEGOS parte B: Choose4Me y HippoRadar
 #  Recorre cada utilidad desde el menu Juegos: entrada, interaccion
 #  y salida limpia a IDLE. Captura cada pantalla relevante.
-#  Ejecutar:  walkie_sim.exe --fresh demo_juegos_b.sim
+#  Ejecutar:  ./out/linux/walkie_sim --fresh demos/demo_juegos_b.sim
 #
 #  NOTA sobre la tecnica de captura (ver tambien sim/scripts/history.sim y
 #  sim/scripts/ack_late.sim):

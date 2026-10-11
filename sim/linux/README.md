@@ -1,24 +1,22 @@
-# Simulador — versión Linux (GNOME)
+# Simulador — lanzadores Linux (GNOME)
 
-Versión Linux del simulador nativo. Es **el mismo simulador** que el de Windows
-(`../README.md`): compila el firmware real de `../../src` con la misma capa mock
-(`../arduino`), las mismas librerías (`../vendor`), el mismo motor (`../engine`)
-y los mismos scripts de prueba (`../scripts`). Solo cambia la capa de plataforma
-y los lanzadores, que viven separados en esta carpeta:
+Aquí viven los scripts con los que se compila y se usa el simulador nativo (descrito en [`../README.md`](../README.md)):
+compila el firmware real de `../../src` con la capa mock (`../arduino`), las librerías (`../vendor`), el motor
+(`../engine`) y ejecuta los scripts de prueba (`../scripts`). Linux es la plataforma del simulador.
 
-| Windows (`sim/`)            | Linux (`sim/linux/`)           | Qué hace |
-|-----------------------------|--------------------------------|----------|
-| `build.bat` (MSVC `cl`)     | `build.sh` (g++/gcc)           | Compila → `out/walkie_sim.exe` / `out/linux/walkie_sim` |
-| `run.bat`                   | `run.sh`                       | Modo interactivo o un script |
-| `run_tests.bat`             | `run_tests.sh`                 | Toda la batería de tests |
-| `net.bat` + `net.ps1`       | `net.sh`                       | N dispositivos interactivos comunicados por radio |
-| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (11 escenas A–K: chat, hora, dibujos, las partidas de 3 en raya, Tetris y HippoRadar entre dos firmwares reales (16 semillas cada una) y el **emparejamiento** entre dos equipos sin clave (8 semillas: mismo código en los dos y clave nueva funcionando)). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~13 s); `net_test.ps1` usa el modelo de radio ideal (solo las escenas de chat) |
-| —                           | `seed_tests.sh`                | Toda la batería con muchas secuencias aleatorias (`./seed_tests.sh [desde] [hasta] [paralelo]`) |
-| `engine/console_win.cpp`    | `console_linux.cpp`            | Ajuste de la consola para píxeles cuadrados |
-| `<conio.h>`, `<process.h>`  | `platform_linux.h`             | Teclado sin eco (termios), pid, ruta del ejecutable |
+| Script / fichero      | Qué hace |
+|-----------------------|----------|
+| `build.sh` (g++/gcc)  | Compila → `../out/linux/walkie_sim` |
+| `run.sh`              | Modo interactivo o un script |
+| `run_tests.sh`        | Toda la batería de tests |
+| `seed_tests.sh`       | Toda la batería con muchas secuencias aleatorias (`./seed_tests.sh [desde] [hasta] [paralelo]`) |
+| `net.sh`              | N dispositivos interactivos comunicados por radio |
+| `net_test.sh`         | Prueba automatizada multi-dispositivo (11 escenas A–K: chat, hora, dibujos, las partidas de 3 en raya, Tetris y HippoRadar entre dos firmwares reales (16 semillas cada una) y el **emparejamiento** entre dos equipos sin clave (8 semillas: mismo código en los dos y clave nueva funcionando)). Los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~15 s) |
+| `console_linux.cpp`   | Ajuste de la consola para píxeles cuadrados |
+| `platform_linux.h`    | Teclado sin eco (termios), pid, ruta del ejecutable |
+| `term_common.sh`      | Funciones comunes de `run.sh` y `net.sh` (tamaño y zoom de la ventana) |
 
-Las compilaciones están separadas: Windows deja sus artefactos en `sim/out/` y
-Linux en `sim/out/linux/` (ejecutable, objetos, EEPROM y capturas).
+Los artefactos (ejecutable, objetos, EEPROM y capturas) quedan en `sim/out/linux/`.
 
 ## Requisitos
 
@@ -48,13 +46,12 @@ Admite las variables `CXX`, `CC` (p.ej. `CXX=clang++ CC=clang ./build.sh`) y `JO
 
 ### Modo interactivo
 
-Mismas teclas que en Windows: `m` / `n` pulsar, `M` / `N` pulsación larga,
+Teclas: `m` / `n` pulsar, `M` / `N` pulsación larga,
 flechas arriba/abajo para el potenciómetro, `r` simula recepción LoRa, `q` salir.
 
 El render cuadrado necesita 128 columnas y ~68 filas. `run.sh` y `net.sh` abren
 GNOME Terminal con `--geometry=132x72` y un `--zoom` calculado para que quepa en
-el monitor (lo mismo que `run.bat` consigue fijando la fuente de `conhost`). Si
-no te encaja, fuerza otro zoom:
+el monitor. Si no te encaja, fuerza otro zoom:
 
 ```bash
 SIM_ZOOM=0.6 ./run.sh
@@ -66,7 +63,7 @@ cuadrados. Al salir (también con `Ctrl+C`) se restaura el modo del terminal.
 
 ### Ejecutable directo
 
-Las opciones son las mismas que las de `walkie_sim.exe` (ver `../README.md`):
+Opciones del ejecutable (ver `../README.md`):
 
 ```bash
 ../out/linux/walkie_sim --fresh ../scripts/history.sim
@@ -82,9 +79,7 @@ CUÁNDO pasó cada cosa en una escena de varios equipos.
 
 ## Notas de implementación
 
-- `../engine/sim_main.cpp` es compartido; solo tiene unos pocos `#ifdef _WIN32`
-  (cabeceras `conio.h`/`process.h`, `timeBeginPeriod`, `chcp` y el separador de
-  ruta de la EEPROM). En Windows se compila exactamente igual que antes.
-- `platform_linux.h` traduce las flechas VT (`ESC [ A` / `ESC [ B`) al formato de
-  `conio` (`0xE0` + 72/80) y deja pasar intacta la respuesta DSR con la que el
-  simulador mide el terminal.
+- `../engine/sim_main.cpp` incluye `platform_linux.h`, que da el teclado sin eco (`_kbhit`/`_getch`, con los
+  nombres de `<conio.h>` con los que está escrito el motor), el pid y la ruta del ejecutable.
+- `platform_linux.h` traduce las flechas VT (`ESC [ A` / `ESC [ B`) al formato de `conio` (`0xE0` + 72/80) y deja
+  pasar intacta la respuesta DSR con la que el simulador mide el terminal.

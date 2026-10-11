@@ -65,6 +65,8 @@ static void onNewIncoming(uint8_t sender, const String &preview) {
         g_alertPending = true;
         g_alertFrom = sender;
         g_alertText = preview;
+    } else if (mainState == STATE_GAMES_MENU) {
+        GameNotice_add();                    // dentro de un juego: insignia con el numero de mensajes nuevos
     }
 }
 
@@ -1110,6 +1112,14 @@ bool handleHistoryMenu() {
     return true;
 }
 // ==================== STATE_GAMES_MENU ====================
+// Una partida: mientras dura, los mensajes que llegan se avisan con una insignia (ver GameNotice_* en Display.h).
+// noticeY: altura de la insignia en ese juego (la esquina superior derecha tapa el marcador de fichas del Poker y el titulo de Choose4Me).
+static void runGame(void (*game)(), int noticeY = 0) {
+    GameNotice_begin(noticeY);
+    game();
+    GameNotice_end();
+}
+
 bool handleGamesMenu() {
     static bool needRedraw = true;
 
@@ -1127,27 +1137,27 @@ bool handleGamesMenu() {
 
             switch (seleccion) {
                 case 0: // Tetris Coop (implementado): gestiona su propia salida a IDLE
-                    startTetrisCoop();
+                    runGame(startTetrisCoop);
                     return true;
 
                 case 1: // Poker (implementado): gestiona su propia salida a IDLE
-                    startPoker();
+                    runGame(startPoker, 92);
                     return true;
 
                 case 2: // RefillGame (implementado): gestiona su propia salida a IDLE
-                    startRefillGame();
+                    runGame(startRefillGame);
                     return true;
 
                 case 3: // Choose4Me (implementado): deja mainState = STATE_IDLE
-                    startChoose4Me();
+                    runGame(startChoose4Me, 24);
                     return true;
 
                 case 4: // HippoRadar (utilidad): gestiona su propia salida a IDLE
-                    startHippoRadar();
+                    runGame(startHippoRadar);
                     return true;
 
                 case 5: // Tres en raya (2 jugadores por LoRa): gestiona su salida a IDLE
-                    startTresEnRaya();
+                    runGame(startTresEnRaya);
                     return true;
 
                 default: { // Sin implementar

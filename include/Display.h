@@ -43,6 +43,14 @@ void Display_begin();
 
 void Display_update();
 void Display_clear();
+// Volcado a pantalla de los JUEGOS: igual que display.display() pero, si durante la partida ha llegado algun mensaje o
+// dibujo nuevo, dibuja encima una insignia (sobre + numero) en la esquina superior derecha. Asi el aviso sale en cada
+// fotograma de los juegos que se repintan solos y tambien en las pantallas estaticas (Display_update() lo usa).
+void Display_flush();
+void GameNotice_begin(int y = 0);   // empieza una partida: aviso activo y a cero; y = altura de la insignia (cada juego elige un hueco libre)
+void GameNotice_end();     // termina la partida: ya no se dibuja nada
+void GameNotice_add();     // ha llegado un mensaje/dibujo nuevo (solo cuenta con una partida en curso; lo dibuja ya)
+int  GameNotice_count();
 void Display_setPower(bool on);   // enciende/apaga el panel OLED (ahorro batería)
 
 void Display_centerText(const String &text);

@@ -1,2 +1,2 @@
-# Los scripts de Linux deben mantener finales de linea LF aunque se clone en Windows
+# Los scripts de shell deben mantener finales de linea LF
 *.sh text eol=lf

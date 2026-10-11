@@ -332,7 +332,7 @@ static void drawGame() {
   // leyenda piezas
   display.fillRect(hx, 86, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 86); display.print("Tu");
   display.drawRect(hx, 98, 5, 5, SH110X_WHITE);  display.setCursor(hx + 8, 98); display.print(p2isBot ? "CPU" : (clientView ? "P1" : "P2"));
-  display.display();
+  Display_flush();
 }
 
 // ============================================================
@@ -415,7 +415,7 @@ static bool lobby(bool host) {
     centerPrint(host ? "Esperando" : "Buscando", 54, 1);
     centerPrint(host ? "companero..." : "partida...", 66, 1);
     centerPrint("B: cancelar", 100, 1);
-    display.display();
+    Display_flush();
     String m = tcRecv();
     if (host)  { if (m == "TJ") { for (int k = 0; k < 3; k++) tcSend("TS_GO"); return true; } if (now - t > 600 && !Lora_busy()) { tcSend("TH"); t = now; } }
     else {
@@ -446,7 +446,7 @@ static void clientGame() {
     // Anfitrion perdido (apagado o fuera de alcance): en plena partida llega su estado cada 340 ms; si deja de llegar
     // se avisa y se sale al menu en vez de dejar el ultimo tablero congelado.
     if (started && !over && now - lastState > HOST_LOST_MS) {
-      display.clearDisplay(); centerPrint("Anfitrion perdido", 56, 1); display.display();
+      display.clearDisplay(); centerPrint("Anfitrion perdido", 56, 1); Display_flush();
       for (int i = 0; i < 60; i++) { backgroundTick(false); delay(25); }
       mainState = STATE_IDLE; Display_clear(); return;
     }
@@ -461,7 +461,7 @@ static void clientGame() {
     if (now - lastInput > TETRIS_INPUT_MS && !Lora_busy()) { tcSend(encodeInput(tx, rotC, dropC)); lastInput = now; }
 
     if (started) { drawGame(); if (over) { if (!gameOverScreen()) { mainState = STATE_IDLE; Display_clear(); return; } resetBoard(); over = false; started = false; } }
-    else { display.clearDisplay(); centerPrint("Conectando...", 56, 1); display.display(); }
+    else { display.clearDisplay(); centerPrint("Conectando...", 56, 1); Display_flush(); }
     delay(25);
   }
 }
@@ -479,7 +479,7 @@ static int modeSelect() {     // 0=solo, 1=crear(host), 2=unirse(cliente), -1=sa
     centerPrint(((sel == 2) ? "> " : "  ") + String("2 Jug: Unirse"), 72, 1);
     centerPrint("Pote: elegir", 96, 1);
     centerPrint("A: ok  B: salir", 112, 1);
-    display.display();
+    Display_flush();
     char k = pollButton();
     if (k == 'A') return sel;
     if (k == 'B') return -1;
@@ -494,7 +494,7 @@ static bool gameOverScreen() {   // true = otra
   centerPrint(String("Puntos: ") + String(score), 56, 1);
   centerPrint(String("Lineas: ") + String(lines), 70, 1);
   centerPrint("A: Otra  B: Salir", 104, 1);
-  display.display();
+  Display_flush();
   while (true) {
     char k = pollButton();
     if (k == 'A') return true;
@@ -607,7 +607,7 @@ void startTetrisCoop() {
     }
 
     if (partnerLeft) {                                // aviso y de vuelta al lobby, esperando a otro companero (o B para salir)
-      display.clearDisplay(); centerPrint("El companero salio", 56, 1); display.display();
+      display.clearDisplay(); centerPrint("El companero salio", 56, 1); Display_flush();
       for (int i = 0; i < 60; i++) { backgroundTick(false); delay(25); }
       Game_dropPackets();
       if (!lobby(true)) { mainState = STATE_IDLE; Display_clear(); return; }
