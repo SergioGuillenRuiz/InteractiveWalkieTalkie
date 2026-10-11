@@ -12,7 +12,7 @@ y los lanzadores, que viven separados en esta carpeta:
 | `run.bat`                   | `run.sh`                       | Modo interactivo o un script |
 | `run_tests.bat`             | `run_tests.sh`                 | Toda la batería de tests |
 | `net.bat` + `net.ps1`       | `net.sh`                       | N dispositivos interactivos comunicados por radio |
-| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (10 escenas: chat, hora, dibujos y las partidas de 3 en raya, Tetris y HippoRadar entre dos firmwares reales, cada una con 16 semillas). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~13 s); `net_test.ps1` usa el modelo de radio ideal (solo las escenas de chat) |
+| `net_test.ps1`              | `net_test.sh`                  | Prueba automatizada multi-dispositivo (11 escenas A–K: chat, hora, dibujos, las partidas de 3 en raya, Tetris y HippoRadar entre dos firmwares reales (16 semillas cada una) y el **emparejamiento** entre dos equipos sin clave (8 semillas: mismo código en los dos y clave nueva funcionando)). En Linux los procesos comparten el mismo tiempo virtual (`--nodes N`: colisiones reales y resultado determinista, ~13 s); `net_test.ps1` usa el modelo de radio ideal (solo las escenas de chat) |
 | —                           | `seed_tests.sh`                | Toda la batería con muchas secuencias aleatorias (`./seed_tests.sh [desde] [hasta] [paralelo]`) |
 | `engine/console_win.cpp`    | `console_linux.cpp`            | Ajuste de la consola para píxeles cuadrados |
 | `<conio.h>`, `<process.h>`  | `platform_linux.h`             | Teclado sin eco (termios), pid, ruta del ejecutable |

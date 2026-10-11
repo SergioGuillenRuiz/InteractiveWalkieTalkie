@@ -63,8 +63,9 @@ pio run -t upload        # cargar en la placa conectada por USB
 pio device monitor       # registro serie a 115200 baudios
 ```
 
-Carga **el mismo firmware en los dos equipos**: comparten clave de cifrado y parámetros de radio. Cada equipo
-tiene un número propio (**"Equipo #N"**, de 1 a 254, derivado del chip y visible en el registro serie al arrancar).
+Carga **el mismo firmware en los dos equipos** y después **empareja** uno con otro (ver *Emparejar los dos equipos*):
+la clave de cifrado no viene en el firmware, la crea cada pareja. Cada equipo tiene un número propio
+(**"Equipo #N"**, de 1 a 254, derivado del chip y visible en el registro serie al arrancar).
 
 ---
 
@@ -91,7 +92,38 @@ Tres iconos en fila (gira el potenciómetro para mover el cursor y pulsa **A** p
   **batería del compañero** (la más baja de los que están en alcance; un `!` indica que alguno tiene la batería baja).
 * **Insignia en "Hist"**: número de mensajes **sin leer** (`9+` si hay más de 9).
 * Cuando llega un mensaje, el hipopótamo **persigue al corazón**.
-* **Mantén B 1,5 s** en esta pantalla para **poner la hora** (ver más abajo).
+* **Mantén B 1,5 s** en esta pantalla para abrir **Ajustes**: *Poner la hora* y *Emparejar* (ver más abajo).
+
+### Emparejar los dos equipos
+
+Cada pareja de equipos tiene su **propia clave secreta**, que se crea al emparejarlos (no viene en el firmware). **Mientras
+un equipo no tenga pareja no envía ni acepta nada**: *Env* y los juegos por radio muestran "Sin pareja". Se hace **una sola vez**:
+
+1. En **los dos equipos**: pantalla principal → **mantén B** 1,5 s → **Ajustes** → **Emparejar** (potenciómetro para elegir, **A** para abrir).
+2. Con *"Buscando…"* en las dos pantallas, los equipos se encuentran solos en unos segundos y calculan la clave. En cada pantalla
+   aparece un **código de 6 dígitos**.
+3. **Compara los dos códigos.** Si son **iguales**, pulsa **A** en los dos (el primero verá "Esperando al otro…"). Si son
+   **distintos**, o tienes dudas, pulsa **B**: no se guarda nada.
+4. *"¡Emparejado! Solo vosotros dos podéis hablar."* La clave queda guardada en el equipo y **sobrevive a reinicios**.
+
+Para cambiar de pareja se repite el proceso (el equipo avisa de que la clave anterior se sustituye). Si no se encuentran en 3 minutos, se cancela sin cambiar nada.
+
+**Qué te da, de verdad:**
+
+* Nadie sin la clave puede **leer** los mensajes, **inventar** uno que el equipo acepte, **modificarlo** al vuelo, ni **repetir** uno
+  antiguo que hayas capturado (cada paquete lleva un contador que solo avanza y una firma de 8 bytes).
+* Un tercero cercano no puede colarse en el emparejamiento sin que lo notes **si comparas el código de verdad**: para
+  engañar a los dos equipos tendría que acertar un código de 6 dígitos (1 entre un millón por intento).
+* Un equipo que no es tu pareja no puede leer tus mensajes (ni tú los suyos): lo que oye es ruido cifrado.
+
+**Qué NO te da** (no existe el "100 %"):
+
+* El **código solo protege si lo comparas**. Si pulsas A sin mirar el otro equipo, el emparejamiento queda sin proteger.
+* La clave está en la memoria del equipo **sin cifrar**: quien tenga el equipo en la mano y sepa leer su memoria la obtiene.
+* Se puede **ver que hay radio**: el número de equipo, cuándo emite y el tamaño de los paquetes no se ocultan (el contenido sí).
+* No hay defensa contra un **inhibidor** (alguien que sature la banda): impide la comunicación, no la espía.
+* Tras **reiniciar el equipo que recibe**, un atacante que hubiera capturado paquetes recientes (hasta 4096 de los últimos) podría repetir uno una vez.
+* **Solo hay una pareja**: la clave es de dos equipos; un tercero no puede unirse a la conversación.
 
 ### Enviar un mensaje
 
@@ -139,7 +171,7 @@ antiguo). Se guardan en el equipo y **sobreviven a un reinicio**.
 
 El equipo no tiene reloj propio: la hora se pone **una vez** y se **comparte por radio**.
 
-1. En la pantalla principal, **mantén B** 1,5 s → **Poner la hora**.
+1. En la pantalla principal, **mantén B** 1,5 s → **Ajustes** → **Poner la hora**.
 2. Con el **potenciómetro** eliges las **horas**; **A** pasa a las **decenas de minuto**, otra vez **A** a las **unidades**, y **A** guarda. **B** vuelve atrás (en las horas, cancela).
 3. El otro equipo **adopta la hora** en cuanto oye la baliza (la última hora puesta gana, aunque sea anterior). La hora se guarda y es la **hora local**: al cambiar de horario de verano/invierno hay que ponerla de nuevo.
 
@@ -163,7 +195,7 @@ y los verás como no leídos al salir al menú. (En el radar de HippoRadar, solo
 
 ### La radio
 
-* Banda de **868 MHz**, modulación LoRa **SF7**, 125 kHz; los mensajes van **cifrados (AES-128)**.
+* Banda de **868 MHz**, modulación LoRa **SF7**, 125 kHz; los mensajes van **cifrados (AES-128) y firmados (AES-CMAC)** con la clave de la pareja (ver *Emparejar los dos equipos*).
 * **Alcance:** depende de la antena y del entorno (todavía no medido en la placa). El radar usa un modo
   de más alcance (SF10, +20 dBm).
 * **Presencia:** cada equipo emite una **baliza** cada ~30 s; si un compañero lleva más de 90 s sin oírse se considera fuera de alcance
@@ -176,8 +208,11 @@ y los verás como no leídos al salir al menú. (En el radar de HippoRadar, solo
 
 | Síntoma | Qué mirar |
 |---|---|
+| "Sin pareja" al enviar o al abrir un juego | Los dos equipos deben **emparejarse** una vez: mantén **B** 1,5 s en la pantalla principal → *Emparejar* (en los dos). |
+| El emparejamiento no avanza de "Buscando…" | Los dos equipos tienen que estar en *Emparejar* a la vez, con antena y al alcance de la radio. |
+| Tras emparejar, no se oyen aunque estén cerca | Si uno se emparejó con **otro** equipo después, la clave ya no coincide: vuelve a emparejar los dos entre sí. |
 | La pantalla no enciende / está en negro | ¿Está **suspendido**? Pulsa un botón 3 veces. Comprueba SDA/SCL y la dirección `0x3C`. |
-| No se oyen los equipos | Mismo firmware en los dos, **antena conectada**, a menos distancia; que ninguno esté en el **radar** de HippoRadar (solo oye el chat 1,2 s cada 4 s). El registro serie muestra `[LoRa] ...` y `[Presencia]`. |
+| No se oyen los equipos | **Emparejados entre sí**, mismo firmware en los dos, **antena conectada**, a menos distancia; que ninguno esté en el **radar** de HippoRadar (solo oye el chat 1,2 s cada 4 s). El registro serie muestra `[LoRa] ...` y `[Presencia]`. |
 | Dos equipos que no se ven aunque están cerca | Pueden tener el **mismo número** (el identificador es de 1 byte derivado del chip: raro, ~0,4 %); en ese caso un equipo ignora los mensajes del otro. Compara "Equipo #N" en el registro serie al arrancar. |
 | `--:--` en lugar de la hora | Nadie ha puesto la hora aún: mantén **B** 1,5 s en la pantalla principal. |
 | El nivel de batería siempre marca 100 % | Es lo esperado hoy: el único ADC del ESP8266 lo usa el potenciómetro y medir la batería requiere hardware dedicado (ver `path.md`). |
@@ -205,10 +240,10 @@ En **Linux (GNOME)** hay una versión equivalente y separada en [`sim/linux/`](s
 
 ```bash
 cd sim/linux
-./run_tests.sh           # compila y ejecuta toda la batería de tests (45 suites)
+./run_tests.sh           # compila y ejecuta toda la batería de tests (48 suites)
 ./seed_tests.sh 1 50     # la misma batería con 50 secuencias aleatorias (descubre tests que dependen de la suerte)
-./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido (10 escenas, incluidas partidas
-                         # de 3 en raya, Tetris y HippoRadar entre dos firmwares reales)
+./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido (11 escenas, incluidas partidas
+                         # de 3 en raya, Tetris y HippoRadar entre dos firmwares reales y el emparejamiento)
 ./run.sh                 # modo interactivo (abre una ventana de GNOME Terminal)
 ```
 

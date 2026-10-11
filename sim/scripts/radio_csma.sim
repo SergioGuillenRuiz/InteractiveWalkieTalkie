@@ -100,10 +100,34 @@ in 120 morse up
 run 300 100                               # envia; la espera "Enviado" es bloqueante: con poco margen se corta pronto
 expect serial Chat] Enviando: happy
 waitfor clear
-waitfor serial 3000 6800 Reintento msg 1 (1)   # (desde ~0,4 s despues del envio: el intervalo es 3,5-6,5 s)
+# La 1a espera de cada mensaje arranca ~0,4 s despues del envio (sesgo fijo que, por si solo, ya daria "dispersion"): su cota
+# se comprueba pero no cuenta para la dispersion. Esta se mide con las esperas 2 y 3 de DOS mensajes (4 muestras de 3,5-6,5 s).
+waitfor serial 3000 6800 Reintento msg 1 (1)   # (el intervalo es 3,5-6,5 s desde el envio)
+waitfor drop
 waitfor serial 3400 6800 Reintento msg 1 (2)
 waitfor serial 3400 6800 Reintento msg 1 (3)
-expect spread 100                         # cada intervalo es distinto (5 s +-1,5 s), no un metronomo
+tap finish                                # cierra "Enviado" (vuelve al menu) para mandar el segundo mensaje
+wait 300
+expect text Env
+pot 80
+wait 300
+tap morse
+wait 300
+pot 300
+wait 300
+tap morse
+wait 300
+pot 585
+wait 300
+in 0 morse down
+in 120 morse up
+run 300 100
+expect times 2 Chat] Enviando: happy
+waitfor serial 3000 6800 Reintento msg 2 (1)
+waitfor drop
+waitfor serial 3400 6800 Reintento msg 2 (2)
+waitfor serial 3400 6800 Reintento msg 2 (3)
+expect spread 40                          # cada intervalo es distinto (5 s +-1,5 s), no un metronomo
 print E) los reintentos se reparten en 3,5..6,5 s con dispersion
 
 # --- F) Lora_busy(): ocupado con la trama en el aire y una pausa aleatoria al quedar libre ---

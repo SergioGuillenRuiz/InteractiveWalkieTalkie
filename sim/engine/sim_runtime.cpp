@@ -91,8 +91,9 @@ void applyDue() {
         for (size_t i = 0; i < g_events.size(); ++i)
             if (g_events[i].t <= g_now && (idx < 0 || g_events[i].t < best)) { best = g_events[i].t; idx = (int)i; }
         if (idx < 0) break;
-        applyEvent(g_events[idx]);
-        g_events.erase(g_events.begin() + idx);
+        Ev ev = g_events[idx];                       // se saca de la cola ANTES de aplicarlo: aplicarlo puede llamar a yield()
+        g_events.erase(g_events.begin() + idx);      // (p. ej. un calculo de X25519) y volver aqui
+        applyEvent(ev);
     }
 }
 
@@ -111,8 +112,9 @@ void advance(uint32_t ms) {
             if (idx < 0 || g_events[i].t < best) { best = g_events[i].t; idx = (int)i; }
         if (idx < 0 || best > target) break;
         moveClock((best < g_now) ? g_now : best);     // los eventos pasados se aplican ya
-        applyEvent(g_events[idx]);
+        Ev ev = g_events[idx];
         g_events.erase(g_events.begin() + idx);
+        applyEvent(ev);
         if (g_now > g_deadline) throw Timeout();
     }
     moveClock(target);

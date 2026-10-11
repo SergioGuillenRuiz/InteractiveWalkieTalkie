@@ -4,6 +4,8 @@
 #include "States.h"
 #include "MyLora.h"
 #include "TetrisCoop.h"
+#include "Pairing.h"
+#include "Settings.h"
 
 // ============================================================
 //  TETRIS COOP
@@ -550,6 +552,7 @@ void startTetrisCoop() {
 
   int mode = modeSelect();
   if (mode < 0) { mainState = STATE_IDLE; Display_clear(); return; }
+  if (mode != 0 && !Pairing_isPaired()) { showNeedPairing(); mainState = STATE_IDLE; return; }   // 2 jugadores = radio = pareja
   p2isBot = false;                                   // (los estaticos sobreviven de una partida a otra: un cliente que antes
   clientView = (mode == 2);                          //  jugo contra la CPU veia "CPU" en el marcador)
 

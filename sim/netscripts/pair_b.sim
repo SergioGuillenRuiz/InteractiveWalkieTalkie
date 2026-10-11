@@ -1,0 +1,29 @@
+# ============================================================
+#  EMPAREJAMIENTO entre DOS firmwares reales (escena K): equipo B (#201); ver pair_a.sim.
+# ============================================================
+wait 300
+unpair
+wait 500
+expect text SIN PAREJA
+pot 1000                                        # Ajustes: opcion 2 = Emparejar
+wait 300
+in 0 finish down
+in 1700 finish up
+in 1900 morse down
+in 2050 morse up
+in 9000 expect text Codigo
+in 9500 morse down                              # A: "es el mismo"
+in 9650 morse up
+in 15000 expect text Emparejado
+in 15500 morse down
+in 15650 morse up
+run 17000
+expect text Env
+expect notext SIN PAREJA
+print Emparejados (B)
+# Espera el mensaje de A
+wait 10000
+expect serial Guardado: happy
+expect serial ACK a #101
+print B: recibio y confirmo el mensaje de la pareja
+serial

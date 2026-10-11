@@ -1,0 +1,7 @@
+# ============================================================
+#  Primitivas criptograficas del proyecto (src/Crypto.cpp) contra los vectores oficiales:
+#  SHA-256 (FIPS 180-4), X25519 (RFC 7748: dos vectores de multiplicacion y el intercambio Alice/Bob) y AES-CMAC
+#  (RFC 4493 y longitudes irregulares). Los vectores se generaron con una implementacion de referencia.
+# ============================================================
+crypto selftest
+print Criptografia: SHA-256, X25519 y AES-CMAC OK

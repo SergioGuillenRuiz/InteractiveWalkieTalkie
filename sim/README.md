@@ -75,8 +75,10 @@ procesos en un **"aire" compartido**: lo que **transmite** un dispositivo lo
 RF real. Cada proceso es un dispositivo **independiente y real**: su propio
 firmware, su propia EEPROM y su propia identidad de equipo (`Device_id`).
 
-No es una maqueta: el cifrado AES, el sobre de chat, el auto-ACK de entrega y el
-historial son los mismos que en la placa. Lo único simulado es el medio (un
+No es una maqueta: el cifrado AES, la autenticación, el sobre de chat, el auto-ACK de entrega y el
+historial son los mismos que en la placa. (Con la EEPROM vacía el simulador instala una **clave de pruebas**, igual en todos
+los procesos, para que los guiones no tengan que emparejar a mano; `unpair` la borra y el emparejamiento real se prueba
+con `pairing.sim` y la escena K.) Lo único simulado es el medio (un
 directorio donde cada transmisión es un fichero de paquete que los demás leen).
 Como en la radio real, un equipo solo oye lo que se emite mientras está
 encendido (si arranca después, no recibe los mensajes anteriores) y cada paquete
@@ -115,10 +117,11 @@ otro equipo, tres equipos viéndose por las balizas, un **dibujo** de un equipo 
 radio (`[radio]`: qué emitió y qué le llegó, y por qué se perdió lo que no oyó) se vuelcan a un fichero
 y se comprueban.
 
-Las escenas **H, I y J** (solo Linux) enfrentan **dos firmwares reales jugando entre sí**: *Tres en raya* (se emparejan, se
+Las escenas **H, I, J y K** (solo Linux) enfrentan **dos firmwares reales entre sí**: *Tres en raya* (se emparejan, se
 turnan y uno gana), *Tetris Coop* (anfitrión y cliente: lobby, estado, entrada del cliente, las dos piezas fijadas en las
 dos pantallas, ocupación del canal, salida) y *HippoRadar* (los dos radares en SF10 se enlazan, se bloquean y al salir vuelve
-el chat). Cada equipo ejecuta **su propio guion** de `netscripts/*.sim` (el mismo DSL, con sus `expect`) y la escena exige que
+el chat) y *Emparejar* (los dos equipos sin clave se buscan, muestran el mismo código de 6 dígitos, el usuario confirma en
+ambos y a partir de ahí hablan con la clave nueva; la escena K usa 8 semillas y comprueba también que el código sale igual en los dos). Cada equipo ejecuta **su propio guion** de `netscripts/*.sim` (el mismo DSL, con sus `expect`) y la escena exige que
 los dos acaben sin fallos. Cada una se repite con **16 semillas** (`SIM_SEED`): lo que se prueba depende de retardos aleatorios
 (HELLO, respuestas, pausas de escucha-antes-de-hablar) y un protocolo que solo funciona con una combinación afortunada falla en
 alguna. Para reproducir una: `SIM_SEED=<n> SIM_TRACE=1` con los dos procesos (ver `run_duo` en `linux/net_test.sh`).
@@ -129,7 +132,7 @@ Con `--nodes N` los N procesos comparten **el mismo tiempo virtual** y avanzan j
 milisegundo (barrera en memoria compartida: `<aire>/board.bin`). Lo que emite un equipo en el ms *t* lo
 oyen los demás desde el ms *t+1* con su instante de inicio exacto, de modo que los tiempos en el aire, el
 half-duplex y las **colisiones son los de la realidad** y el resultado es **determinista**: no depende de la
-velocidad de la máquina ni del azar del arranque (las 10 escenas tardan ~13 s). Sin `--nodes` cada proceso
+velocidad de la máquina ni del azar del arranque (las 11 escenas tardan ~15 s). Sin `--nodes` cada proceso
 lleva su propio reloj, anclado al reloj de pared con `--pace`: sirve para ver la comunicación funcionando
 (es lo que usa `net.sh` interactivo), pero los relojes quedan desfasados decenas de ms y dos tramas que en
 la realidad se pisarían, o no, dependen del azar. En Windows el modo sincronizado no está disponible
@@ -161,11 +164,11 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `tetris_lobby.sim` | Tetris Coop como cliente, el lobby: entra también con `TS_GO` o con el primer estado del anfitrión (antes solo con `TH` y se quedaba buscando para siempre si el anfitrión ya había salido de su lobby), un `TQ`/`TI` suelto no lo mueve, B cancela y vuelve al **menú principal** (antes reabría el de juegos: pulsación fantasma de A), y el cliente ve su pieza maciza y el marcador "COOP" (no hereda "CPU") |
 | `hippo_rx.sim`     | HippoRadar (SF10) y el chat: pings por la cola de juego, el chat (SF7) solo se oye y se confirma en las ventanas de chat (1,2 s cada 4 s), balizas y reintentos esperan a una ventana, y al salir se anuncia y el chat vuelve |
 | `doodle_store.sim` | Dibujos persistentes: el lienzo vive en su registro del Historial (sobrevive a reinicios, sigue a su registro al desplazarse o borrarse, sin duplicados, outbox persistente con el mismo lienzo) |
-| `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
+| `clock_set.sim`    | Pantalla "Poner la hora": abrir (B mantenida → Ajustes → Poner la hora), tres pasos con el pote, cancelar, guardar, persistencia, radio activa durante el ajuste |
 | `clock_gen.sim`    | Autoridad de la hora entre equipos (generación de ajuste: más reciente gana aunque sea hacia atrás, igual converge, vuelta del contador, baliza antigua) y edades del historial conservadas |
 | `radio_model.sim`  | Autotest del modelo de radio: la librería LoRa real contra el chip simulado (tiempos en el aire del roadmap, bloqueo al transmitir, reglas de recepción) |
 | `radio_rx.sim`     | La radio escucha SIEMPRE (menú, juegos, esperas bloqueantes, tras emitir), vigilancia que re-arma un chip caído, sueño de la radio solo en suspensión prolongada y consumo |
-| `radio_csma.sim`   | Acceso al canal: escuchar antes de hablar, no destruir una trama sin leer al emitir, leer una trama sin abortar la siguiente, ACK con retardo aleatorio, reintentos con dispersión y `Lora_busy()` (acceso sin bloquear: ocupado con la trama en el aire y una pausa aleatoria al quedar libre) |
+| `radio_csma.sim`   | Acceso al canal: escuchar antes de hablar, no destruir una trama sin leer al emitir, leer una trama sin abortar la siguiente, ACK con retardo aleatorio, reintentos con dispersión (el rango se mide con las esperas 2 y 3 de dos mensajes: una versión sin jitter da 0 ms y falla) y `Lora_busy()` (acceso sin bloquear: ocupado con la trama en el aire y una pausa aleatoria al quedar libre) |
 | `unread.sim`       | Mensajes no leídos: insignia, puntos de "nuevo", persistencia, leídos al abrir/salir de la lista, 9+, enviados y ACK/duplicados no cuentan |
 | `sleep_alert.sim`  | Aviso con la pantalla apagada: vista previa 8 s, A lee / B cierra, no cuenta para el despertar, duplicados/ACK/balizas no avisan |
 | `peers.sim`        | Varios equipos: tabla de compañeros (presencia por equipo, batería mínima, tabla llena, mismo msgId de emisores distintos, dedup de 16, reactivar reintentos) |
@@ -174,6 +177,9 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
 | `tetris_leave.sim` | Tetris 2J cuando el otro desaparece: el cliente sale con "Anfitrión perdido" a los 6 s sin estado; el anfitrión vuelve al lobby al recibir el `TQ` del cliente |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
+| `crypto.sim`       | Autotest de la criptografía propia (SHA-256, X25519 y AES-CMAC) contra los vectores oficiales (FIPS 180-4, RFC 7748, RFC 4493) |
+| `security.sim`     | Seguridad del chat con pareja: un paquete legítimo se acepta; repetido, con un bit alterado, de otra pareja o con secuencia antigua se rechaza; tras reiniciar siguen rechazados los anteriores al último tramo guardado y el equipo no reutiliza sus propios números de secuencia; sin pareja no se acepta ni se emite nada y el menú lo avisa |
+| `pairing.sim`      | Emparejamiento (pantalla *Emparejar* con un compañero virtual `pairpeer`): código de 6 dígitos igual al calculado aparte (vectores de referencia en Python), claves nuevas funcionando (lo grabado con la clave vieja deja de valer), ataques (clave que no coincide con el compromiso, clave de orden bajo, confirmación falsa o reflejada) y cancelar con códigos distintos sin cambiar la clave |
 | `ttt_pair.sim`     | Tres en raya, emparejamiento: quien ya está emparejado contesta a cada HELLO del rival con su estado (así el otro también se entera), un tercer equipo no pisa la partida ni recibe respuesta, y terminada la partida ya no se contesta (radio ideal: lógica pura; con la realista, la escena H) |
 
 Ejecutar uno con salida detallada:
@@ -252,6 +258,22 @@ persista) y la batería mockeada, pero descarta los eventos diferidos pendientes
 (`in <ms> ...` que aún no hayan vencido), igual que un reinicio real perdería
 entradas en vuelo.
 
+**Seguridad y emparejamiento** (el firmware real contra un atacante o un "otro equipo" virtual)
+```
+crypto selftest        SHA-256, X25519 y AES-CMAC contra los vectores oficiales
+unpair                 el equipo queda SIN pareja (borra la clave de pruebas del simulador)
+pairpeer new <nombre>  otro equipo virtual con claves X25519 propias (determinista por nombre)
+pairpeer hello|reveal|confirm [bad|zero|reflect]   sus tramas de emparejamiento: compromiso, clave pública, confirmación
+                       (bad = falsa / no coincide con el compromiso; zero = clave de orden bajo; reflect = la del propio firmware devuelta)
+lora keep              guarda la última trama inyectada;  lora replay|tamper <n|keep>: la repite tal cual / con un bit alterado
+lora tamperrx <texto>  paquete válido con un bit alterado (sin el original: aísla la comprobación de la etiqueta)
+lora wrongkey <texto>  paquete de OTRA pareja (clave ajena);  lora oldseq <texto>: de la pareja pero con secuencia ya vista
+keyprint mark          anota la huella de la clave;  expect keyprint same|changed|none
+txseq mark             anota la secuencia de la última emisión;  expect txseq above
+expect paircode        la pantalla enseña el código de 6 dígitos que calcula el compañero virtual
+expect pairvector      derivación de claves, código y confirmación = valores calculados aparte con una implementación de referencia
+```
+
 **Inspección y aserciones**
 ```
 screen              dibuja el OLED en el terminal
@@ -271,6 +293,7 @@ expect pixel <x> <y> on|off   estado de un píxel
 waitfor serial <min> <max> <texto>   ejecuta el firmware hasta que <texto> aparezca en el log serie (solo
                        lo nuevo) y comprueba que lo hace entre <min> y <max> ms (ritmo de balizas, reintentos)
 waitfor clear          olvida las esperas registradas;  expect spread <ms>: entre ellas, max-min >= <ms>
+waitfor drop           olvida solo la última (una espera que arrancó con sesgo y no debe contar para la dispersión)
 waitfor txend          ejecuta el firmware hasta que la radio termine de emitir (la emisión es asíncrona: tras
                        `waitfor serial ... [Chat] Baliza` la baliza aún está en el aire)
 watch pixel <x> <y> on|off <ms>   ejecuta el firmware <ms> y comprueba el píxel tras CADA vuelta de loop()
@@ -339,7 +362,7 @@ los pines NSS/RST/DIO0. Reproduce lo que hace el silicio:
 - **modos** SLEEP / STDBY / TX / RX continuo / RX único (con su caducidad de 100 símbolos ≈ 102 ms a SF7),
   banderas IRQ que se borran escribiendo 1, FIFO de 256 bytes;
 - **transmitir tarda el tiempo en el aire real** (fórmula del datasheet con SF, BW, CR, preámbulo, CRC). Los
-  paquetes del firmware van en **binario** (IV de 16 B + bloques AES de 16 B): un mensaje corto o una baliza son
+  paquetes del firmware van en **binario** (nonce de 8 B + bloques AES de 16 B + etiqueta de 8 B): un mensaje corto o una baliza son
   32 B = 72 ms a SF7, el estado de Tetris 64 B = 118 ms, un dibujo 96 B = 164 ms, un mensaje largo 112 B = 190 ms
   y un ping del radar a SF10 32 B = 453 ms. `endPacket()` de la librería bloquea ese tiempo; el firmware emite en
   modo asíncrono (`endPacket(true)`) y sigue con su bucle. Mientras transmite **no escucha** (half-duplex);
@@ -393,7 +416,7 @@ expect radiomode sleep|stdby|tx|rxcont|rxsingle
 |---|---|
 | Lógica del firmware | **idéntica** (compila `../src` sin cambios) |
 | Render OLED | **idéntico** (Adafruit_GFX + fuente reales, 128×128, 1 bpp) |
-| Cifrado de mensajes | **idéntico** (tiny-AES real, AES-128-CBC + PKCS7; paquete binario IV + bloques) |
+| Cifrado y autenticación | **idéntico** (tiny-AES real, AES-128-CBC + PKCS7; paquete binario nonce + bloques + etiqueta AES-CMAC; SHA-256, X25519 y CMAC propios, con vectores oficiales). **Distinto**: la fuente de aleatoriedad (en la placa, RNG del ESP8266 + ruido de la radio; ver `path.md`) |
 | Historial / EEPROM | respaldado en fichero; persiste entre ejecuciones |
 | Botones (antirrebote) | reloj virtual; el antirrebote se ejerce de verdad |
 | Potenciómetro | valor 0–1023 controlable |
@@ -434,6 +457,8 @@ Consejos para que no sea frágil (la radio es realista: ver "Modelo de radio"):
 - Si un paquete que llega **justo cuando el equipo empieza a emitir** (una ventana de unos ms) rompería el test, **repítelo** como
   haría un emisor real que no recibe el ACK (mismo `msgId`: no se duplica).
 - Para las ocupaciones del canal usa `expect airtime <max%> <ventanaMs>`.
+- Una **medida estadística** (`expect spread`) debe tomar muestras que arranquen igual: la primera espera tras una pulsación lleva un sesgo fijo que, por sí solo, ya da "dispersión" (`waitfor drop` la descarta). Comprueba el test con una **mutación** (p. ej. jitter 0): tiene que fallar.
+- Un `expect radiomode` o una inyección justo tras un `ff` pueden coincidir con una baliza propia en el aire (modo TX; una trama inyectada mientras se emite se pierde): `waitfor txend` antes.
 - **Pruébalo con varias semillas** (`SIM_SEED=1..50`, o `linux/seed_tests.sh`) antes de darlo por bueno.
 - Una suite de **lógica pura de un protocolo** (se cuentan respuestas, nada depende de pérdidas de radio) puede usar `radio ideal on`
   al principio: es determinista. Lo que depende de la radio real (retardos, colisiones, pausas) se prueba con dos firmwares en `netscripts/`.

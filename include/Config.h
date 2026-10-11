@@ -119,6 +119,7 @@
 #define RADAR_CHAT_EVERY_MS   4000UL
 #define RADAR_CHAT_WINDOW_MS  1200UL
 #define RADAR_LINK_LOST_MS    6000UL
+#define RADAR_REARM_MS          40UL   // pausa minima antes del primer ping tras la ventana (>3 simbolos de SF10 = 25 ms)
 #define HOST_LOST_MS         6000UL   // Tetris 2J, cliente: sin recibir estado del anfitrion durante este tiempo = anfitrion perdido
 #define TETRIS_STATE_MS       340UL
 #define TETRIS_INPUT_MS       280UL

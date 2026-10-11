@@ -4,6 +4,7 @@
 #include "Config.h"
 #include "MyLora.h"
 #include "SimpleCrypto.h"
+#include "Pairing.h"
 
 
 // Estado interno del módulo
@@ -29,6 +30,7 @@ static uint32_t    g_lastWatch = 0;
 #define SX_REG_RX_NB_BYTES 0x13    // longitud de la última trama recibida
 #define SX_REG_MODEM_STAT  0x18    // bits 0..3: señal detectada / sincronizada / recibiendo / cabecera válida
 #define SX_REG_PKT_RSSI    0x1A
+#define SX_REG_RSSI_WIDE   0x2C    // RSSI de banda ancha: su bit bajo es ruido del receptor (fuente de aleatorios)
 #define SX_IRQ_RX_DONE     0x40
 #define SX_IRQ_TX_DONE     0x08
 #define SX_OPMODE_MASK     0x07    // bits de modo de RegOpMode
@@ -265,12 +267,29 @@ void Lora_setRangeMode(bool on) {
 //  Envío de mensajes
 // ============================================================
 
+// Emite unos bytes ya preparados (cifrados, o una trama de emparejamiento): espera la emision anterior, escucha antes
+// de hablar y la lanza en modo asincrono.
+static void transmitBytes(const String &bytes) {
+  waitTxEnd();             // la emision anterior, si sigue en el aire
+  waitChannelClear();      // escuchar antes de hablar (y guardar lo ya recibido: la FIFO es la misma)
+  stashPending();
+
+  LoRa.beginPacket();
+  LoRa.write((const uint8_t *)bytes.c_str(), bytes.length());   // binario
+  LoRa.endPacket(true);    // asincrono: el chip emite solo; txBusy() vuelve a escuchar cuando acaba
+  g_txActive = true;
+}
+
 bool Lora_send(const String &message) {
   if (!loraReady) {
     Serial.println("[LoRa] No inicializado, no se puede enviar.");
     return false;
   }
   if (g_policy == RP_SLEEP) return false;     // radio dormida (ahorro): el equipo no emite
+  if (!Pairing_isPaired()) {                  // sin pareja no hay clave: no se emite nada (salvo el emparejamiento)
+    Serial.println("[LoRa] Sin emparejar: no se emite");
+    return false;
+  }
 
   Serial.print("[LoRa] Enviando: ");
   Serial.println(logSafe(message));
@@ -283,15 +302,28 @@ bool Lora_send(const String &message) {
   Serial.print("[LoRa] Encriptado: ");
   Serial.println(hexLog(encrypted));
 
-  waitTxEnd();             // la emision anterior, si sigue en el aire
-  waitChannelClear();      // escuchar antes de hablar (y guardar lo ya recibido: la FIFO es la misma)
-  stashPending();
-
-  LoRa.beginPacket();
-  LoRa.write((const uint8_t *)encrypted.c_str(), encrypted.length());   // binario: IV + bloques cifrados
-  LoRa.endPacket(true);    // asincrono: el chip emite solo; txBusy() vuelve a escuchar cuando acaba
-  g_txActive = true;
+  transmitBytes(encrypted);   // formato: nonce(8) | bloques AES | etiqueta(8)
   return true;
+}
+
+// Trama de emparejamiento: va sin cifrar (todavia no hay clave). Ver Pairing.cpp.
+bool Lora_sendRaw(const String &bytes) {
+  if (!loraReady || g_policy == RP_SLEEP || bytes.length() == 0) return false;
+  transmitBytes(bytes);
+  return true;
+}
+
+// Ruido del receptor: el bit bajo de RegRssiWideband cambia con el ruido de banda ancha (1 ms entre muestras).
+void Lora_entropy(uint8_t *out, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    uint8_t v = 0;
+    for (int b = 0; b < 8; b++) {
+      if (loraReady) v = (v << 1) | (sxRead(SX_REG_RSSI_WIDE) & 1);
+      else           v = (v << 1) | (uint8_t)(micros() & 1);
+      delay(1);
+    }
+    out[i] = v;
+  }
 }
 
 // ============================================================
@@ -311,10 +343,17 @@ bool Lora_hasMessage() {
   g_rxqN--;
   g_rxq[g_rxqN] = "";
 
+  // Los paquetes cifrados miden siempre un multiplo de 16 bytes; las tramas de emparejamiento, no.
+  if (lastReceived.length() % 16 != 0) {
+    Pairing_onFrame(lastReceived);
+    lastReceived = "";
+    return false;
+  }
+
   Serial.print("[LoRa] Mensaje recibido (crudo): ");
   Serial.println(hexLog(lastReceived));
 
-  String decrypted = SimpleCrypto_decrypt(lastReceived);
+  String decrypted = SimpleCrypto_decryptRx(lastReceived);   // autenticado y con anti-repeticion
   if (decrypted.length() == 0) {
     Serial.println("[LoRa] Error al desencriptar mensaje");
     return false;

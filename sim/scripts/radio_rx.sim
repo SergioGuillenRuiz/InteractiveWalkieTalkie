@@ -90,6 +90,7 @@ print Si la radio cae a STDBY/SLEEP se re-arma sola (vigilancia)
 wait 800
 ff 305000                                  # a SLEEP (pantalla apagada)
 expect panel off
+waitfor txend                                # (si la baliza cae justo aqui, el modo es TX, no RX)
 expect radiomode rxcont
 radio mark
 chatmsg 50 30 avisa en suspension
@@ -102,6 +103,7 @@ run 9000
 expect panel off
 ff 950000                                  # 15 min y pico sin oir NADA
 wait 500
+waitfor txend
 expect radiomode rxcont                    # por defecto (LORA_DEEP_SLEEP = 0) la radio NO se duerme: sigue alcanzable
 radio mark
 chatmsg 50 33 sigo oyendo tras mucho rato

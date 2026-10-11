@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <map>
 #include <fstream>
 #include <iostream>
 #include <cstdio>
@@ -29,8 +30,11 @@
 #include "MyLora.h"            // parametros de modulacion del proyecto (LORA_*)
 #include "EEPROM.h"
 #include "SimpleCrypto.h"      // String SimpleCrypto_encrypt/decrypt
+#include "Pairing.h"           // Pairing_clear (comando unpair)
+
 #include "Clock.h"             // Clock_set/Clock_now (comando settime)
 #include "Chat.h"              // Chat_beaconSoon (comando beaconsoon)
+#include "Crypto.h"            // Crypto_selfTest (comando crypto)
 #include <Adafruit_SH110X.h>   // tipo del display
 
 #undef min
@@ -70,7 +74,58 @@ static int deferPacket(const std::string &enc) {
 
 // Construye una baliza de presencia cifrada: 0x02 | peer | flags | epoch(4) | batt | gen.
 // 'gen' = generacion de ajuste de la hora del peer (0 = nunca fijada; <0 = formato antiguo sin el byte).
-static std::string buildBeacon(int peer, long epoch, int batt, int flags, int gen = 0) {
+// Los equipos INYECTADOS cifran con la clave de la pareja como si fueran el otro equipo: id propio y numero de secuencia
+// propio. El receptor solo acepta numeros crecientes (anti-repeticion), asi que el numero sigue el INSTANTE DE ENTREGA
+// (no el orden del guion: una linea "in 5000" puede escribirse antes que una "in 3000"). Varias tramas en el mismo ms
+// se distinguen por un contador; tras un reinicio en frio (el reloj vuelve a 0) la base sigue creciendo.
+static const uint8_t PEER_ID = 0xA7;
+static uint32_t g_txSeqMark = 0;
+static uint32_t g_keyMark = 0;
+// Huella de la clave de la pareja (4 bytes de SHA-256 de las dos claves); 0 si no hay pareja.
+static uint32_t keyPrint() {
+    uint8_t k[32], h[32];
+    if (!Pairing_keys(k, k + 16)) return 0;
+    Crypto_sha256(k, 32, h);
+    return ((uint32_t)h[0] << 24) | ((uint32_t)h[1] << 16) | ((uint32_t)h[2] << 8) | h[3];
+}
+static std::string g_keptFrame;      // "lora keep": trama guardada para repetirla despues con "lora replay keep"
+
+// ---- Companero virtual del EMPAREJAMIENTO (pairpeer): hace de "otro equipo" con sus propias claves X25519 ----
+static uint8_t g_ppPriv[32], g_ppPub[32];
+static bool g_ppInit = false;
+static void ppSeed(const std::string &label) {
+    Crypto_sha256((const uint8_t *)label.data(), label.size(), g_ppPriv);
+    Crypto_x25519Base(g_ppPub, g_ppPriv);
+    g_ppInit = true;
+}
+static std::string ppFrame(char kind, const uint8_t *data, size_t n) {
+    std::string f; f += 'W'; f += kind; f.append((const char *)data, n); return f;
+}
+// clave publica del FIRMWARE: la ultima trama 'K' que emitio
+static bool ppFirmwarePub(uint8_t out[32]) {
+    auto ring = simLoraSentRing();
+    for (auto it = ring.rbegin(); it != ring.rend(); ++it)
+        if (it->size() == 34 && (*it)[0] == 'W' && (*it)[1] == 'K') { memcpy(out, it->data() + 2, 32); return true; }
+    return false;
+}
+// Numero de secuencia (bytes 1..4 del nonce) de la ultima trama cifrada que emitio el firmware; 0 si no hay.
+static uint32_t lastTxSeq() {
+    auto ring = simLoraSentRing();
+    for (auto it = ring.rbegin(); it != ring.rend(); ++it)
+        if (it->size() >= 32 && it->size() % 16 == 0)
+            return ((uint32_t)(uint8_t)(*it)[1] << 24) | ((uint32_t)(uint8_t)(*it)[2] << 16) | ((uint32_t)(uint8_t)(*it)[3] << 8) | (uint8_t)(*it)[4];
+    return 0;
+}
+static uint32_t g_peerSeqBase = 1;
+static std::map<uint32_t, uint32_t> g_peerSeqAt;
+static uint32_t peerSeq(uint32_t at) { uint32_t k = g_peerSeqAt[at]++; return g_peerSeqBase + at * 32u + (k & 31u); }
+static String peerEncrypt(const String &plain, uint32_t at = 0xFFFFFFFFu) {
+    if (at == 0xFFFFFFFFu) at = sim::now();
+    return SimpleCrypto_encryptAs(plain, PEER_ID, peerSeq(at));
+}
+static void peerColdReboot() { g_peerSeqBase += (sim::now() + 10u) * 32u + 64u; g_peerSeqAt.clear(); }
+
+static std::string buildBeacon(int peer, long epoch, int batt, int flags, int gen = 0, uint32_t at = 0xFFFFFFFFu) {
     String p;
     p += (char)0x02;
     p += (char)peer;
@@ -81,13 +136,13 @@ static std::string buildBeacon(int peer, long epoch, int batt, int flags, int ge
     p += (char)(epoch & 0xFF);
     p += (char)batt;
     if (gen >= 0) p += (char)gen;     // gen < 0: baliza ANTIGUA, sin el byte de generacion
-    String enc = SimpleCrypto_encrypt(p);
+    String enc = peerEncrypt(p, at);
     return std::string(enc.c_str(), enc.length());
 }
 
 // Construye un paquete de dibujo cifrado: 0x04 | peer | msgId | 72 bytes del lienzo (24x24, MSB primero).
 // 'pattern': "heart" (un corazon) o "frame" (marco con una diagonal).
-static std::string buildDoodle(int peer, int msgId, const std::string &pattern) {
+static std::string buildDoodle(int peer, int msgId, const std::string &pattern, uint32_t at = 0xFFFFFFFFu) {
     String p; p += (char)0x04; p += (char)peer; p += (char)msgId;
     for (int cy = 0; cy < 24; cy++) {
         unsigned char b[3] = {0, 0, 0};
@@ -103,17 +158,17 @@ static std::string buildDoodle(int peer, int msgId, const std::string &pattern) 
         }
         p += (char)b[0]; p += (char)b[1]; p += (char)b[2];
     }
-    String e = SimpleCrypto_encrypt(p);
+    String e = peerEncrypt(p);
     return std::string(e.c_str(), e.length());
 }
 static int g_doodleSeq = 0;      // msgId automatico de los dibujos inyectados sin msgId explicito
 
 // Construye un paquete de Tres en raya cifrado: 0x07 'H'|'S' | peer [ tablero(9) fin ].
-static std::string buildTtt(const std::string &sub, int peer, const std::string &cells, int over) {
+static std::string buildTtt(const std::string &sub, int peer, const std::string &cells, int over, uint32_t at = 0xFFFFFFFFu) {
     String p; p += (char)0x07;
     if (sub == "hello") { p += 'H'; p += (char)peer; }
     else { p += 'S'; p += (char)peer; for (int i = 0; i < 9; i++) p += (char)((i < (int)cells.size()) ? cells[i] - '0' : 0); p += (char)over; }
-    String enc = SimpleCrypto_encrypt(p);
+    String enc = peerEncrypt(p, at);
     return std::string(enc.c_str(), enc.length());
 }
 
@@ -586,13 +641,14 @@ static void execLine(const std::string &raw) {
         std::string what; uint32_t mn = 0, mx = 0;
         is >> what;
         if (what == "clear") { g_waitSamples.clear(); return; }     // waitfor clear: olvida las muestras
+        if (what == "drop") { if (!g_waitSamples.empty()) g_waitSamples.pop_back(); return; }   // waitfor drop: olvida solo la ultima muestra (una espera que arranco con sesgo)
         if (what == "txend") {      // waitfor txend: ejecuta el firmware hasta que la radio termine de emitir lo que tenga en el aire
             // (la emision es asincrona: el firmware sigue con su bucle mientras el chip emite. Un guion que
             //  espera "[Chat] Baliza" tiene la baliza aun en el aire; inyectar una trama ahora la pisaria.)
             check(settleTx(), "radio: la emision en curso termina en menos de 4 s");
             return;
         }
-        if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear | txend)"); return; }
+        if (!(is >> mn >> mx) || what != "serial") { scriptError("waitfor necesita: serial <minMs> <maxMs> <texto>  (o: clear | drop | txend)"); return; }
         std::string txt = restAfter(line, 4);
         if (txt.empty()) { scriptError("waitfor necesita el texto a esperar"); return; }
         size_t startLen = sim::serialLog().size();
@@ -636,28 +692,28 @@ static void execLine(const std::string &raw) {
             // firmware esta dentro de un bucle de juego (p.ej. los pings "HR" de HippoRadar,
             // que su rxTick lee pero backgroundTick descartaria si llegaran fuera del juego).
             std::string txt = restAfter(line, 3);
-            String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            String enc = peerEncrypt(String(txt.c_str()), t);
             if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
         else if (what == "lorabin") {   // in <ms> lorabin <hex>: como "lora rxbin" (texto plano en hex), diferido
             std::string hex, bytes; is >> hex;
             if (!fromHexStr(hex, bytes) || bytes.empty()) { scriptError("in <ms> lorabin necesita los bytes del texto plano en hex"); return; }
-            String enc = SimpleCrypto_encrypt(String(bytes));
+            String enc = peerEncrypt(String(bytes), t);
             if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
         else if (what == "chatack") {   // ACK diferido: in <ms> chatack <destino> <msgId>
             int target = 0, mid = 0; is >> target >> mid;
             String p; p += (char)0x06; p += (char)target; p += (char)mid;
-            String enc = SimpleCrypto_encrypt(p);
+            String enc = peerEncrypt(p, t);
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
         else if (what == "chatmsg") {   // MENSAJE diferido: in <ms> chatmsg <emisor> <msgId> <texto>
             int sender = 0, mid = 0; is >> sender >> mid;
             std::string txt = restAfter(line, 5);
             String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
-            String enc = SimpleCrypto_encrypt(p);
+            String enc = peerEncrypt(p, t);
             if (!encryptedOk(enc)) return;
             sim::scheduleAt(t, sim::EV_INJECT, deferPacket(std::string(enc.c_str(), enc.length())));
         }
@@ -667,9 +723,9 @@ static void execLine(const std::string &raw) {
         else if (what == "presence") {  // baliza diferida: in <ms> presence <peer> [epoch] [batt] [gen]
             int peer = 0, batt = 100, gen = 0; long ep = 0; is >> peer >> ep >> batt >> gen;
             int flags = (batt <= 15) ? 1 : 0;
-            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags, gen)));
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildBeacon(peer, ep, batt, flags, gen, t)));
         }
-        else if (what == "expect" || what == "shot" || what == "print" || what == "radio") {   // comprobacion / captura / mensaje / ajuste de radio DIFERIDO
+        else if (what == "expect" || what == "shot" || what == "print" || what == "radio" || what == "pairpeer") {   // comprobacion / captura / mensaje / ajuste de radio DIFERIDO
             g_deferredLines.push_back({ restAfter(line, 2), g_lineNo });
             sim::scheduleAt(t, sim::EV_INJECT, -(int)g_deferredLines.size());
         }
@@ -679,19 +735,57 @@ static void execLine(const std::string &raw) {
             std::string a2; if (is >> a2) { if (isdigit((unsigned char)a2[0])) { mid = atoi(a2.c_str()); is >> pat; } else pat = a2; }
             if (pat != "heart" && pat != "frame") { scriptError("in doodle: el dibujo es heart|frame"); return; }
             if (mid == 0) mid = 200 + (g_doodleSeq++ % 50);
-            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildDoodle(peer, mid, pat)));
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildDoodle(peer, mid, pat, t)));
         }
         else if (what == "ttt") {        // tres en raya diferido: in <ms> ttt hello|state ...
             std::string sub; is >> sub;
             int peer = 0, ov = 0; std::string cells = "000000000";
             if (sub == "hello") is >> peer; else is >> peer >> cells >> ov;
-            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildTtt(sub, peer, cells, ov)));
+            sim::scheduleAt(t, sim::EV_INJECT, deferPacket(buildTtt(sub, peer, cells, ov, t)));
         }
         else scriptError("accion desconocida en in: \"" + what + "\"");
     }
+    else if (cmd == "crypto") {   // crypto selftest: SHA-256, X25519 y AES-CMAC contra los vectores oficiales
+        std::string sub; is >> sub;
+        if (sub != "selftest") { scriptError("crypto necesita: selftest"); return; }
+        check(Crypto_selfTest(), "criptografia: SHA-256, X25519 y AES-CMAC coinciden con los vectores oficiales");
+    }
+    else if (cmd == "pairpeer") {   // hace de OTRO equipo en el emparejamiento (ver Pairing.cpp): hello|reveal|confirm [variante]
+        std::string sub, var; is >> sub >> var;
+        if (!g_ppInit) ppSeed("pairpeer-default");
+        uint8_t zero[32] = {0}, evilPriv[32], evilPub[32];
+        Crypto_sha256((const uint8_t *)"pairpeer-evil", 13, evilPriv); Crypto_x25519Base(evilPub, evilPriv);
+        if (sub == "new") { ppSeed("pairpeer-" + var); return; }
+        if (sub == "hello") {            // su compromiso: SHA-256(clave publica)[0..16]  (zero: compromiso de una clave de orden bajo)
+            uint8_t h[32]; Crypto_sha256(var == "zero" ? zero : g_ppPub, 32, h);
+            simLoraInject(ppFrame('H', h, 16));
+        } else if (sub == "reveal") {    // su clave publica  (bad: OTRA distinta de la comprometida; zero: de orden bajo)
+            simLoraInject(ppFrame('K', var == "bad" ? evilPub : (var == "zero" ? zero : g_ppPub), 32));
+        } else if (sub == "confirm") {   // su confirmacion  (bad: falsa; reflect: la del propio firmware devuelta)
+            uint8_t fw[32], tag[16];
+            if (!ppFirmwarePub(fw)) { scriptError("pairpeer confirm: el firmware aun no ha emitido su clave publica"); return; }
+            PairSecrets sec;
+            if (!Pairing_derive(g_ppPriv, g_ppPub, fw, sec)) { scriptError("pairpeer confirm: secreto no valido"); return; }
+            if (var == "bad") { for (int i = 0; i < 16; i++) tag[i] = (uint8_t)(0x5A + i); }
+            else Pairing_confirmTag(sec.mac, g_ppPub, fw, var == "reflect" ? (sec.role == 1 ? 2 : 1) : sec.role, tag);
+            simLoraInject(ppFrame('C', tag, 16));
+        } else scriptError("pairpeer necesita: new|hello|reveal|confirm [variante]");
+    }
+    else if (cmd == "keyprint") {   // keyprint mark: anota la huella de la clave de la pareja (expect keyprint same|changed|none)
+        std::string sub; is >> sub;
+        if (sub != "mark") { scriptError("keyprint necesita: mark"); return; }
+        g_keyMark = keyPrint();
+    }
+    else if (cmd == "txseq") {      // txseq mark: anota el numero de secuencia de la ultima emision del firmware (expect txseq above)
+        std::string sub; is >> sub;
+        if (sub != "mark") { scriptError("txseq necesita: mark"); return; }
+        g_txSeqMark = lastTxSeq();
+        printf("  secuencia de la ultima emision: %u\n", (unsigned)g_txSeqMark);
+    }
+    else if (cmd == "unpair") { Pairing_clear(); printf("  equipo sin emparejar (la clave de pruebas del simulador se ha borrado)\n"); }
     else if (cmd == "beaconsoon") { Chat_beaconSoon(); }   // el equipo se anuncia "ya" (como al volver del radar o poner la hora)
     else if (cmd == "reboot") { setup(); }
-    else if (cmd == "reboot-cold") { sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
+    else if (cmd == "reboot-cold") { peerColdReboot(); sim::resetClock(); setup(); printf("  reboot en frio (millis=0)\n"); }
     else if (cmd == "battery") { int pct; if (!(is >> pct)) { scriptError("battery necesita un % 0-100"); return; } sim::setBatteryRaw(pct * 1023 / 100); printf("  bateria = %d%%\n", pct); }
     else if (cmd == "settime") { long ep = 0; if (!(is >> ep)) { scriptError("settime necesita segundos epoch"); return; } Clock_set((uint32_t)ep); printf("  reloj fijado a %ld (gen %d)\n", ep, (int)Clock_gen()); }
     else if (cmd == "presence") {   // baliza de un peer: presence <peerId> [epoch] [batt] [gen]
@@ -720,20 +814,20 @@ static void execLine(const std::string &raw) {
         std::string sub; is >> sub;
         if (sub == "rx") {
             std::string txt = restAfter(line, 2);
-            String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            String enc = peerEncrypt(String(txt.c_str()));
             if (!encryptedOk(enc)) return;
             simLoraInject(std::string(enc.c_str(), enc.length()));
             printf("  LoRa RX inyectado: \"%s\"\n", txt.c_str());
         } else if (sub == "rxbad") {      // como rx, pero la trama llega CORRUPTA (ruido en el canal)
             std::string txt = restAfter(line, 2);
-            String enc = SimpleCrypto_encrypt(String(txt.c_str()));
+            String enc = peerEncrypt(String(txt.c_str()));
             if (!encryptedOk(enc)) return;
             sx::inject(std::string(enc.c_str(), enc.length()), -42, true);
             printf("  LoRa RX CORRUPTO inyectado: \"%s\"\n", txt.c_str());
         } else if (sub == "rxbin") {      // paquete cuyo texto PLANO son esos bytes (hex): lo cifra el firmware y se inyecta
             std::string hex, bytes;
             if (!(is >> hex) || !fromHexStr(hex, bytes) || bytes.empty()) { scriptError("lora rxbin necesita los bytes del texto plano en hex"); return; }
-            String enc = SimpleCrypto_encrypt(String(bytes));
+            String enc = peerEncrypt(String(bytes));
             if (!encryptedOk(enc)) return;
             simLoraInject(std::string(enc.c_str(), enc.length()));
         } else if (sub == "rxraw") {
@@ -754,13 +848,50 @@ static void execLine(const std::string &raw) {
             String dec = SimpleCrypto_decrypt(String(last));
             printf("  LoRa TX (%zu B, hex)=%s  descifrado=\"%s\"\n", last.size(), toHexStr(last).c_str(), printable(dec).c_str());
         }
-        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxbad|rxbin|rxraw|loopback|tx|sent)");
+        else if (sub == "keep") {        // guarda la ultima trama inyectada (para repetirla mucho despues: lora replay keep)
+            auto &log = sx::injectedLog();
+            if (log.empty()) { scriptError("lora keep: aun no se ha inyectado nada"); return; }
+            g_keptFrame = log.back();
+        } else if (sub == "replay" || sub == "tamper") {   // ATAQUES: repetir tal cual (replay) o con un bit alterado (tamper) lo inyectado hace n tramas ("keep": la guardada)
+            std::string arg; is >> arg;
+            auto &log = sx::injectedLog();
+            std::string f;
+            if (arg == "keep") { if (g_keptFrame.empty()) { scriptError("lora " + sub + " keep: no hay trama guardada"); return; } f = g_keptFrame; }
+            else {
+                int back = atoi(arg.c_str());
+                if (back < 0 || (size_t)back >= log.size()) { scriptError("lora " + sub + ": no hay tantas tramas inyectadas"); return; }
+                f = log[log.size() - 1 - back];
+            }
+            if (sub == "tamper") f[10 % f.size()] ^= 0x01;
+            simLoraInject(f);
+            printf("  LoRa RX %s inyectado (%zu B)\n", sub == "replay" ? "REPETIDO" : "ALTERADO", f.size());
+        } else if (sub == "tamperrx") {   // ATAQUE: paquete valido con un bit alterado (el original NO se entrega: aisla la comprobacion de la etiqueta)
+            std::string txt = restAfter(line, 2);
+            String enc = peerEncrypt(String(txt.c_str()));
+            if (!encryptedOk(enc)) return;
+            std::string f(enc.c_str(), enc.length());
+            f[10] ^= 0x01;
+            simLoraInject(f);
+            printf("  LoRa RX ALTERADO (solo la version alterada) inyectado: \"%s\"\n", txt.c_str());
+        } else if (sub == "wrongkey" || sub == "oldseq") {   // ATAQUES: paquete de OTRA pareja (clave ajena) / de la pareja pero con un numero de secuencia ya visto
+            std::string txt = restAfter(line, 2);
+            String enc;
+            if (sub == "wrongkey") {
+                uint8_t k1[16], k2[16];
+                for (int i = 0; i < 16; i++) { k1[i] = (uint8_t)(0x40 + i); k2[i] = (uint8_t)(0x90 + i); }
+                enc = SimpleCrypto_encryptWithKeys(String(txt.c_str()), k1, k2, PEER_ID, peerSeq(sim::now()));
+            } else enc = SimpleCrypto_encryptAs(String(txt.c_str()), PEER_ID, 1);
+            if (!encryptedOk(enc)) return;
+            simLoraInject(std::string(enc.c_str(), enc.length()));
+            printf("  LoRa RX %s inyectado: \"%s\"\n", sub == "wrongkey" ? "con CLAVE AJENA" : "con secuencia ANTIGUA", txt.c_str());
+        }
+        else scriptError("subcomando lora desconocido \"" + sub + "\" (rx|rxbad|rxbin|rxraw|loopback|tx|sent|replay|tamper|tamperrx|wrongkey|oldseq)");
     }
     else if (cmd == "chatmsg") {   // inyecta un MENSAJE de chat de un peer: chatmsg <emisor> <msgId> <texto>
         int sender = 0, mid = 0; is >> sender >> mid;
         std::string txt = restAfter(line, 3);
         String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
-        String enc = SimpleCrypto_encrypt(p);
+        String enc = peerEncrypt(p);
         if (!encryptedOk(enc)) return;
         simLoraInject(std::string(enc.c_str(), enc.length()));
         printf("  Chat MSG inyectado de #%d (msg %d): \"%s\"\n", sender, mid, txt.c_str());
@@ -768,7 +899,7 @@ static void execLine(const std::string &raw) {
     else if (cmd == "chatack") {   // inyecta un ACK de un peer: chatack <destino> <msgId>
         int target = 0, mid = 0; is >> target >> mid;
         String p; p += (char)0x06; p += (char)target; p += (char)mid;
-        String enc = SimpleCrypto_encrypt(p);
+        String enc = peerEncrypt(p);
         simLoraInject(std::string(enc.c_str(), enc.length()));
         printf("  Chat ACK inyectado para #%d (msg %d)\n", target, mid);
     }
@@ -877,6 +1008,40 @@ static void execLine(const std::string &raw) {
             double pct = 100.0 * sx::txAirtimeBetween(t0, t1) / (double)win;
             char b[160]; snprintf(b, sizeof(b), "ocupacion del canal por este equipo en los ultimos %u ms: %.1f %% (maximo %.1f %%)", (unsigned)win, pct, maxPct);
             check(pct <= maxPct, b);
+        }
+        else if (sub == "pairvector") {   // expect pairvector: derivacion de claves/codigo/confirmacion = valores calculados APARTE con una implementacion de referencia (Python)
+            uint8_t pa[32], pb[32], PA[32], PB[32];
+            Crypto_sha256((const uint8_t *)"pair-vector-a", 13, pa); Crypto_sha256((const uint8_t *)"pair-vector-b", 13, pb);
+            Crypto_x25519Base(PA, pa); Crypto_x25519Base(PB, pb);
+            PairSecrets sa, sb; uint8_t tag[16];
+            bool ok = Pairing_derive(pa, PA, PB, sa) && Pairing_derive(pb, PB, PA, sb);
+            if (ok) Pairing_confirmTag(sa.mac, PA, PB, sa.role, tag);
+            std::string enc = ok ? toHexStr(std::string((char *)sa.enc, 16)) : "", mac = ok ? toHexStr(std::string((char *)sa.mac, 16)) : "", t = ok ? toHexStr(std::string((char *)tag, 16)) : "";
+            bool same = ok && !memcmp(sa.enc, sb.enc, 16) && !memcmp(sa.mac, sb.mac, 16) && sa.sas == sb.sas && sa.role != sb.role;
+            check(same && enc == "8648CCC3B6A5002EA5CDDF932389D1DC" && mac == "F763CB21D03F1BF2228C688AB3D3F988" && sa.sas == 304268 && sa.role == 1 &&
+                  t == "F5485081D9FF636D0C41BE36009C3876",
+                  "derivacion de claves, codigo (304268) y confirmacion = vector de referencia; los dos extremos coinciden");
+        }
+        else if (sub == "paircode") {  // expect paircode: la pantalla muestra el codigo de 6 digitos que calcula el companero virtual
+            uint8_t fw[32];
+            if (!ppFirmwarePub(fw)) { check(false, "pairpeer: el firmware no ha emitido su clave publica"); return; }
+            PairSecrets sec;
+            bool ok = Pairing_derive(g_ppPriv, g_ppPub, fw, sec);
+            char code[16]; snprintf(code, sizeof(code), "%06lu", (unsigned long)sec.sas);
+            check(ok && contains(display.simText(), code), std::string("la pantalla muestra el codigo ") + (ok ? code : "?"));
+        }
+        else if (sub == "keyprint") {  // expect keyprint same|changed|none: la clave de la pareja es la anotada / otra / no hay
+            std::string st; is >> st;
+            uint32_t now = keyPrint();
+            if (st == "same") check(now != 0 && now == g_keyMark, "la clave de la pareja no ha cambiado");
+            else if (st == "changed") check(now != 0 && now != g_keyMark, "la clave de la pareja es otra");
+            else if (st == "none") check(now == 0, "no hay clave de pareja");
+            else scriptError("expect keyprint necesita same|changed|none");
+        }
+        else if (sub == "txseq") {     // expect txseq above: la ultima emision lleva un numero de secuencia MAYOR que el anotado con "txseq mark"
+            uint32_t now = lastTxSeq();
+            char b[120]; snprintf(b, sizeof(b), "secuencia de la ultima emision %u > %u (anotada)", (unsigned)now, (unsigned)g_txSeqMark);
+            check(now > g_txSeqMark, b);
         }
         else if (sub == "busy") {      // expect busy on|off: Lora_busy() (acceso al canal sin bloquear: emitiendo, canal ocupado o pausa)
             std::string st; is >> st;
@@ -1033,7 +1198,7 @@ static void pressKey(int c) {
         case 'n': scheduleTap(sim::EV_FINISH, 150); break;
         case 'M': scheduleTap(sim::EV_MORSE, 1700); break;   // pulsacion larga
         case 'N': scheduleTap(sim::EV_FINISH, 1700); break;
-        case 'r': { String e = SimpleCrypto_encrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
+        case 'r': { String e = peerEncrypt(String("happy")); simLoraInject(std::string(e.c_str(), e.length())); } break;
         case 'q':
             g_iRunning = false;
             // Salir YA aunque el firmware este en una espera bloqueante (pantallas
@@ -1076,7 +1241,7 @@ static void fireScriptedKeys() {
         else if (act.rfind("hr", 0) == 0) {                    // ping del companero con RSSI dado
             int rssi = atoi(trim(act.substr(2)).c_str());
             String p = String("HR"); p += (char)0xAB;          // id de companero ficticio
-            String e = SimpleCrypto_encrypt(p);
+            String e = peerEncrypt(p);
             simLoraInject(std::string(e.c_str(), e.length()), rssi);
         }
         else if (act.rfind("cmsg", 0) == 0) {                  // mensaje de chat de un peer: cmsg <emisor> <msgId> <texto>
@@ -1084,14 +1249,14 @@ static void fireScriptedKeys() {
             int sender = 0, mid = 0; as >> sender >> mid;
             std::string txt; std::getline(as, txt); txt = trim(txt);
             String p; p += (char)0x01; p += (char)sender; p += (char)mid; p += String(txt.c_str());
-            String e = SimpleCrypto_encrypt(p);
+            String e = peerEncrypt(p);
             simLoraInject(std::string(e.c_str(), e.length()));
         }
         else if (act.rfind("cack", 0) == 0) {                  // ACK de un peer: cack <destino> <msgId>
             std::istringstream as(act.substr(4));
             int target = 0, mid = 0; as >> target >> mid;
             String p; p += (char)0x06; p += (char)target; p += (char)mid;
-            String e = SimpleCrypto_encrypt(p);
+            String e = peerEncrypt(p);
             simLoraInject(std::string(e.c_str(), e.length()));
         }
         else if (!act.empty()) {

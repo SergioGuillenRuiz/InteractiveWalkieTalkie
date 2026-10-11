@@ -1,0 +1,123 @@
+# ============================================================
+#  Emparejamiento visto desde UN equipo, con un "companero virtual" (pairpeer) que hace de otro equipo y de atacante.
+#  (El emparejamiento entre DOS firmwares reales esta en la escena K de net_test.sh.)
+#  Se entra con B larga -> Ajustes -> Emparejar (el equipo ya tiene la clave de pruebas del simulador: pide confirmacion).
+#
+#  Escena 1: un atacante intenta de todo y despues llega el companero de verdad:
+#    - una clave publica que NO es la que se comprometio antes (podria ser de quien ajusta su clave a lo que ve): se descarta;
+#    - la pantalla muestra el MISMO codigo de 6 digitos que calcula el otro equipo;
+#    - una confirmacion falsa y la propia confirmacion del equipo devuelta (reflejada) se ignoran;
+#    - con la confirmacion buena se guarda la clave nueva; lo grabado con la clave vieja deja de valer.
+#  Escena 2: los codigos NO coinciden (alguien en medio): el usuario cancela con B y la clave no cambia.
+#  Escena 3: clave publica de orden bajo (secreto compartido nulo): se rechaza y la clave no cambia.
+#  Radio ideal: es logica del protocolo.  (Device_id del sim = 137.)
+# ============================================================
+radio ideal on
+expect pairvector                           # la derivacion de claves coincide con un calculo hecho aparte (Python, cryptography)
+wait 300
+chatmsg 50 1 antes del emparejamiento
+run 800
+expect serial Guardado: antes del emparejamiento
+lora keep                                   # grabado con la clave VIEJA, para repetirlo despues
+keyprint mark
+
+# --- Escena 1 ---
+pot 1000                                    # Ajustes: opcion 2 = Emparejar
+wait 300
+in 0 finish down
+in 1700 finish up
+in 1900 morse down
+in 2050 morse up
+in 2600 morse down                          # "ya tiene pareja": A = emparejar de nuevo
+in 2750 morse up
+in 3500 pairpeer hello                      # el companero se compromete con su clave...
+in 4300 pairpeer reveal bad                 # ...y revela OTRA
+in 5300 expect serial no coincide con el compromiso
+in 5300 expect notext Codigo
+in 6000 pairpeer hello
+in 6800 pairpeer reveal                     # ahora si, la comprometida
+in 8500 expect text Codigo
+in 8500 expect paircode                     # el mismo codigo de 6 digitos que calcula el otro equipo
+in 9000 morse down                          # A: "es el mismo"
+in 9150 morse up
+in 9500 pairpeer confirm bad                # confirmacion falsa
+in 10300 pairpeer confirm reflect           # su propia confirmacion devuelta
+in 11500 expect serial confirmacion invalida
+in 11500 expect notext Emparejado
+in 12000 pairpeer confirm                   # la buena
+in 13500 expect text Emparejado
+in 15500 morse down                         # salir
+in 15650 morse up
+run 17000
+expect text Env
+expect keyprint changed
+print Escena 1: compromiso, codigo igual, confirmaciones falsas ignoradas y clave nueva guardada
+
+# Con la clave nueva se acepta lo nuevo y lo grabado con la vieja se rechaza
+chatmsg 50 2 con la clave nueva
+run 800
+expect serial Guardado: con la clave nueva
+expect times 0 Error al desencriptar
+lora replay keep
+run 800
+expect times 1 Error al desencriptar
+print Clave nueva en uso: lo viejo ya no vale
+
+# --- Escena 2: los codigos no coinciden -> cancelar con B ---
+keyprint mark
+pairpeer new otro
+pot 1000
+wait 300
+in 0 finish down
+in 1700 finish up
+in 1900 morse down
+in 2050 morse up
+in 2600 morse down
+in 2750 morse up
+in 3500 pairpeer hello
+in 4300 pairpeer reveal
+in 6500 expect text Codigo
+in 7000 finish down                         # B: "no es el mismo" (alguien se interpone)
+in 7150 finish up
+in 8500 expect text Cancelado
+run 10500 400
+run 3000
+expect text Env
+expect keyprint same
+print Escena 2: cancelar por codigos distintos no cambia la clave
+
+# --- Escena 3: clave de orden bajo ---
+pot 1000
+wait 300
+in 0 finish down
+in 1700 finish up
+in 1900 morse down
+in 2050 morse up
+in 2600 morse down
+in 2750 morse up
+in 3500 pairpeer hello zero
+in 4300 pairpeer reveal zero
+in 5200 expect text no valida
+run 8000 400
+run 3000
+expect text Env
+expect keyprint same
+print Escena 3: una clave publica de orden bajo se rechaza y la clave no cambia
+
+# --- Escena 4: nadie aparece en 3 minutos -> se cancela solo y la clave no cambia ---
+pot 1000
+wait 300
+in 0 finish down
+in 1700 finish up
+in 1900 morse down
+in 2050 morse up
+in 2600 morse down
+in 2750 morse up
+in 100000 expect text Buscando              # sigue buscando
+in 177000 expect notext agotado
+in 184000 expect text Tiempo agotado
+run 187000 400
+run 3000
+expect text Env
+expect keyprint same
+print Escena 4: sin compañero en 3 minutos se cancela solo y la clave no cambia

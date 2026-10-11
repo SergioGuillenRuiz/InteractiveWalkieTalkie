@@ -1,0 +1,107 @@
+# ============================================================
+#  Seguridad del canal (un equipo emparejado; el simulador le da una clave de pruebas). Cada ataque debe RECHAZARSE
+#  (el firmware anota "Error al desencriptar mensaje") sin dejar de aceptar lo legitimo:
+#    - un paquete legitimo del compañero se acepta;
+#    - REPETICION: reenviar tal cual un paquete ya aceptado (grabado y repetido por un atacante) se rechaza;
+#    - ALTERACION: cambiar un solo bit de un paquete se rechaza (la etiqueta AES-CMAC no coincide);
+#    - CLAVE AJENA: un paquete cifrado y autenticado con otra clave se rechaza;
+#    - SECUENCIA ANTIGUA: un paquete con la clave buena pero con un numero de secuencia ya superado se rechaza;
+#    - tras reiniciar, los paquetes anteriores al ultimo tramo guardado en la EEPROM siguen rechazandose, y el equipo
+#      NO reutiliza numeros de secuencia propios (su contador salta al siguiente tramo reservado);
+#    - SIN PAREJA: no se acepta nada, no se emite nada y el menu lo avisa.
+#  Es logica pura: radio ideal. (Device_id del sim = 137; el equipo inyectado, 0xA7.)
+# ============================================================
+radio ideal on
+wait 300
+
+# --- 1) Un paquete legitimo se acepta ---
+chatmsg 50 1 hola
+run 800
+expect serial Guardado: hola
+expect times 0 Error al desencriptar
+print Legitimo: aceptado
+
+# --- 2) REPETICION del mismo paquete: rechazado ---
+lora replay 0
+run 800
+expect times 1 Error al desencriptar
+print Repeticion: rechazada
+
+# --- 3) ALTERACION de un bit: rechazado ---
+lora tamperrx quiero cambiar esto
+run 800
+expect times 2 Error al desencriptar
+expect times 0 Guardado: quiero cambiar
+print Alteracion de un bit: rechazada
+
+# --- 4) CLAVE AJENA: rechazado ---
+lora wrongkey soy un intruso
+run 800
+expect times 3 Error al desencriptar
+expect times 0 Guardado: soy un intruso
+print Clave de otra pareja: rechazada
+
+# --- 5) SECUENCIA ANTIGUA con la clave buena: rechazado ---
+lora oldseq paquete antiguo
+run 800
+expect times 4 Error al desencriptar
+expect times 0 Guardado: paquete antiguo
+print Secuencia antigua: rechazada
+
+# --- 6) Lo legitimo sigue funcionando despues de los ataques ---
+chatmsg 50 2 segundo
+run 800
+expect serial Guardado: segundo
+expect times 4 Error al desencriptar
+print Tras los ataques, lo legitimo se acepta
+
+# --- 7) Reinicio: lo viejo sigue rechazado y el contador propio no se repite ---
+chatmsg 50 3 primero
+run 800
+wait 600                                    # el numero de secuencia del compañero avanza mas de un tramo (4096)
+chatmsg 50 4 ultimo
+run 800
+expect serial Guardado: ultimo
+txseq mark
+reboot
+wait 500
+lora replay 1                               # "primero", anterior al tramo guardado
+run 800
+expect times 5 Error al desencriptar
+lora tx tras el reinicio
+run 400
+expect txseq above
+print Reinicio: lo antiguo sigue rechazado y el contador propio salta (no repite numeros)
+
+# --- 8) SIN PAREJA: no acepta, no emite y lo avisa ---
+unpair
+wait 500
+expect text SIN PAREJA
+lora replay 3                               # un paquete antes valido: sin clave no se descifra
+run 800
+expect times 6 Error al desencriptar
+lora tx hola
+expect serial Sin emparejar: no se emite
+pot 80
+wait 300
+in 0 morse down                             # Enviar sin pareja: avisa en vez de abrir el envio
+in 150 morse up
+run 1200 300
+expect text Primero hay que
+expect text emparejar
+print Sin pareja: no acepta, no emite y avisa al intentar enviar
+
+# Los juegos por radio tampoco arrancan sin pareja (Tres en raya, Tetris de 2, radar): avisan
+wait 5000                                    # (el aviso anterior se cierra solo)
+pot 1000
+wait 200
+tap morse
+wait 200
+pot 900
+wait 250
+expect text 3 en raya
+in 0 morse down
+in 120 morse up
+run 1500 300
+expect text Primero hay que
+print Sin pareja: tampoco arrancan los juegos por radio

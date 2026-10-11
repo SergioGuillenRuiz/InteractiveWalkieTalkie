@@ -17,6 +17,7 @@ expect pixel 64 64 off
 print En suspension el panel esta apagado
 
 # --- Mensaje nuevo: se enciende el panel con la vista previa ---
+waitfor txend                    # la baliza puede caer justo al salir del avance: una trama inyectada mientras se emite se pierde
 chatmsg 50 1 hola desde lejos
 run 600
 expect panel on
@@ -50,6 +51,7 @@ print Al despertar: insignia de no leidos
 ff 305000
 wait 200
 expect panel off
+waitfor txend                    # la baliza puede caer justo al salir del avance: una trama inyectada mientras se emite se pierde
 chatmsg 50 2 segundo
 run 600
 expect panel on
@@ -73,6 +75,7 @@ print B cierra el aviso y no cuenta para el despertar (hacen falta 3 pulsaciones
 ff 305000
 wait 200
 expect panel off
+waitfor txend                    # la baliza puede caer justo al salir del avance: una trama inyectada mientras se emite se pierde
 chatmsg 50 3 mira esto
 run 600
 expect text Mensaje nuevo
@@ -94,6 +97,7 @@ print A abre el Historial desde el aviso y los mensajes pasan a leidos
 # --- Un segundo mensaje durante el aviso lo reinicia y lo actualiza ---
 ff 305000
 wait 200
+waitfor txend                    # la baliza puede caer justo al salir del avance: una trama inyectada mientras se emite se pierde
 chatmsg 50 4 uno
 run 600
 expect text uno

@@ -1,0 +1,47 @@
+# ============================================================
+#  EMPAREJAMIENTO entre DOS firmwares reales (net_test.sh, escena K): equipo A (#101); el otro es pair_b.sim.
+#  Los dos empiezan SIN pareja (se borra la clave de pruebas del simulador): no pueden enviar. Entran en
+#  Ajustes -> Emparejar, intercambian claves por radio, muestran el MISMO codigo de 6 digitos (el ejecutor de la escena
+#  compara los codigos de los dos), confirman con A y quedan emparejados. Despues A envia un mensaje con la clave nueva
+#  y B lo recibe y lo confirma.
+# ============================================================
+wait 300
+unpair
+wait 500
+expect text SIN PAREJA                          # el menu principal avisa
+pot 1000                                        # Ajustes: opcion 2 = Emparejar
+wait 300
+in 0 finish down                                # B larga: abre Ajustes
+in 1700 finish up
+in 1900 morse down                              # A: Emparejar
+in 2050 morse up
+in 9000 expect text Codigo                      # los dos ven el codigo
+in 9500 morse down                              # A: "es el mismo"
+in 9650 morse up
+in 15000 expect text Emparejado
+in 15500 morse down                             # salir
+in 15650 morse up
+run 17000
+expect text Env
+expect notext SIN PAREJA
+print Emparejados (A)
+# Con la clave nueva: A envia "happy" y B lo confirma
+pot 80
+wait 300
+tap morse
+wait 300
+pot 300
+wait 300
+tap morse
+wait 300
+pot 585
+wait 400
+expect text happy
+in 0 morse down
+in 120 morse up
+run 1500
+expect serial Enviando: happy
+wait 6000
+expect serial Confirmado: entregado
+print A: el mensaje con la clave de la pareja llego y fue confirmado
+serial

@@ -19,6 +19,8 @@
 #include "Doodle.h"
 #include "TresEnRaya.h"
 #include "ClockSetup.h"
+#include "Settings.h"
+#include "Pairing.h"
 
 #if defined(ESP8266)
 extern "C" {
@@ -389,6 +391,10 @@ bool handleIdle() {
                   Chat_peerBatt(), Chat_peerBattLow());
     drawStatusClock(Clock_hhmm().c_str());
     drawUnreadBadge(History_unreadCount());
+    if (!Pairing_isPaired()) {                        // sin clave de pareja el equipo no emite
+        display.setTextSize(1); display.setTextColor(SH110X_WHITE);
+        display.setCursor(2, 118); display.print("SIN PAREJA");
+    }
     if (justEnteredIdle) {
         Display_resetMenuCursor();   // forzar repintado del cursor al entrar
         justEnteredIdle = false;
@@ -400,6 +406,13 @@ bool handleIdle() {
     if (isMorsePressed()) {
         delay(50);
         if (isMorsePressed()) {
+            if (cursorPos == 0 && !Pairing_isPaired()) {   // sin pareja no se puede enviar: avisar y seguir en el menu
+                lastInteraction = millis();
+                Display_clear();
+                menuTransitionDelay();
+                showNeedPairing();
+                return true;
+            }
             if (cursorPos == 0)      mainState = STATE_SEND_MENU;
             else if (cursorPos == 1) mainState = STATE_HISTORY_MENU;
             else if (cursorPos == 2) mainState = STATE_GAMES_MENU;
@@ -420,7 +433,7 @@ bool handleIdle() {
             else if (millis() - bSince >= CLOCK_SETUP_HOLD_MS) {
                 bSince = 0;
                 justEnteredIdle = true;
-                startClockSetup();
+                startSettings();
                 return true;
             }
         } else {

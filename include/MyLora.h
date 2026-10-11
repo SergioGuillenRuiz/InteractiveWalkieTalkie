@@ -60,6 +60,10 @@ bool Lora_rangeMode();
 // vuelve solo a escuchar (se atiende en Lora_update/Lora_hasMessage/Lora_send). Una nueva emision espera
 // a que acabe la anterior.
 bool Lora_send(const String &msg);
+// Emite unos bytes SIN cifrar (solo para el emparejamiento, antes de tener clave). Mismo acceso al canal que Lora_send.
+bool Lora_sendRaw(const String &bytes);
+// n bytes de ruido del receptor de la chip (RegRssiWideband), unos 8 ms por byte. Fuente de aleatorios del emparejamiento.
+void Lora_entropy(uint8_t *out, size_t n);
 
 // Hay un mensaje recibido y descifrado listo para Lora_readMessage().
 bool Lora_hasMessage();

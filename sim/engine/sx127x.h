@@ -51,6 +51,7 @@ void setLoopback(bool on);                   // lo transmitido vuelve como recib
 void setPolite(bool on);
 bool polite();
 AirFrame &peerFrame();                       // parametros por defecto de las tramas inyectadas
+const std::vector<std::string> &injectedLog();   // todo lo inyectado hasta ahora (para repetirlo en las pruebas de seguridad)
 void inject(const std::string &payload, int rssi = -42, bool corrupt = false);   // trama que empieza AHORA
 void resetWorld();                           // reinicio en frio del reloj virtual: se olvidan tramas en vuelo
 

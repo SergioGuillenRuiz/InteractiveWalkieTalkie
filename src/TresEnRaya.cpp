@@ -6,6 +6,8 @@
 #include "States.h"
 #include "MyLora.h"
 #include "Identity.h"
+#include "Pairing.h"
+#include "Settings.h"
 
 // ============================================================
 //  Tres en raya por LoRa (2 jugadores).
@@ -144,6 +146,7 @@ static void drawBoard(bool myTurn) {
 }
 
 void startTresEnRaya() {
+  if (!Pairing_isPaired()) { showNeedPairing(); mainState = STATE_IDLE; return; }   // sin pareja no hay radio
   memset(board, 0, sizeof(board));
   myRole = 0; peerId = 0; paired = false; over = false; cursor = 4;
 

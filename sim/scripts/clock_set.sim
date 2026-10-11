@@ -1,6 +1,7 @@
 # ============================================================
 #  Ajuste de la hora por menu ("Poner la hora").
-#  Mantener B ~1,5 s en el menu principal abre la pantalla: tres pasos (horas,
+#  Mantener B ~1,5 s en el menu principal abre los Ajustes (Poner la hora / Emparejar, con el pote) y A entra en
+#  "Poner la hora" (en estos guiones, 'in 1900 morse down' tras soltar B). La pantalla: tres pasos (horas,
 #  decenas y unidades de minuto) con el pote, A acepta y avanza (en el ultimo
 #  GUARDA), B retrocede (en el primero CANCELA), 60 s sin tocar = cancela.
 #
@@ -33,6 +34,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400            # horas = 09
 run 2500 300               # congela el fotograma dentro de la pantalla
 expect text Poner la hora
@@ -48,6 +51,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400
 in 2800 morse down         # A: horas -> decenas
 in 2950 morse up
@@ -59,6 +64,8 @@ expect text B: atras
 shot clock_set_2_decenas
 in 0 finish down           # B: vuelve a horas  (se programa tras 'abandonar' la anterior)
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400
 in 2800 morse down
 in 2950 morse up
@@ -78,6 +85,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400
 in 2800 finish down
 in 2950 finish up          # B en el primer campo = cancelar
@@ -98,6 +107,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400            # 09
 in 2800 morse down
 in 2950 morse up
@@ -146,6 +157,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 700            # horas = 16
 in 3000 morse down
 in 3150 morse up
@@ -160,6 +173,8 @@ pot 0
 wait 300
 in 0 finish down
 in 1700 finish up
+in 1900 morse down         # Ajustes -> Poner la hora (con el pote abajo)
+in 2050 morse up
 in 2300 pot 400
 run 70000
 expect notext Poner la hora

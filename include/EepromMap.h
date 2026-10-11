@@ -15,6 +15,7 @@
 //   [EE_FRASERO_BASE .. +SIZE)     -> Frasero: piezas propias (ver Frasero.cpp)
 //   [EE_OUTBOX_BASE .. +SIZE)      -> Outbox: mensajes sin confirmar (ver Chat.cpp)
 //   [EE_CLOCK_BASE .. +SIZE)       -> Reloj: epoch persistido (ver Clock.cpp)
+//   [EE_PAIR_BASE .. +SIZE)        -> Emparejamiento: claves de la pareja y contadores (ver Pairing.cpp)
 // ============================================================
 
 // Fin de la region del historial. DEBE coincidir con su EEPROM_SIZE
@@ -48,9 +49,15 @@
 #define CLK_HDR_SIZE       4            // 3 magia {'C','K','1'} + 1 version
 #define EE_CLOCK_SIZE      (CLK_HDR_SIZE + 4 + 1)                // 9 (4B epoch + 1B generacion de ajuste, v2)
 
+// --- Region EMPAREJAMIENTO: claves de la pareja y contadores anti-repeticion ---
+// 3B magia {'P','K','1'} + 1B version + 16B clave de cifrado + 16B clave de autenticacion
+// + 4B contador de emision reservado + 4 x (1B id de emisor + 4B contador de recepcion) (tramos de 4096: ver Pairing.cpp)
+#define EE_PAIR_BASE       (EE_CLOCK_BASE + EE_CLOCK_SIZE)       // 1807
+#define EE_PAIR_SIZE       60
+
 // Tamano total que TODOS deben pasar a EEPROM.begin() (un commit con un tamano
 // menor borraria a 0xFF las regiones de arriba, asi que SIEMPRE EE_TOTAL_SIZE).
-#define EE_TOTAL_SIZE      (EE_CLOCK_BASE + EE_CLOCK_SIZE)       // 1807
+#define EE_TOTAL_SIZE      (EE_PAIR_BASE + EE_PAIR_SIZE)         // 1867
 
 // Cota fisica: el sector de EEPROM del ESP8266 es 4096 B y el backing del
 // simulador usa 2048 B; el mapa debe caber en ambos.

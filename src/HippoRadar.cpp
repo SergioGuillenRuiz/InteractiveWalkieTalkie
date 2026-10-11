@@ -7,6 +7,8 @@
 #include "Chat.h"
 #include "Identity.h"
 #include "HippoRadar.h"
+#include "Pairing.h"
+#include "Settings.h"
 
 // ============================================================
 //  HIPPO RADAR  -  utilidad para localizar al otro equipo
@@ -219,6 +221,7 @@ void startHippoRadar() {
   ownId = Device_id();   // id estable y unico por equipo (no aleatorio): evita que
                          // dos equipos saquen el mismo id y se ignoren mutuamente.
 
+  if (!Pairing_isPaired()) { showNeedPairing(); mainState = STATE_IDLE; return; }   // sin pareja no hay radio
   if (!startScreen()) { mainState = STATE_IDLE; Display_clear(); return; }
   while (isMorsePressed()) { backgroundTick(); delay(10); }   // soltar la A de "empezar"
 
@@ -244,7 +247,11 @@ void startHippoRadar() {
     // en ella). Se espera a que no haya una trama a medias para no cortarla.
     if (!chatWin && now >= nextWin && !Lora_busy()) { Lora_setRangeMode(false); chatWin = true; winEnd = millis() + RADAR_CHAT_WINDOW_MS; Serial.println("[Radar] ventana de chat abierta (SF7)"); }
     else if (chatWin && now >= winEnd && (!Lora_busy() || now >= winEnd + 600)) {
-      Lora_setRangeMode(true); Serial.println("[Radar] ventana de chat cerrada (SF10)"); chatWin = false; nextWin = millis() + RADAR_CHAT_EVERY_MS; nextPing = millis();
+      Lora_setRangeMode(true); Serial.println("[Radar] ventana de chat cerrada (SF10)"); chatWin = false; nextWin = millis() + RADAR_CHAT_EVERY_MS;
+      // Primer ping tras la ventana: el receptor acaba de reiniciarse y necesita unos simbolos escuchando para ver una trama
+      // ya empezada (sin ellos, "escuchar antes de hablar" no ve nada y se pisa al otro equipo). Ademas las ventanas de los
+      // dos equipos caen casi a la vez: la pausa aleatoria los desfasa en vez de dejar que salgan juntos.
+      nextPing = millis() + RADAR_REARM_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1);
     }
 
     // radio: pings frecuentes para reaccionar al girar

@@ -79,7 +79,7 @@ run_duo() {
     SIM_SEED=$seed start_script "$air" 2 200 "$sb" "$WORK/_duo2.out"; p2=$NODE_PID
     wait_all 90 "$p1" "$p2"
     n=$((n + 1))
-    if ! duo_ok "$WORK/_duo1.out" || ! duo_ok "$WORK/_duo2.out"; then
+    if ! duo_ok "$WORK/_duo1.out" || ! duo_ok "$WORK/_duo2.out" || { [[ -n "${DUO_HOOK:-}" ]] && ! "$DUO_HOOK" "$WORK/_duo1.out" "$WORK/_duo2.out"; }; then
       bad=$((bad + 1)); echo "  [FAIL] $title con la semilla $seed"
       grep -hF '[FAIL]' "$WORK/_duo1.out" "$WORK/_duo2.out" | head -6 | sed 's/^/         /'
     fi
@@ -217,7 +217,7 @@ check "#2 acaba con su envio confirmado"            "$(has "$x2" 'Confirmado: en
 
 # ============================================================
 #  ESCENA C: la hora puesta a mano en un equipo la adopta el otro (#1 -> #2).
-#  #1 abre "Poner la hora" (mantener B), pone 09:06 y guarda; despues la corrige
+#  #1 abre "Poner la hora" (mantener B -> Ajustes -> A), pone 09:06 y guarda; despues la corrige
 #  HACIA ATRAS a 07:20. #2 (otro proceso, sin hora) adopta ambas por radio: la
 #  segunda tiene una generacion de ajuste mas reciente aunque su hora sea anterior.
 #  (Teclas: fdown/fup = B mantenida; pote -> horas pot*24/1024, decenas pot*6/1024,
@@ -233,6 +233,8 @@ keys_c1=$(cat <<EOF
 0 pot 0
 3000 fdown
 4700 fup
+4900 mdown
+5050 mup
 5200 pot 400
 5700 mdown
 5850 mup
@@ -245,6 +247,8 @@ keys_c1=$(cat <<EOF
 10500 pot 0
 11000 fdown
 12700 fup
+12900 mdown
+13050 mup
 13200 pot 300
 13700 mdown
 13850 mup
@@ -394,6 +398,20 @@ run_duo "tetris coop: anfitrion y cliente" "$SIM/netscripts/tetris_a.sim" "$SIM/
 echo
 echo "==== Escena J: hipporadar entre dos equipos reales ===="
 run_duo "hipporadar: los dos equipos se enlazan y vuelven al chat" "$SIM/netscripts/hippo_a.sim" "$SIM/netscripts/hippo_b.sim" $(seq 1 16)
+
+# ============================================================
+#  ESCENA K: EMPAREJAMIENTO entre dos firmwares reales (netscripts/pair_a.sim y pair_b.sim). Empiezan sin pareja
+#  (no pueden enviar), se emparejan por radio y comparan el codigo de 6 digitos: DEBE ser el mismo en los dos. Despues se
+#  escriben con la clave nueva.
+# ============================================================
+same_code() {   # las dos pantallas mostraron el mismo codigo (y no uno vacio)
+  local c1 c2
+  c1="$(grep -a '\[Pair\] codigo:' "$1" | tail -1)"; c2="$(grep -a '\[Pair\] codigo:' "$2" | tail -1)"
+  [[ -n "$c1" && "$c1" == "$c2" ]] || { echo "         codigos distintos: [$c1] [$c2]"; return 1; }
+}
+echo
+echo "==== Escena K: emparejamiento entre dos equipos reales ===="
+DUO_HOOK=same_code run_duo "emparejar: mismo codigo en los dos, clave nueva funcionando" "$SIM/netscripts/pair_a.sim" "$SIM/netscripts/pair_b.sim" $(seq 1 8)
 
 # --- Capturas a PNG (si hay ImageMagick) ---
 conv=""

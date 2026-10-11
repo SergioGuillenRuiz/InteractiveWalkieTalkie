@@ -52,7 +52,9 @@ in 600 morse down                              # A: empezar -> radar (largo alca
 in 750 morse up
 in 1500 expect text BUSCANDO
 # 1) pings del companero (SF10, ~0,7 s en el aire): llega el enlace
-in 2000 lora HR
+in 1900 lora HR
+in 2900 lora HR                                 # (el otro radar repite su ping cada ~1,4 s; a SF10 la deteccion de portadora
+in 3900 lora HR                                 #  tarda ~25 ms y un ping que empieza casi a la vez que el nuestro se pisa)
 in 4500 expect text GIRA
 # 2) chat: el radar vuelve a SF7 durante 1,2 s cada 4 s (ventana de chat). Un mensaje FUERA de la ventana no se oye (la radio
 #    esta en SF10); uno DENTRO se guarda y se confirma con su ACK. (1a ventana: a los ~4,8-6 s del inicio del radar;
@@ -73,17 +75,17 @@ in 6500 expect serial Radar] ventana de chat cerrada
 in 6500 expect text GIRA                         # y el radar sigue enlazado
 # 3) el radar dura mas de 35 s (con un ping del companero cada 2,5 s mantiene el enlace). La baliza y los reintentos
 #    solo salen en las ventanas de chat (en SF10 nadie del chat los oiria)
-in 4500 lora HR
+in 4200 lora HR
 in 7000 lora HR
-in 9500 lora HR
+in 9300 lora HR
 in 12000 lora HR
-in 14500 lora HR
+in 14300 lora HR
 in 17000 lora HR
-in 19500 lora HR
+in 19300 lora HR
 in 22000 lora HR
-in 24500 lora HR
+in 24300 lora HR
 in 27000 lora HR
-in 29500 lora HR
+in 29300 lora HR
 in 32500 lora HR
 in 34500 lora HR
 in 37500 lora HR

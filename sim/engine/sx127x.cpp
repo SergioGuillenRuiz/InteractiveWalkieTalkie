@@ -323,6 +323,13 @@ uint8_t readReg(uint8_t a) {
         }
         case R_VERSION: return 0x12;
         case R_RSSI: return (uint8_t)(-110 + 157);
+        case 0x2C: {   // RegRssiWideband: ruido del receptor (fuente de aleatorios del emparejamiento); distinto en cada equipo y semilla
+            static std::mt19937 noise([] {
+                const char *id = getenv("SIM_CHIPID"), *sd = getenv("SIM_SEED");
+                return (unsigned)(4242u + (id ? strtoul(id, nullptr, 0) * 2654435761u : 0u) + (sd ? strtoul(sd, nullptr, 0) * 40503u : 0u));
+            }());
+            return (uint8_t)noise();
+        }
         default: return c.reg[a];
     }
 }
@@ -432,7 +439,11 @@ static double peerBackoffMs() {
     return 1.0 + (double)(rng() % 80u);
 }
 
+static std::vector<std::string> g_injected;
+const std::vector<std::string> &injectedLog() { return g_injected; }
+
 void inject(const std::string &payload, int rssi, bool corrupt) {
+    g_injected.push_back(payload);
     AirFrame a = g_peer;
     a.payload = payload;
     a.rssi = rssi;

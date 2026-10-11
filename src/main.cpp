@@ -8,6 +8,7 @@
 #include "Identity.h"
 #include "Frasero.h"
 #include "Clock.h"
+#include "Pairing.h"
 #include "Chat.h"
 
 #if defined(ESP8266)
@@ -57,6 +58,7 @@ void setup() {
   Frasero_load();
   Clock_load();          // restaura el epoch persistido (hora compartida)
   Chat_load();           // restaura la outbox (mensajes sin confirmar)
+  Pairing_load();        // clave de la pareja (sin ella el equipo no emite: ver Pairing.h)
 
   Serial.print("[ID] Equipo #"); Serial.println(Device_id());
 
