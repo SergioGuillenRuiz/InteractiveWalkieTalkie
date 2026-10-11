@@ -1,0 +1,56 @@
+# ============================================================
+#  Tetris Coop 2J: cuando el otro desaparece.
+#    - Cliente: si en plena partida deja de llegar el estado del anfitrion (llega cada 340 ms) durante 6 s, avisa
+#      "Anfitrion perdido" y sale al menu (antes se quedaba con el ultimo tablero congelado).
+#    - Anfitrion: si recibe el aviso de salida del cliente ('TQ'), muestra "El companero salio" y vuelve al lobby
+#      esperando a otro (antes lo ignoraba y seguia jugando solo).
+#  Logica pura del protocolo: radio ideal. (Device_id del sim = 137.)
+# ============================================================
+radio ideal on
+wait 300
+
+# --- Cliente: el anfitrion desaparece ---
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+expect text Tetris
+in 0 morse down
+in 120 morse up
+in 400 pot 900
+in 700 expect text Unirse
+in 1200 morse down
+in 1320 morse up
+in 2000 lora TS_GO
+in 2800 lorabin 54530000000000000000000000000000000000000000000000010002020101000802010000000000
+in 3600 expect text PTS
+in 8000 expect text PTS               # 5 s sin estado: aun no
+in 9600 expect text perdido           # a los 6 s del ultimo estado
+in 12500 expect text Env              # ... y de vuelta en el menu principal
+run 13000
+
+# --- Anfitrion: el cliente se va ---
+wait 300
+pot 1000
+wait 200
+tap morse
+pot 0
+wait 250
+in 0 morse down
+in 120 morse up
+in 400 pot 512
+in 700 expect text Crear
+in 1200 morse down
+in 1320 morse up
+in 1800 expect text Esperando
+in 2000 lora TJ
+in 4000 expect text PTS
+in 5000 lora TQ
+in 5500 expect text salio
+in 8500 expect text Esperando         # de vuelta al lobby
+in 9000 finish down                   # B: cancelar
+in 9300 finish up
+run 10500
+expect text Env
+print Tetris Coop 2J: cliente sale si el anfitrion desaparece; anfitrion vuelve al lobby si el cliente se va

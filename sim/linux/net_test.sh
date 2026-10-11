@@ -346,7 +346,7 @@ check "#2 oye el dibujo entero (96 B: 164 ms en el aire)" "$(has "$g2" 'rx t=[0-
 
 # ============================================================
 #  ESCENA G: CUATRO equipos. #1 envia un mensaje y los TRES receptores lo confirman (ACK). Cada ACK sale tras
-#  un retardo aleatorio de 10-300 ms y escuchando antes de hablar: antes los tres confirmaban en el mismo
+#  un retardo aleatorio de 80-300 ms y escuchando antes de hablar: antes los tres confirmaban en el mismo
 #  instante, los ACK se pisaban en el emisor y no oia ninguno (con 3 o mas equipos). #1 recibe las
 #  confirmaciones y no hace falta reintentar. (ids: chip 100 -> #101, 200 -> #201, 300 -> #47, 400 -> #?)
 # ============================================================

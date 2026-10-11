@@ -172,6 +172,7 @@ aserciones; el ejecutable devuelve código de salida ≠ 0 si alguna falla.
 | `beacon_jitter.sim`| Balizas con jitter: primera a los 2-4 s y siguientes cada 27-33 s, no todas iguales; y la baliza "ya" (`Chat_beaconSoon`) sale en menos de 0,45 s con una pausa distinta cada vez |
 | `peer_batt.sim`    | Batería del compañero junto al corazón de presencia (nivel, "!" de batería baja, oculta fuera de alcance) |
 | `ui_fixes.sim`     | Cursor del menú principal (no desaparece al dormir/despertar ni tras las animaciones), hora de la barra de estado y etiquetas del menú de juegos |
+| `tetris_leave.sim` | Tetris 2J cuando el otro desaparece: el cliente sale con "Anfitrión perdido" a los 6 s sin estado; el anfitrión vuelve al lobby al recibir el `TQ` del cliente |
 | `ttt.sim`          | Tres en raya por LoRa: emparejamiento, roles, jugada y detección de fin |
 | `ttt_pair.sim`     | Tres en raya, emparejamiento: quien ya está emparejado contesta a cada HELLO del rival con su estado (así el otro también se entera), un tercer equipo no pisa la partida ni recibe respuesta, y terminada la partida ya no se contesta (radio ideal: lógica pura; con la realista, la escena H) |
 
@@ -353,7 +354,7 @@ parámetros del proyecto (`radio peer ...` los cambia). `--radio ideal`
 da el comportamiento antiguo: la trama se entrega al instante y siempre, y transmitir no cuesta tiempo.
 
 **Escribir tests con este modelo.** Una trama inyectada ocupa el canal lo que dura en el aire (un mensaje
-corto ~70 ms; uno largo ~190 ms; un dibujo ~160 ms) y el equipo contesta con su ACK, que sale entre 10 y 300 ms
+corto ~70 ms; uno largo ~190 ms; un dibujo ~160 ms) y el equipo contesta con su ACK, que sale entre 80 y 300 ms
 después de recibir y dura otros ~70 ms: dos inyecciones a la vez, o una que llegue mientras el equipo
 emite su ACK, se pisan y no se oye ninguna, igual que con la radio real. Por eso los guiones separan los
 mensajes (≥ 800 ms entre uno y el siguiente, con `in <ms> chatmsg|lora|presence ...` o con `run`) y, antes de inyectar

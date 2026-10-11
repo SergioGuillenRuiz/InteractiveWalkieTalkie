@@ -434,13 +434,20 @@ static void clientGame() {
   bool over = false, started = false;
   static bool pa = false, pb = false;
   uint8_t rotC = 0, dropC = 0;
-  unsigned long bHold = 0;
+  unsigned long bHold = 0, lastState = millis();
   while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
   while (true) {
     unsigned long now = millis();
     String m = tcRecv();
-    if (m.startsWith("TS") && m.length() > 10) { decodeState(m, over); started = true; }
+    if (m.startsWith("TS") && m.length() > 10) { decodeState(m, over); started = true; lastState = now; }
     if (m == "TQ") { mainState = STATE_IDLE; Display_clear(); return; }
+    // Anfitrion perdido (apagado o fuera de alcance): en plena partida llega su estado cada 340 ms; si deja de llegar
+    // se avisa y se sale al menu en vez de dejar el ultimo tablero congelado.
+    if (started && !over && now - lastState > HOST_LOST_MS) {
+      display.clearDisplay(); centerPrint("Anfitrion perdido", 56, 1); display.display();
+      for (int i = 0; i < 60; i++) { backgroundTick(false); delay(25); }
+      mainState = STATE_IDLE; Display_clear(); return;
+    }
 
     int tx = map(getPotValue(BW - 1), 0, BW - 1, 0, BW - 4);
     bool a = isMorsePressed(), b = isFinishPressed();
@@ -557,7 +564,7 @@ void startTetrisCoop() {
   while (true) {
     resetBoard();
     if (host) gravMs = 1100;                          // mas lento: la radio tiene retardo
-    bool over = false;
+    bool over = false, partnerLeft = false;
     if (!spawnPiece(P1, 1, NULL) || !spawnPiece(P2, 5, &P1)) over = true;
     botA.planned = botB.planned = false;
     appliedRot = appliedDrop = remoteRot = remoteDrop = 0; remoteTargetX = P2.x;
@@ -568,7 +575,11 @@ void startTetrisCoop() {
     while (isMorsePressed() || isFinishPressed()) { backgroundTick(); delay(10); }
 
     while (!over) {
-      if (host) { String m = tcRecv(); if (m.startsWith("TI")) decodeInput(m); }   // (tcRecv incluye backgroundTick)
+      if (host) {                                      // (tcRecv incluye backgroundTick)
+        String m = tcRecv();
+        if (m.startsWith("TI")) decodeInput(m);
+        else if (m == "TQ") { partnerLeft = true; break; }   // el companero salio
+      }
       else backgroundTick();
       now = millis();
 
@@ -592,6 +603,13 @@ void startTetrisCoop() {
       delay(25);
     }
 
+    if (partnerLeft) {                                // aviso y de vuelta al lobby, esperando a otro companero (o B para salir)
+      display.clearDisplay(); centerPrint("El companero salio", 56, 1); display.display();
+      for (int i = 0; i < 60; i++) { backgroundTick(false); delay(25); }
+      Game_dropPackets();
+      if (!lobby(true)) { mainState = STATE_IDLE; Display_clear(); return; }
+      continue;
+    }
     if (host) tcSend(encodeState(true));
     if (!gameOverScreen()) { if (host) tcQuit(); mainState = STATE_IDLE; Display_clear(); return; }
   }

@@ -205,7 +205,7 @@ En **Linux (GNOME)** hay una versión equivalente y separada en [`sim/linux/`](s
 
 ```bash
 cd sim/linux
-./run_tests.sh           # compila y ejecuta toda la batería de tests (44 suites)
+./run_tests.sh           # compila y ejecuta toda la batería de tests (45 suites)
 ./seed_tests.sh 1 50     # la misma batería con 50 secuencias aleatorias (descubre tests que dependen de la suerte)
 ./net_test.sh            # pruebas con varios equipos a la vez sobre el "aire" compartido (10 escenas, incluidas partidas
                          # de 3 en raya, Tetris y HippoRadar entre dos firmwares reales)

@@ -112,6 +112,7 @@
 //    entrada cada TETRIS_INPUT_MS (72 ms: ~26 %). Antes 302 ms cada 280 ms (108 %) y 118 ms cada 200 ms.
 #define RADAR_PING_MS         1200UL
 #define RADAR_PING_JITTER_MS  300UL
+#define HOST_LOST_MS         6000UL   // Tetris 2J, cliente: sin recibir estado del anfitrion durante este tiempo = anfitrion perdido
 #define TETRIS_STATE_MS       340UL
 #define TETRIS_INPUT_MS       280UL
 
@@ -122,12 +123,13 @@
 //    que acabe y luego una pausa aleatoria 1..CSMA_BACKOFF_MS (dos equipos que esperaban lo mismo no deben
 //    salir a la vez). Pasados CSMA_MAX_WAIT_MS se emite igualmente.
 //  - Varios equipos que reciben el MISMO mensaje lo confirman (ACK) en el mismo instante y los ACK se pisarian
-//    en el emisor: cada ACK sale tras un retardo aleatorio ACK_DELAY_MIN_MS..ACK_DELAY_MAX_MS.
+//    en el emisor: cada ACK sale tras un retardo aleatorio ACK_DELAY_MIN_MS..ACK_DELAY_MAX_MS. El minimo (80 ms) da
+//    tiempo a que el emisor, que acaba de emitir, vuelva a escuchar (su radio solo se re-arma cuando su bucle la consulta).
 //  - Los reintentos se reparten +-MSG_RETRY_JITTER_MS: dos equipos que perdieron su mensaje a la vez
 //    (colision) no deben reintentarlo otra vez a la vez.
 #define CSMA_MAX_WAIT_MS     1500UL
 #define CSMA_BACKOFF_MS      80UL
-#define ACK_DELAY_MIN_MS     10UL
+#define ACK_DELAY_MIN_MS     80UL
 #define ACK_DELAY_MAX_MS     300UL
 #define ACK_QUEUE            4          // ACK pendientes de enviar a la vez
 #define MSG_RETRY_JITTER_MS  1500UL

@@ -36,6 +36,11 @@ in 4300 expect serial equipo #60 en alcance
 # 2) El anfitrion contesta: empieza la partida (cliente) y llega su estado
 in 4500 lora TH
 in 5500 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+# (el anfitrion sigue difundiendo su estado: si callara 6 s el cliente saldria con "Anfitrion perdido")
+in 8500 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+in 11000 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+in 13500 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
+in 16000 lorabin 54530000000000000000000000000000000000000000000000000000000000000000000000000000
 in 7000 expect text PTS                        # el cliente pinta la partida (tablero, puntos...)
 # 3) Durante la partida: otro mensaje de chat. El cliente emite su entrada ('TI') cada ~225 ms; si el mensaje
 #    empezara en el MISMO instante que una de esas emisiones se pisarian (ventana fisica de unos ms), asi que, como
