@@ -112,6 +112,13 @@
 //    entrada cada TETRIS_INPUT_MS (72 ms: ~26 %). Antes 302 ms cada 280 ms (108 %) y 118 ms cada 200 ms.
 #define RADAR_PING_MS         1200UL
 #define RADAR_PING_JITTER_MS  300UL
+//  - HippoRadar y el chat: el radar va en largo alcance (SF10) y en SF10 no se oye el chat (SF7). Para no quedar
+//    incomunicado, cada RADAR_CHAT_EVERY_MS el radar vuelve a SF7 durante RADAR_CHAT_WINDOW_MS (escucha y atiende el
+//    chat: mensajes, ACK, balizas, reintentos) y no emite pings en ese rato; a costa de perder los pings del otro equipo
+//    que caigan en la ventana (el enlace se da por perdido tras RADAR_LINK_LOST_MS sin oir ninguno).
+#define RADAR_CHAT_EVERY_MS   4000UL
+#define RADAR_CHAT_WINDOW_MS  1200UL
+#define RADAR_LINK_LOST_MS    6000UL
 #define HOST_LOST_MS         6000UL   // Tetris 2J, cliente: sin recibir estado del anfitrion durante este tiempo = anfitrion perdido
 #define TETRIS_STATE_MS       340UL
 #define TETRIS_INPUT_MS       280UL

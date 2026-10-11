@@ -155,11 +155,11 @@ La hora se usa para la antigüedad de los mensajes ("hace 3m").
 | **Poker** | Texas Hold'em contra la CPU (1000 fichas, ciegas 10/20). **B** cambia de acción (igualar/pasar, subir, retirarse) y **A** confirma. |
 | **RefillGame** | "La Cervecería": llegan jarras; el **potenciómetro** regula el caudal del grifo y **A** para y entrega la jarra. Gana puntos cuanto más cerca de la marca; desbordar o quedarse corto cuesta una vida (3). |
 | **Choose4Me** | Una bola mágica: piensa una pregunta, **A** para preguntar; **B** sale. |
-| **HippoRadar** | Localiza al otro equipo: **ambos** abren el radar (A para empezar). Pasa de *BUSCANDO* a *GIRA DESPACIO* (frío / tibio / caliente) y, al bloquearse, a *VE HACIA AQUÍ* con una flecha y la distancia estimada. **A** reinicia la búsqueda, **B** sale. **Mientras dura el radar el equipo no recibe mensajes** (usa otra configuración de radio de más alcance); al salir se anuncia y reintenta lo pendiente. |
+| **HippoRadar** | Localiza al otro equipo: **ambos** abren el radar (A para empezar). Pasa de *BUSCANDO* a *GIRA DESPACIO* (frío / tibio / caliente) y, al bloquearse, a *VE HACIA AQUÍ* con una flecha y la distancia estimada. **A** reinicia la búsqueda, **B** sale. El radar usa otra configuración de radio de más alcance, en la que no se oye el chat; por eso **cada 4 s vuelve 1,2 s a la del chat** (ventana de chat): ahí se reciben y confirman mensajes, salen las balizas y los reintentos, y no se emiten pings. Un mensaje que llegue fuera de la ventana no se oye (el emisor reintenta). Al salir se anuncia. |
 | **3 en raya** | Para dos equipos. Emparejamiento automático ("Buscando rival…"): el equipo con el número **menor** juega con la **X** y mueve primero. **Potenciómetro** elige la casilla, **A** coloca la ficha; **mantén B** para salir. |
 
 **Los mensajes siguen llegando mientras juegas** (Tetris, Tres en raya, HippoRadar…): se guardan en el Historial y se confirman,
-y los verás como no leídos al salir al menú. (En el radar de HippoRadar, no: ver arriba.)
+y los verás como no leídos al salir al menú. (En el radar de HippoRadar, solo en sus ventanas de chat: ver arriba.)
 
 ### La radio
 
@@ -177,7 +177,7 @@ y los verás como no leídos al salir al menú. (En el radar de HippoRadar, no: 
 | Síntoma | Qué mirar |
 |---|---|
 | La pantalla no enciende / está en negro | ¿Está **suspendido**? Pulsa un botón 3 veces. Comprueba SDA/SCL y la dirección `0x3C`. |
-| No se oyen los equipos | Mismo firmware en los dos, **antena conectada**, a menos distancia; que ninguno esté en el **radar** de HippoRadar. El registro serie muestra `[LoRa] ...` y `[Presencia]`. |
+| No se oyen los equipos | Mismo firmware en los dos, **antena conectada**, a menos distancia; que ninguno esté en el **radar** de HippoRadar (solo oye el chat 1,2 s cada 4 s). El registro serie muestra `[LoRa] ...` y `[Presencia]`. |
 | Dos equipos que no se ven aunque están cerca | Pueden tener el **mismo número** (el identificador es de 1 byte derivado del chip: raro, ~0,4 %); en ese caso un equipo ignora los mensajes del otro. Compara "Equipo #N" en el registro serie al arrancar. |
 | `--:--` en lugar de la hora | Nadie ha puesto la hora aún: mantén **B** 1,5 s en la pantalla principal. |
 | El nivel de batería siempre marca 100 % | Es lo esperado hoy: el único ADC del ESP8266 lo usa el potenciómetro y medir la batería requiere hardware dedicado (ver `path.md`). |

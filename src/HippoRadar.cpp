@@ -230,6 +230,8 @@ void startHippoRadar() {
   unsigned long now = millis();
   nextPing = now;
   bool prevA = false;
+  bool chatWin = false;                                       // ventana de chat abierta (la radio vuelve a SF7)
+  unsigned long nextWin = now + RADAR_CHAT_EVERY_MS, winEnd = 0;
 
   while (true) {
     now = millis();
@@ -238,10 +240,17 @@ void startHippoRadar() {
     if (isFinishPressed()) { delay(40); if (isFinishPressed()) { radioRestore(); mainState = STATE_IDLE; Display_clear(); return; } }
     bool a = isMorsePressed();
 
+    // ventana de chat: cada RADAR_CHAT_EVERY_MS la radio vuelve a SF7 un rato para atender el chat (no se emiten pings
+    // en ella). Se espera a que no haya una trama a medias para no cortarla.
+    if (!chatWin && now >= nextWin && !Lora_busy()) { Lora_setRangeMode(false); chatWin = true; winEnd = millis() + RADAR_CHAT_WINDOW_MS; Serial.println("[Radar] ventana de chat abierta (SF7)"); }
+    else if (chatWin && now >= winEnd && (!Lora_busy() || now >= winEnd + 600)) {
+      Lora_setRangeMode(true); Serial.println("[Radar] ventana de chat cerrada (SF10)"); chatWin = false; nextWin = millis() + RADAR_CHAT_EVERY_MS; nextPing = millis();
+    }
+
     // radio: pings frecuentes para reaccionar al girar
-    if (now >= nextPing && !Lora_busy()) { sendPing(); nextPing = now + RADAR_PING_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1); }
+    if (!chatWin && now >= nextPing && !Lora_busy()) { sendPing(); nextPing = now + RADAR_PING_MS + (unsigned long)random(RADAR_PING_JITTER_MS + 1); }
     rxTick();
-    if (now - lastHeard > 3500) haveLink = false;
+    if (now - lastHeard > RADAR_LINK_LOST_MS) haveLink = false;
     if (haveLink) distM = estDistance(rssiEMA);
     if (!haveLink) phase = PH_SEARCH;
 

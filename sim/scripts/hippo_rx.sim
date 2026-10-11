@@ -1,11 +1,13 @@
 # ============================================================
 #  HippoRadar y el chat. Durante el radar la radio va en LARGO ALCANCE (SF10, +20 dBm) y el chat, en SF7, no se
-#  oye en ninguno de los dos sentidos. Lo que se comprueba:
+#  oye en ninguno de los dos sentidos... salvo en las VENTANAS DE CHAT: cada 4 s el radar vuelve a SF7 durante 1,2 s.
+#  Lo que se comprueba:
 #    - los pings "HR" del compañero (que tambien va en SF10) llegan al juego por la cola de paquetes de juego
 #      (ya no por una lectura directa que se comia los demas paquetes);
-#    - un mensaje de chat en SF7 no se oye durante el radar, y NADA entra en el Historial como basura;
-#    - mientras dura el radar el equipo no saca balizas ni reintentos (saldrian en SF10 y nadie del chat los oiria:
-#      solo ocuparian el canal), y al salir vuelve al chat: se anuncia con una baliza y reintenta lo pendiente;
+#    - un mensaje de chat fuera de la ventana no se oye; uno dentro se guarda y se confirma; NADA entra en el
+#      Historial como basura;
+#    - la baliza y los reintentos esperan a una ventana (en SF10 nadie del chat los oiria) y, al salir, el equipo se
+#      anuncia con una baliza;
 #    - ya fuera, el chat funciona como siempre (SF7).
 #  El radar es bloqueante: todo se programa con "in <ms> ..." dentro de un unico run.
 #  (Device_id del sim = 137.)
@@ -52,14 +54,25 @@ in 1500 expect text BUSCANDO
 # 1) pings del companero (SF10, ~0,7 s en el aire): llega el enlace
 in 2000 lora HR
 in 4500 expect text GIRA
-# 2) un mensaje de chat en SF7 durante el radar: la radio (SF10) no lo oye
-in 5000 radio peer sf 7
-in 5010 chatmsg 50 1 hola desde fuera del radar
-in 5020 radio peer sf 10
-in 7000 expect times 0 Guardado: hola desde fuera
-in 7000 expect times 0 ACK a #50
-# 3) el radar dura mas de 35 s (con un ping del companero cada 2,5 s mantiene el enlace): ni una baliza ni un
-#    reintento mientras tanto
+# 2) chat: el radar vuelve a SF7 durante 1,2 s cada 4 s (ventana de chat). Un mensaje FUERA de la ventana no se oye (la radio
+#    esta en SF10); uno DENTRO se guarda y se confirma con su ACK. (1a ventana: a los ~4,8-6 s del inicio del radar;
+#    despues cada 5,2 s)
+in 3000 radio peer sf 7
+in 3010 chatmsg 50 1 hola fuera de la ventana
+in 3020 radio peer sf 10
+in 4400 expect times 0 Guardado: hola fuera
+in 4400 expect times 0 ACK a #50
+in 4950 radio peer sf 7
+in 4960 chatmsg 50 3 hola desde la ventana
+in 5300 chatmsg 50 3 hola desde la ventana       # (el emisor repite si no recibe el ACK: mismo msgId, no se duplica)
+in 5320 radio peer sf 10
+in 6500 expect serial Radar] ventana de chat abierta
+in 6500 expect serial Guardado: hola desde la ventana
+in 6500 expect serial ACK a #50 msg 3
+in 6500 expect serial Radar] ventana de chat cerrada
+in 6500 expect text GIRA                         # y el radar sigue enlazado
+# 3) el radar dura mas de 35 s (con un ping del companero cada 2,5 s mantiene el enlace). La baliza y los reintentos
+#    solo salen en las ventanas de chat (en SF10 nadie del chat los oiria)
 in 4500 lora HR
 in 7000 lora HR
 in 9500 lora HR
@@ -71,12 +84,11 @@ in 22000 lora HR
 in 24500 lora HR
 in 27000 lora HR
 in 29500 lora HR
-in 32000 lora HR
+in 32500 lora HR
 in 34500 lora HR
-in 37000 lora HR
-in 38000 expect times 1 Chat] Baliza           # solo la baliza de arranque (de antes del radar)
-in 38000 expect times 0 Reintento msg 1 (2)     # sin reintentos mientras dura el radar (el 1o pudo salir antes de entrar:
-                                                # cae a los 3,5-6,5 s del envio y el radar empieza a los ~4 s)
+in 37500 lora HR
+in 38000 expect times 2 Chat] Baliza           # la de arranque y la que tocaba durante el radar, que esperó a una ventana
+in 38000 expect serial Reintento msg 1          # el reintento del mensaje sin confirmar tambien salio en una ventana
 in 38000 expect airtime 45 20000                # los pings (SF10, 453 ms) ocupan ~34 % del canal por equipo (antes 205 %: siempre emitiendo)
 in 38000 expect notext BUSCANDO                 # el enlace sigue vivo (los pings llegan por la cola de juego)
 in 38000 expect notext Jueg                     # y seguimos en el radar
@@ -86,16 +98,16 @@ in 38500 finish down
 in 39000 finish up
 run 41000
 expect text Env
-expect times 0 Historial] Guardado: hola          # nada del chat llego ni se guardo durante el radar
-print HippoRadar: pings por la cola de juego, chat en pausa durante el radar y sin basura en el historial
+expect times 0 Historial] Guardado: hola fuera    # lo de fuera de la ventana no llego
+expect times 1 Historial] Guardado: hola desde    # lo de la ventana, una sola vez
+print HippoRadar: pings por la cola de juego, chat solo en las ventanas y sin basura en el historial
 
-# --- Ya fuera: la baliza de anuncio, el reintento pendiente y el chat vuelven a funcionar ---
+# --- Ya fuera: la baliza de anuncio y el chat vuelven a funcionar ---
 radio peer sf 7
-waitfor serial 0 5000 Reintento msg 1
 waitfor txend
 chatmsg 50 2 ya estoy de vuelta
 run 1500
 expect serial Guardado: ya estoy de vuelta
 expect serial ACK a #50 msg 2
-expect times 2 Chat] Baliza                       # la de arranque y la de vuelta del radar
-print Tras el radar: baliza de anuncio, reintento pendiente y chat de nuevo en SF7
+expect times 3 Chat] Baliza                       # la de arranque, la del radar y la de vuelta
+print Tras el radar: baliza de anuncio y chat de nuevo en SF7
