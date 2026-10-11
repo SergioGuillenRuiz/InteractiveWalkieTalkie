@@ -8,7 +8,7 @@
 // ============================================================
 
 // Nombre y versión
-#define PROJECT_NAME       "Proyecto Gogoaty"
+#define PROJECT_NAME       "Walkie-Talkie LoRa"
 #define PROJECT_VERSION    "V2.0"
 
 // ------------------------------------------------------------

@@ -1,14 +1,25 @@
-# Proyecto Gogoaty — walkie-talkie LoRa con pantalla
+# Walkie-talkie LoRa con pantalla
 
 Un par de equipos de bolsillo (ESP8266 + módulo LoRa SX1276 + pantalla OLED, **dos botones y un potenciómetro**)
-que se mandan mensajes cifrados por radio, sin móvil ni internet: texto en Morse, mensajes rápidos con icono,
-letras con una rueda, frases por piezas y dibujos de 24×24 píxeles. Un hipopótamo anima la pantalla, avisa
-cuando llega algo y se duerme solo. Incluye varios juegos (Tetris cooperativo, Poker, Tres en raya…) y un radar
-para localizar al otro equipo. Versión del firmware: **V2.0**.
+que se mandan mensajes cifrados por radio, sin móvil ni internet. Versión del firmware: **V2.0**.
 
-> **Estado.** Todo lo descrito aquí está verificado en el **simulador** (`sim/`, más de 40 tests con la radio y el
+* **Mensajes:** texto en Morse, mensajes rápidos con icono, letras con una rueda, frases por piezas y dibujos de 24×24 píxeles.
+* **Mascota:** un hipopótamo anima la pantalla, avisa cuando llega algo y se duerme solo.
+* **Juegos:** Tetris cooperativo, Poker, Tres en raya… y un radar para localizar al otro equipo.
+* **Seguridad:** cada pareja de equipos tiene su propia clave (emparejamiento), con mensajes cifrados y autenticados.
+
+> **Estado.** Todo lo descrito aquí está verificado en el **simulador** (`sim/`, 49 suites de tests con la radio y el
 > chip modelados). **Falta compilarlo y probarlo en la placa**: ver [`path.md`](path.md) (hoja de ruta, riesgos y decisiones
 > pendientes).
+
+## Índice
+
+1. [Componentes](#componentes) · [Conexiones](#conexiones) · [Compilar y cargar el firmware](#compilar-y-cargar-el-firmware)
+2. [Manual de usuario](#manual-de-usuario): [Controles](#controles), [Pantalla principal](#pantalla-principal),
+   [Emparejar](#emparejar-los-dos-equipos), [Enviar](#enviar-un-mensaje), [Historial](#historial),
+   [Avisos y suspensión](#avisos-y-suspensión), [Poner la hora](#poner-la-hora), [Juegos](#juegos),
+   [La radio](#la-radio), [Solución de problemas](#solución-de-problemas)
+3. [Simulador y pruebas](#simulador-y-pruebas)
 
 ---
 
